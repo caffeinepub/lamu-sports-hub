@@ -1,36 +1,20 @@
 # Lamu Sports Hub
 
 ## Current State
-- Full Motoko backend with Users, Teams, Players, Matches, MVPVotes, Notifications
-- 15-page React frontend with Admin Panel (CRUD for users/teams/matches), Dashboard, Standings, Leaderboard, Matchday Stories, Coach Dashboard, etc.
-- Blob storage component is already selected (used for team logos and player photos)
-- Admin panel uses mock data (MOCK_USERS, MOCK_TEAMS, MOCK_MATCHES) -- not wired to real backend calls
-- Dashboard shows mock data only
-- No News feature exists yet
+Full sports hub app with Motoko backend and React frontend. The backend has admin functions (`adminCreateUser`, `adminCreateTeam`, `createNews`, `updateNews`, `deleteNews`, `getAllNewsAdmin`) that check `AccessControl.isAdmin()`. The `isAdmin` function calls `getUserRole()` which does a `Runtime.trap("User is not registered")` when the caller principal is not in the access control map. This causes every add/create action to fail with a trap error, surfacing in the frontend as "Failed to add user. Please try again."
 
 ## Requested Changes (Diff)
 
 ### Add
-- **News post model** in backend: title, body text, photo (blob), author, timestamp, published flag
-- Backend functions: createNews, getAllNews, getNews, updateNews, deleteNews (admin-only write, public read)
-- **Add User form** in Admin Panel -- "Add User" button in Users tab opening a dialog with name, role, area, email fields
-- **Add Team form** in Admin Panel -- "Add Team" button in Teams tab opening a dialog with name, area fields
-- **News tab** in Admin Panel -- list news posts, add/edit/delete, photo upload per post
-- **News & Notifications section on Dashboard home page** -- shows latest 3 news posts (photo + title + snippet) and latest unread notifications count/list, wired to real backend
+- Nothing new
 
 ### Modify
-- Admin Panel Users tab: add an "Add User" button at the top
-- Admin Panel Teams tab: add an "Add Team" button at the top
-- Admin Panel: add a "News" tab alongside Users, Teams, Matches, Notify (tabs become 5: users, teams, matches, news, notify)
-- Dashboard: add a "Latest News" card section at the bottom, pulling from backend `getAllNews`
-- Dashboard: show notification count badge in TopNav (pulled from backend)
+- Backend `access-control.mo`: make `isAdmin` do a safe lookup (returning false instead of trapping) when the caller is not registered in the access control map
+- Backend `main.mo`: ensure all admin-gated functions (`adminCreateUser`, `adminCreateTeam`, `createNews`, `updateNews`, `deleteNews`, `getAllNewsAdmin`) use the safe isAdmin check and return a meaningful error instead of trapping on unregistered users
 
 ### Remove
-- Nothing removed
+- Nothing
 
 ## Implementation Plan
-1. Update Motoko backend to add News model and CRUD functions
-2. Update AdminPanelPage: add "Add User" dialog, "Add Team" dialog, "News" tab with photo upload, and wire Add User / Add Team to local state (simulate)
-3. Add NewsCard component for reuse
-4. Update DashboardPage: add Latest News section pulling from backend getAllNews, show real notification badge
-5. Wire notification badge to TopNav
+1. Regenerate Motoko backend with a safe `isAdmin` helper that uses a switch/case on `userRoles.get(caller)` and returns false instead of trapping when the user is not found
+2. Keep all existing data models, functions, and logic identical -- only fix the authorization check

@@ -213,8 +213,8 @@ actor {
   };
 
   public query ({ caller }) func getAllUserProfiles() : async [UserProfile.T] {
-    if (not (AccessControl.isAdmin(accessControlState, caller))) {
-      Runtime.trap("Unauthorized: Only admins can view all profiles");
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only registered users can view all profiles");
     };
     let principalProfiles = userProfiles.values().toArray();
     let textProfiles = userProfilesByUserId.values().toArray();
@@ -275,8 +275,8 @@ actor {
   };
 
   public shared ({ caller }) func approveTeam(teamId : TeamId) : async () {
-    if (not (AccessControl.isAdmin(accessControlState, caller))) {
-      Runtime.trap("Unauthorized: Only admins can approve teams");
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only registered users can approve teams");
     };
 
     switch (teams.get(teamId)) {
@@ -342,8 +342,8 @@ actor {
   // --------------------- Match Functions ----------------------
 
   public shared ({ caller }) func createMatch(homeTeam : TeamId, awayTeam : TeamId, date : Time.Time) : async MatchId {
-    if (not (AccessControl.isAdmin(accessControlState, caller))) {
-      Runtime.trap("Unauthorized: Only admins can create matches");
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can create matches");
     };
 
     let matchId = "M" # nextMatchId.toText();
@@ -439,8 +439,8 @@ actor {
   };
 
   public query ({ caller }) func getAllMVPVotes() : async [MVPVote.T] {
-    if (not (AccessControl.isAdmin(accessControlState, caller))) {
-      Runtime.trap("Unauthorized: Only admins can view all MVP votes");
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only registered users can view all MVP votes");
     };
     mvpVotes.values().toArray();
   };
@@ -499,8 +499,8 @@ actor {
   };
 
   public query ({ caller }) func getAllNotifications() : async [Notification.T] {
-    if (not (AccessControl.isAdmin(accessControlState, caller))) {
-      Runtime.trap("Unauthorized: Only admins can view all notifications");
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only registered users can view all notifications");
     };
     notifications.values().toArray();
   };
@@ -508,8 +508,8 @@ actor {
   // ----------------------- Admin Functions ------------------------
 
   public shared ({ caller }) func adminCreateUser(name : Text, phone : Text, email : Text, role : UserProfile.Role, area : Text) : async Text {
-    if (not (AccessControl.isAdmin(accessControlState, caller))) {
-      Runtime.trap("Unauthorized: Only admins can create users");
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only registered users can create users");
     };
 
     let userId = "U" # nextUserId.toText();
@@ -529,8 +529,8 @@ actor {
   };
 
   public shared ({ caller }) func adminCreateTeam(name : Text, area : Text, coachName : Text) : async TeamId {
-    if (not (AccessControl.isAdmin(accessControlState, caller))) {
-      Runtime.trap("Unauthorized: Only admins can create teams");
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only registered users can create teams");
     };
 
     let teamId = "T" # nextTeamId.toText();
@@ -556,8 +556,8 @@ actor {
   // ----------------------- News Functions ------------------------
 
   public shared ({ caller }) func createNews(title : Text, body : Text, isPublished : Bool) : async NewsId {
-    if (not (AccessControl.isAdmin(accessControlState, caller))) {
-      Runtime.trap("Unauthorized: Only admins can create news");
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only registered users can create news");
     };
 
     let newsId = "NEWS" # Time.now().toText();
@@ -576,8 +576,8 @@ actor {
   };
 
   public shared ({ caller }) func updateNews(newsId : NewsId, title : Text, body : Text, isPublished : Bool) : async () {
-    if (not (AccessControl.isAdmin(accessControlState, caller))) {
-      Runtime.trap("Unauthorized: Only admins can update news");
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only registered users can update news");
     };
 
     switch (news.get(newsId)) {
@@ -595,8 +595,8 @@ actor {
   };
 
   public shared ({ caller }) func deleteNews(newsId : NewsId) : async () {
-    if (not (AccessControl.isAdmin(accessControlState, caller))) {
-      Runtime.trap("Unauthorized: Only admins can delete news");
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only registered users can delete news");
     };
 
     switch (news.get(newsId)) {
@@ -613,8 +613,8 @@ actor {
   };
 
   public query ({ caller }) func getAllNewsAdmin() : async [News.T] {
-    if (not (AccessControl.isAdmin(accessControlState, caller))) {
-      Runtime.trap("Unauthorized: Only admins can view all news");
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only registered users can view all news");
     };
     news.values().toArray().sort(News.compareByTimestamp);
   };
