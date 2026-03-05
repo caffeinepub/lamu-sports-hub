@@ -12,7 +12,9 @@ import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
 import Storage "blob-storage/Storage";
 import MixinStorage "blob-storage/Mixin";
+import Migration "migration";
 
+(with migration = Migration.run)
 actor {
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
@@ -74,6 +76,7 @@ actor {
       userId : Text;
       teamId : TeamId;
       nickname : Text;
+      name : Text;
       position : Position;
       jerseyNumber : Nat;
       matchesPlayed : Nat;
@@ -82,6 +85,7 @@ actor {
       yellowCards : Nat;
       redCards : Nat;
       photo : ?Storage.ExternalBlob;
+      isVerified : Bool;
     };
   };
 
@@ -99,6 +103,7 @@ actor {
       homeScore : Nat;
       awayScore : Nat;
       date : Time.Time;
+      kickoffTime : Text;
       mvpPlayerId : ?PlayerId;
       status : Status;
       commentary : [Text];
@@ -251,7 +256,7 @@ actor {
       Runtime.trap("Unauthorized: Only users can create teams");
     };
     if (not isCoach(caller) and not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only coaches can create teams");
+      Runtime.trap("Unauthorized: Only coaches or admins can create teams");
     };
 
     let teamId = "T" # nextTeamId.toText();
@@ -275,8 +280,8 @@ actor {
   };
 
   public shared ({ caller }) func approveTeam(teamId : TeamId) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only registered users can approve teams");
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can approve teams");
     };
 
     switch (teams.get(teamId)) {
@@ -298,12 +303,12 @@ actor {
 
   // ---------------------- Player Functions --------------------
 
-  public shared ({ caller }) func createPlayer(teamId : TeamId, nickname : Text, position : Player.Position, jerseyNumber : Nat) : async PlayerId {
+  public shared ({ caller }) func createPlayer(teamId : TeamId, nickname : Text, name : Text, position : Player.Position, jerseyNumber : Nat) : async PlayerId {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can create players");
     };
     if (not isTeamCoach(caller, teamId) and not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only the team's coach can create players for this team");
+      Runtime.trap("Unauthorized: Only the team's coach or admins can create players for this team");
     };
 
     let playerId = "P" # nextPlayerId.toText();
@@ -314,6 +319,7 @@ actor {
       userId = caller.toText();
       teamId;
       nickname;
+      name;
       position;
       jerseyNumber;
       matchesPlayed = 0;
@@ -322,6 +328,35 @@ actor {
       yellowCards = 0;
       redCards = 0;
       photo = null;
+      isVerified = false;
+    };
+    players.add(playerId, player);
+    playerId;
+  };
+
+  public shared ({ caller }) func adminAddPlayer(teamId : TeamId, nickname : Text, name : Text, position : Player.Position, jerseyNumber : Nat) : async PlayerId {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only registered users can add players");
+    };
+
+    let playerId = "P" # nextPlayerId.toText();
+    nextPlayerId += 1;
+
+    let player : Player.T = {
+      playerId;
+      userId = caller.toText();
+      teamId;
+      nickname;
+      name;
+      position;
+      jerseyNumber;
+      matchesPlayed = 0;
+      goals = 0;
+      assists = 0;
+      yellowCards = 0;
+      redCards = 0;
+      photo = null;
+      isVerified = false;
     };
     players.add(playerId, player);
     playerId;
@@ -341,7 +376,7 @@ actor {
 
   // --------------------- Match Functions ----------------------
 
-  public shared ({ caller }) func createMatch(homeTeam : TeamId, awayTeam : TeamId, date : Time.Time) : async MatchId {
+  public shared ({ caller }) func createMatch(homeTeam : TeamId, awayTeam : TeamId, date : Time.Time, kickoffTime : Text) : async MatchId {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can create matches");
     };
@@ -356,6 +391,7 @@ actor {
       homeScore = 0;
       awayScore = 0;
       date;
+      kickoffTime;
       mvpPlayerId = null;
       status = #scheduled;
       commentary = [];
@@ -451,9 +487,6 @@ actor {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can create notifications");
     };
-    if (caller != userId and not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Can only create notifications for yourself or as admin");
-    };
 
     let notificationId = "N" # nextNotificationId.toText();
     nextNotificationId += 1;
@@ -508,8 +541,8 @@ actor {
   // ----------------------- Admin Functions ------------------------
 
   public shared ({ caller }) func adminCreateUser(name : Text, phone : Text, email : Text, role : UserProfile.Role, area : Text) : async Text {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only registered users can create users");
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can create users");
     };
 
     let userId = "U" # nextUserId.toText();
@@ -529,8 +562,8 @@ actor {
   };
 
   public shared ({ caller }) func adminCreateTeam(name : Text, area : Text, coachName : Text) : async TeamId {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only registered users can create teams");
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can create teams via admin function");
     };
 
     let teamId = "T" # nextTeamId.toText();
@@ -583,6 +616,10 @@ actor {
     switch (news.get(newsId)) {
       case (null) { Runtime.trap("News item not found") };
       case (?newsItem) {
+        if (newsItem.authorId != caller.toText() and not AccessControl.isAdmin(accessControlState, caller)) {
+          Runtime.trap("Unauthorized: Only the author or admins can update this news");
+        };
+
         let updatedNews = {
           newsItem with
           title;
@@ -601,7 +638,10 @@ actor {
 
     switch (news.get(newsId)) {
       case (null) { Runtime.trap("News item not found") };
-      case (_) {
+      case (?newsItem) {
+        if (newsItem.authorId != caller.toText() and not AccessControl.isAdmin(accessControlState, caller)) {
+          Runtime.trap("Unauthorized: Only the author or admins can delete this news");
+        };
         news.remove(newsId);
       };
     };
@@ -623,7 +663,7 @@ actor {
     switch (news.get(newsId)) {
       case (null) { null };
       case (?newsItem) {
-        if (newsItem.isPublished or AccessControl.isAdmin(accessControlState, caller)) {
+        if (newsItem.isPublished or newsItem.authorId == caller.toText() or AccessControl.isAdmin(accessControlState, caller)) {
           ?newsItem;
         } else {
           null;

@@ -1,4 +1,9 @@
-import { type ExternalBlob, Role } from "@/backend";
+import {
+  type ExternalBlob,
+  type T__2 as PlayerT,
+  Position,
+  Role,
+} from "@/backend";
 import { AreaBadge, TeamBadge } from "@/components/shared/TeamBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -2252,13 +2257,57 @@ function AdminPanelInner() {
   );
 }
 
+const adminPositionMap: Record<string, Position> = {
+  goalkeeper: Position.goalkeeper,
+  defender: Position.defender,
+  midfielder: Position.midfielder,
+  forward: Position.forward,
+};
+
 // ─── ADMIN PLAYERS TAB ────────────────────────────────────────────────────────
 function AdminPlayersTab() {
+  const { actor } = useActor();
   const [confirmations, setConfirmations] = useState<Record<string, boolean>>(
     getPlayerConfirmations,
   );
   const [photos, setPhotos] = useState<Record<string, string>>(getPlayerPhotos);
   const photoInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // Backend players state
+  const [backendPlayers, setBackendPlayers] = useState<PlayerT[]>([]);
+  const [backendPlayersLoading, setBackendPlayersLoading] = useState(false);
+
+  // Add player dialog state
+  const [showAddPlayer, setShowAddPlayer] = useState(false);
+  const [addPlayerLoading, setAddPlayerLoading] = useState(false);
+  const [newPlayerName, setNewPlayerName] = useState("");
+  const [newPlayerNickname, setNewPlayerNickname] = useState("");
+  const [newPlayerTeamId, setNewPlayerTeamId] = useState<string>("");
+  const [newPlayerPosition, setNewPlayerPosition] = useState<string>("forward");
+  const [newPlayerJersey, setNewPlayerJersey] = useState("");
+
+  const fetchBackendPlayers = async () => {
+    if (!actor) return;
+    setBackendPlayersLoading(true);
+    try {
+      const players = await actor.getAllPlayers();
+      setBackendPlayers(players);
+    } catch {
+      toast.error("Failed to load backend players");
+    } finally {
+      setBackendPlayersLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!actor) return;
+    setBackendPlayersLoading(true);
+    actor
+      .getAllPlayers()
+      .then((players) => setBackendPlayers(players))
+      .catch(() => toast.error("Failed to load backend players"))
+      .finally(() => setBackendPlayersLoading(false));
+  }, [actor]);
 
   const toggle = (playerId: string, checked: boolean) => {
     const updated = { ...confirmations, [playerId]: checked };
@@ -2279,85 +2328,346 @@ function AdminPlayersTab() {
     reader.readAsDataURL(file);
   };
 
+  const handleAddPlayer = async () => {
+    if (!newPlayerName.trim() || !newPlayerTeamId) {
+      toast.error("Player name and team are required");
+      return;
+    }
+    const positionEnum = adminPositionMap[newPlayerPosition];
+    if (!positionEnum) {
+      toast.error("Invalid position");
+      return;
+    }
+    setAddPlayerLoading(true);
+    try {
+      await actor?.adminAddPlayer(
+        newPlayerTeamId,
+        newPlayerNickname.trim(),
+        newPlayerName.trim(),
+        positionEnum,
+        BigInt(newPlayerJersey || 0),
+      );
+      toast.success(`Player "${newPlayerName}" registered!`);
+      setShowAddPlayer(false);
+      setNewPlayerName("");
+      setNewPlayerNickname("");
+      setNewPlayerTeamId("");
+      setNewPlayerPosition("forward");
+      setNewPlayerJersey("");
+      await fetchBackendPlayers();
+    } catch {
+      toast.error("Failed to register player. Please try again.");
+    } finally {
+      setAddPlayerLoading(false);
+    }
+  };
+
   return (
-    <div className="space-y-2" data-ocid="admin.players.panel">
-      <p className="text-xs text-muted-foreground mb-3">
+    <div className="space-y-4" data-ocid="admin.players.panel">
+      {/* Add Player button */}
+      <div className="flex justify-end">
+        <Button
+          size="sm"
+          className="text-xs gap-1"
+          onClick={() => setShowAddPlayer(true)}
+          data-ocid="admin.add_player.open_modal_button"
+          style={{
+            background:
+              "linear-gradient(135deg, oklch(0.6 0.22 24) 0%, oklch(0.55 0.25 20) 100%)",
+          }}
+        >
+          <Plus className="w-3 h-3" />
+          Add Player
+        </Button>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
         Confirm player registrations and upload player photos.
       </p>
-      {MOCK_PLAYERS.map((player, i) => {
-        const team = MOCK_TEAMS.find((t) => t.teamId === player.teamId)!;
-        const isConfirmed = confirmations[player.playerId] ?? false;
-        const photo = photos[player.playerId];
-        return (
-          <div
-            key={player.playerId}
-            className="rounded-xl border bg-card px-3 py-2.5 flex items-center gap-3"
-            style={{
-              borderColor: isConfirmed
-                ? "oklch(0.55 0.18 145 / 0.4)"
-                : "oklch(0.3 0.02 252)",
-            }}
-            data-ocid={`admin.player.row.${i + 1}`}
-          >
-            {photo ? (
-              <img
-                src={photo}
-                alt={player.name}
-                className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-              />
-            ) : (
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
-                style={{
-                  backgroundColor: team.color,
-                  color: team.secondaryColor,
-                }}
-              >
-                {player.jerseyNumber}
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-xs text-foreground">
-                {player.name}
-              </p>
-              <p className="text-[10px] text-muted-foreground">
-                {team.name} · #{player.jerseyNumber}
-              </p>
-            </div>
-            {isConfirmed && (
-              <span className="text-[9px] font-bold text-green-400 px-1.5 py-0.5 rounded-full bg-green-500/10 flex-shrink-0">
-                ✓ Card
-              </span>
-            )}
-            {/* Photo upload */}
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              ref={(el) => {
-                photoInputRefs.current[player.playerId] = el;
+
+      {/* Mock players (local) */}
+      <div className="space-y-2">
+        {MOCK_PLAYERS.map((player, i) => {
+          const team = MOCK_TEAMS.find((t) => t.teamId === player.teamId)!;
+          const isConfirmed = confirmations[player.playerId] ?? false;
+          const photo = photos[player.playerId];
+          return (
+            <div
+              key={player.playerId}
+              className="rounded-xl border bg-card px-3 py-2.5 flex items-center gap-3"
+              style={{
+                borderColor: isConfirmed
+                  ? "oklch(0.55 0.18 145 / 0.4)"
+                  : "oklch(0.3 0.02 252)",
               }}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handlePhoto(player.playerId, file);
-              }}
-            />
-            <button
-              type="button"
-              className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-              onClick={() => photoInputRefs.current[player.playerId]?.click()}
-              data-ocid={`admin.player.upload_button.${i + 1}`}
+              data-ocid={`admin.player.row.${i + 1}`}
             >
-              <ImageIcon className="w-3.5 h-3.5" />
-            </button>
-            <Checkbox
-              checked={isConfirmed}
-              onCheckedChange={(v) => toggle(player.playerId, !!v)}
-              data-ocid={`admin.player.checkbox.${i + 1}`}
-            />
+              {photo ? (
+                <img
+                  src={photo}
+                  alt={player.name}
+                  className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                />
+              ) : (
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
+                  style={{
+                    backgroundColor: team.color,
+                    color: team.secondaryColor,
+                  }}
+                >
+                  {player.jerseyNumber}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-xs text-foreground">
+                  {player.name}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  {team.name} · #{player.jerseyNumber}
+                </p>
+              </div>
+              {isConfirmed && (
+                <span className="text-[9px] font-bold text-green-400 px-1.5 py-0.5 rounded-full bg-green-500/10 flex-shrink-0">
+                  ✓ Card
+                </span>
+              )}
+              {/* Photo upload */}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                ref={(el) => {
+                  photoInputRefs.current[player.playerId] = el;
+                }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handlePhoto(player.playerId, file);
+                }}
+              />
+              <button
+                type="button"
+                className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+                onClick={() => photoInputRefs.current[player.playerId]?.click()}
+                data-ocid={`admin.player.upload_button.${i + 1}`}
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+              </button>
+              <Checkbox
+                checked={isConfirmed}
+                onCheckedChange={(v) => toggle(player.playerId, !!v)}
+                data-ocid={`admin.player.checkbox.${i + 1}`}
+              />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Backend registered players section */}
+      <div className="mt-4">
+        <div className="flex items-center gap-2 mb-2">
+          <h3 className="font-display font-bold text-xs text-foreground uppercase tracking-wide">
+            Registered Players (Backend)
+          </h3>
+          <button
+            type="button"
+            className="text-[10px] text-primary hover:underline"
+            onClick={fetchBackendPlayers}
+          >
+            Refresh
+          </button>
+        </div>
+        {backendPlayersLoading ? (
+          <div
+            className="flex items-center justify-center py-6 text-muted-foreground"
+            data-ocid="admin.backend_players.loading_state"
+          >
+            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            <span className="text-xs">Loading...</span>
           </div>
-        );
-      })}
+        ) : backendPlayers.length === 0 ? (
+          <div
+            className="rounded-xl border border-border bg-card py-6 text-center text-xs text-muted-foreground"
+            data-ocid="admin.backend_players.empty_state"
+          >
+            No players registered on-chain yet. Use "Add Player" above.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {backendPlayers.map((player, i) => (
+              <div
+                key={player.playerId}
+                className="rounded-xl border border-border bg-card px-3 py-2.5 flex items-center gap-3"
+                data-ocid={`admin.backend_player.row.${i + 1}`}
+              >
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
+                  style={{
+                    background: "oklch(0.22 0.06 252)",
+                    color: "oklch(0.82 0.08 82)",
+                  }}
+                >
+                  {String(player.jerseyNumber)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-xs text-foreground">
+                    {player.name}
+                    {player.nickname ? (
+                      <span className="text-muted-foreground font-normal">
+                        {" "}
+                        "{player.nickname}"
+                      </span>
+                    ) : null}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground capitalize">
+                    {String(player.position)} · #{String(player.jerseyNumber)}
+                  </p>
+                </div>
+                {player.isVerified && (
+                  <span className="text-[9px] font-bold text-green-400 px-1.5 py-0.5 rounded-full bg-green-500/10 flex-shrink-0">
+                    ✓ Verified
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Add Player Dialog */}
+      <Dialog
+        open={showAddPlayer}
+        onOpenChange={(o) => {
+          if (!o) {
+            setShowAddPlayer(false);
+            setNewPlayerName("");
+            setNewPlayerNickname("");
+            setNewPlayerTeamId("");
+            setNewPlayerPosition("forward");
+            setNewPlayerJersey("");
+          }
+        }}
+      >
+        <DialogContent data-ocid="admin.add_player.dialog">
+          <DialogHeader>
+            <DialogTitle className="font-display">
+              Register New Player
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs mb-1 block">Full Name *</Label>
+              <Input
+                value={newPlayerName}
+                onChange={(e) => setNewPlayerName(e.target.value)}
+                placeholder="e.g. Hassan Mwende"
+                className="h-9 text-sm"
+                data-ocid="admin.add_player.input"
+              />
+            </div>
+            <div>
+              <Label className="text-xs mb-1 block">Nickname (optional)</Label>
+              <Input
+                value={newPlayerNickname}
+                onChange={(e) => setNewPlayerNickname(e.target.value)}
+                placeholder="e.g. Rocket"
+                className="h-9 text-sm"
+              />
+            </div>
+            <div>
+              <Label className="text-xs mb-1 block">Team *</Label>
+              <Select
+                value={newPlayerTeamId}
+                onValueChange={setNewPlayerTeamId}
+              >
+                <SelectTrigger
+                  className="h-9 text-sm"
+                  data-ocid="admin.add_player.select"
+                >
+                  <SelectValue placeholder="Select team..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {MOCK_TEAMS.map((t) => (
+                    <SelectItem
+                      key={t.teamId}
+                      value={t.teamId}
+                      className="text-sm"
+                    >
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs mb-1 block">Position *</Label>
+              <Select
+                value={newPlayerPosition}
+                onValueChange={setNewPlayerPosition}
+              >
+                <SelectTrigger
+                  className="h-9 text-sm"
+                  data-ocid="admin.add_player.select"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="goalkeeper" className="text-sm">
+                    Goalkeeper
+                  </SelectItem>
+                  <SelectItem value="defender" className="text-sm">
+                    Defender
+                  </SelectItem>
+                  <SelectItem value="midfielder" className="text-sm">
+                    Midfielder
+                  </SelectItem>
+                  <SelectItem value="forward" className="text-sm">
+                    Forward
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs mb-1 block">Jersey Number</Label>
+              <Input
+                type="number"
+                value={newPlayerJersey}
+                onChange={(e) => setNewPlayerJersey(e.target.value)}
+                placeholder="e.g. 9"
+                className="h-9 text-sm"
+                min={1}
+                max={99}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAddPlayer(false)}
+              data-ocid="admin.add_player.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleAddPlayer}
+              disabled={addPlayerLoading}
+              data-ocid="admin.add_player.submit_button"
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.6 0.22 24) 0%, oklch(0.55 0.25 20) 100%)",
+              }}
+            >
+              {addPlayerLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                "Register Player"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { Position } from "@/backend";
 import { PlayerCard } from "@/components/shared/PlayerCard";
 import {
   AreaBadge,
@@ -29,6 +30,7 @@ import {
   MOCK_TEAMS,
   type MockPlayer,
 } from "@/data/mockData";
+import { useActor } from "@/hooks/useActor";
 import {
   LSH_PLAYER_CONFIRMATIONS_KEY,
   getPlayerConfirmations,
@@ -50,9 +52,17 @@ import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+const coachPositionMap: Record<string, Position> = {
+  goalkeeper: Position.goalkeeper,
+  defender: Position.defender,
+  midfielder: Position.midfielder,
+  forward: Position.forward,
+};
+
 const POSITIONS = ["goalkeeper", "defender", "midfielder", "forward"];
 
 export function CoachDashboardPage() {
+  const { actor } = useActor();
   // Assume coach manages team-001 (Shela United)
   const team = MOCK_TEAMS[0];
   const players = MOCK_PLAYERS.filter((p) => p.teamId === team.teamId);
@@ -114,13 +124,29 @@ export function CoachDashboardPage() {
       toast.error("Please fill all required fields");
       return;
     }
+    const positionEnum = coachPositionMap[position];
+    if (!positionEnum) {
+      toast.error("Invalid position selected");
+      return;
+    }
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 800));
-    setLoading(false);
-    setShowAddPlayer(false);
-    setNickname("");
-    setJerseyNumber("");
-    toast.success("Player added to squad!");
+    try {
+      await actor?.adminAddPlayer(
+        team.teamId,
+        nickname.trim(),
+        nickname.trim(),
+        positionEnum,
+        BigInt(jerseyNumber),
+      );
+      toast.success("Player added to squad!");
+      setShowAddPlayer(false);
+      setNickname("");
+      setJerseyNumber("");
+    } catch {
+      toast.error("Failed to add player. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmitStats = async () => {

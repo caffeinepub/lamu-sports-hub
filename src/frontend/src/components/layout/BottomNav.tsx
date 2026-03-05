@@ -1,4 +1,4 @@
-import { Role } from "@/backend";
+import { Position, Role } from "@/backend";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -183,10 +183,18 @@ interface AddPlayerDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+const positionMap: Record<string, Position> = {
+  goalkeeper: Position.goalkeeper,
+  defender: Position.defender,
+  midfielder: Position.midfielder,
+  forward: Position.forward,
+};
+
 function AddPlayerDialog({ open, onOpenChange }: AddPlayerDialogProps) {
   const { actor } = useActor();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState("");
+  const [nickname, setNickname] = useState("");
   const [teamId, setTeamId] = useState("");
   const [position, setPosition] = useState("");
   const [jerseyNumber, setJerseyNumber] = useState("");
@@ -194,6 +202,7 @@ function AddPlayerDialog({ open, onOpenChange }: AddPlayerDialogProps) {
 
   function resetForm() {
     setName("");
+    setNickname("");
     setTeamId("");
     setPosition("");
     setJerseyNumber("");
@@ -206,14 +215,19 @@ function AddPlayerDialog({ open, onOpenChange }: AddPlayerDialogProps) {
       toast.error("Please fill in all required fields.");
       return;
     }
+    const positionEnum = positionMap[position];
+    if (!positionEnum) {
+      toast.error("Invalid position selected.");
+      return;
+    }
     setLoading(true);
     try {
-      await actor?.adminCreateUser(
+      await actor?.adminAddPlayer(
+        teamId,
+        nickname.trim(),
         name.trim(),
-        "",
-        "",
-        Role.player,
-        "Lamu Town",
+        positionEnum,
+        BigInt(jerseyNumber || 0),
       );
       toast.success("Player registered!");
       resetForm();
@@ -262,6 +276,17 @@ function AddPlayerDialog({ open, onOpenChange }: AddPlayerDialogProps) {
               onChange={(e) => setName(e.target.value)}
               data-ocid="more.add_player.input"
               required
+            />
+          </div>
+
+          {/* Nickname */}
+          <div className="space-y-1.5">
+            <Label htmlFor="player-nickname">Nickname (optional)</Label>
+            <Input
+              id="player-nickname"
+              placeholder="e.g. Rocket"
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
             />
           </div>
 

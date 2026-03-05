@@ -20,6 +20,13 @@ export const _CaffeineStorageRefillResult = IDL.Record({
   'topped_up_amount' : IDL.Opt(IDL.Nat),
 });
 export const TeamId = IDL.Text;
+export const Position = IDL.Variant({
+  'goalkeeper' : IDL.Null,
+  'midfielder' : IDL.Null,
+  'forward' : IDL.Null,
+  'defender' : IDL.Null,
+});
+export const PlayerId = IDL.Text;
 export const Role = IDL.Variant({
   'fan' : IDL.Null,
   'admin' : IDL.Null,
@@ -32,7 +39,6 @@ export const UserRole = IDL.Variant({
   'guest' : IDL.Null,
 });
 export const MatchId = IDL.Text;
-export const PlayerId = IDL.Text;
 export const Time = IDL.Int;
 export const NewsId = IDL.Text;
 export const UserId = IDL.Principal;
@@ -42,12 +48,6 @@ export const Type = IDL.Variant({
   'message' : IDL.Null,
 });
 export const NotificationId = IDL.Text;
-export const Position = IDL.Variant({
-  'goalkeeper' : IDL.Null,
-  'midfielder' : IDL.Null,
-  'forward' : IDL.Null,
-  'defender' : IDL.Null,
-});
 export const VoteId = IDL.Text;
 export const T__6 = IDL.Record({
   'voteId' : VoteId,
@@ -71,6 +71,7 @@ export const T__5 = IDL.Record({
   'awayScore' : IDL.Nat,
   'commentary' : IDL.Vec(IDL.Text),
   'mvpPlayerId' : IDL.Opt(PlayerId),
+  'kickoffTime' : IDL.Text,
 });
 export const ExternalBlob = IDL.Vec(IDL.Nat8);
 export const T__4 = IDL.Record({
@@ -95,8 +96,10 @@ export const T__2 = IDL.Record({
   'assists' : IDL.Nat,
   'userId' : IDL.Text,
   'playerId' : PlayerId,
+  'name' : IDL.Text,
   'yellowCards' : IDL.Nat,
   'jerseyNumber' : IDL.Nat,
+  'isVerified' : IDL.Bool,
   'goals' : IDL.Nat,
   'redCards' : IDL.Nat,
   'matchesPlayed' : IDL.Nat,
@@ -155,6 +158,11 @@ export const idlService = IDL.Service({
     ),
   '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+  'adminAddPlayer' : IDL.Func(
+      [TeamId, IDL.Text, IDL.Text, Position, IDL.Nat],
+      [PlayerId],
+      [],
+    ),
   'adminCreateTeam' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [TeamId], []),
   'adminCreateUser' : IDL.Func(
       [IDL.Text, IDL.Text, IDL.Text, Role, IDL.Text],
@@ -164,7 +172,7 @@ export const idlService = IDL.Service({
   'approveTeam' : IDL.Func([TeamId], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
   'createMVPVote' : IDL.Func([MatchId, PlayerId], [], []),
-  'createMatch' : IDL.Func([TeamId, TeamId, Time], [MatchId], []),
+  'createMatch' : IDL.Func([TeamId, TeamId, Time, IDL.Text], [MatchId], []),
   'createNews' : IDL.Func([IDL.Text, IDL.Text, IDL.Bool], [NewsId], []),
   'createNotification' : IDL.Func(
       [UserId, Type, IDL.Text],
@@ -177,7 +185,7 @@ export const idlService = IDL.Service({
       [],
     ),
   'createPlayer' : IDL.Func(
-      [TeamId, IDL.Text, Position, IDL.Nat],
+      [TeamId, IDL.Text, IDL.Text, Position, IDL.Nat],
       [PlayerId],
       [],
     ),
@@ -229,6 +237,13 @@ export const idlFactory = ({ IDL }) => {
     'topped_up_amount' : IDL.Opt(IDL.Nat),
   });
   const TeamId = IDL.Text;
+  const Position = IDL.Variant({
+    'goalkeeper' : IDL.Null,
+    'midfielder' : IDL.Null,
+    'forward' : IDL.Null,
+    'defender' : IDL.Null,
+  });
+  const PlayerId = IDL.Text;
   const Role = IDL.Variant({
     'fan' : IDL.Null,
     'admin' : IDL.Null,
@@ -241,7 +256,6 @@ export const idlFactory = ({ IDL }) => {
     'guest' : IDL.Null,
   });
   const MatchId = IDL.Text;
-  const PlayerId = IDL.Text;
   const Time = IDL.Int;
   const NewsId = IDL.Text;
   const UserId = IDL.Principal;
@@ -251,12 +265,6 @@ export const idlFactory = ({ IDL }) => {
     'message' : IDL.Null,
   });
   const NotificationId = IDL.Text;
-  const Position = IDL.Variant({
-    'goalkeeper' : IDL.Null,
-    'midfielder' : IDL.Null,
-    'forward' : IDL.Null,
-    'defender' : IDL.Null,
-  });
   const VoteId = IDL.Text;
   const T__6 = IDL.Record({
     'voteId' : VoteId,
@@ -280,6 +288,7 @@ export const idlFactory = ({ IDL }) => {
     'awayScore' : IDL.Nat,
     'commentary' : IDL.Vec(IDL.Text),
     'mvpPlayerId' : IDL.Opt(PlayerId),
+    'kickoffTime' : IDL.Text,
   });
   const ExternalBlob = IDL.Vec(IDL.Nat8);
   const T__4 = IDL.Record({
@@ -304,8 +313,10 @@ export const idlFactory = ({ IDL }) => {
     'assists' : IDL.Nat,
     'userId' : IDL.Text,
     'playerId' : PlayerId,
+    'name' : IDL.Text,
     'yellowCards' : IDL.Nat,
     'jerseyNumber' : IDL.Nat,
+    'isVerified' : IDL.Bool,
     'goals' : IDL.Nat,
     'redCards' : IDL.Nat,
     'matchesPlayed' : IDL.Nat,
@@ -364,6 +375,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+    'adminAddPlayer' : IDL.Func(
+        [TeamId, IDL.Text, IDL.Text, Position, IDL.Nat],
+        [PlayerId],
+        [],
+      ),
     'adminCreateTeam' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [TeamId], []),
     'adminCreateUser' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, Role, IDL.Text],
@@ -373,7 +389,7 @@ export const idlFactory = ({ IDL }) => {
     'approveTeam' : IDL.Func([TeamId], [], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
     'createMVPVote' : IDL.Func([MatchId, PlayerId], [], []),
-    'createMatch' : IDL.Func([TeamId, TeamId, Time], [MatchId], []),
+    'createMatch' : IDL.Func([TeamId, TeamId, Time, IDL.Text], [MatchId], []),
     'createNews' : IDL.Func([IDL.Text, IDL.Text, IDL.Bool], [NewsId], []),
     'createNotification' : IDL.Func(
         [UserId, Type, IDL.Text],
@@ -386,7 +402,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'createPlayer' : IDL.Func(
-        [TeamId, IDL.Text, Position, IDL.Nat],
+        [TeamId, IDL.Text, IDL.Text, Position, IDL.Nat],
         [PlayerId],
         [],
       ),

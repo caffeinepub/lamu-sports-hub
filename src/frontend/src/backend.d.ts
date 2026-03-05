@@ -55,8 +55,10 @@ export interface T__2 {
     assists: bigint;
     userId: string;
     playerId: PlayerId;
+    name: string;
     yellowCards: bigint;
     jerseyNumber: bigint;
+    isVerified: boolean;
     goals: bigint;
     redCards: bigint;
     matchesPlayed: bigint;
@@ -84,6 +86,7 @@ export interface T__5 {
     awayScore: bigint;
     commentary: Array<string>;
     mvpPlayerId?: PlayerId;
+    kickoffTime: string;
 }
 export interface T__6 {
     voteId: VoteId;
@@ -121,16 +124,17 @@ export enum UserRole {
     guest = "guest"
 }
 export interface backendInterface {
+    adminAddPlayer(teamId: TeamId, nickname: string, name: string, position: Position, jerseyNumber: bigint): Promise<PlayerId>;
     adminCreateTeam(name: string, area: string, coachName: string): Promise<TeamId>;
     adminCreateUser(name: string, phone: string, email: string, role: Role, area: string): Promise<string>;
     approveTeam(teamId: TeamId): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     createMVPVote(matchId: MatchId, nomineePlayerId: PlayerId): Promise<void>;
-    createMatch(homeTeam: TeamId, awayTeam: TeamId, date: Time): Promise<MatchId>;
+    createMatch(homeTeam: TeamId, awayTeam: TeamId, date: Time, kickoffTime: string): Promise<MatchId>;
     createNews(title: string, body: string, isPublished: boolean): Promise<NewsId>;
     createNotification(userId: UserId, notifType: Type, message: string): Promise<NotificationId>;
     createOrUpdateUserProfile(name: string, phone: string, email: string, role: Role, area: string, favoriteTeamId: TeamId | null): Promise<void>;
-    createPlayer(teamId: TeamId, nickname: string, position: Position, jerseyNumber: bigint): Promise<PlayerId>;
+    createPlayer(teamId: TeamId, nickname: string, name: string, position: Position, jerseyNumber: bigint): Promise<PlayerId>;
     createTeam(name: string, area: string): Promise<TeamId>;
     deleteNews(newsId: NewsId): Promise<void>;
     getAllMVPVotes(): Promise<Array<T__6>>;

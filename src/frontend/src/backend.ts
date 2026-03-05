@@ -137,8 +137,10 @@ export interface T__2 {
     assists: bigint;
     userId: string;
     playerId: PlayerId;
+    name: string;
     yellowCards: bigint;
     jerseyNumber: bigint;
+    isVerified: boolean;
     goals: bigint;
     redCards: bigint;
     matchesPlayed: bigint;
@@ -166,6 +168,7 @@ export interface T__5 {
     awayScore: bigint;
     commentary: Array<string>;
     mvpPlayerId?: PlayerId;
+    kickoffTime: string;
 }
 export interface T__6 {
     voteId: VoteId;
@@ -214,16 +217,17 @@ export interface backendInterface {
     _caffeineStorageRefillCashier(refillInformation: _CaffeineStorageRefillInformation | null): Promise<_CaffeineStorageRefillResult>;
     _caffeineStorageUpdateGatewayPrincipals(): Promise<void>;
     _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
+    adminAddPlayer(teamId: TeamId, nickname: string, name: string, position: Position, jerseyNumber: bigint): Promise<PlayerId>;
     adminCreateTeam(name: string, area: string, coachName: string): Promise<TeamId>;
     adminCreateUser(name: string, phone: string, email: string, role: Role, area: string): Promise<string>;
     approveTeam(teamId: TeamId): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     createMVPVote(matchId: MatchId, nomineePlayerId: PlayerId): Promise<void>;
-    createMatch(homeTeam: TeamId, awayTeam: TeamId, date: Time): Promise<MatchId>;
+    createMatch(homeTeam: TeamId, awayTeam: TeamId, date: Time, kickoffTime: string): Promise<MatchId>;
     createNews(title: string, body: string, isPublished: boolean): Promise<NewsId>;
     createNotification(userId: UserId, notifType: Type, message: string): Promise<NotificationId>;
     createOrUpdateUserProfile(name: string, phone: string, email: string, role: Role, area: string, favoriteTeamId: TeamId | null): Promise<void>;
-    createPlayer(teamId: TeamId, nickname: string, position: Position, jerseyNumber: bigint): Promise<PlayerId>;
+    createPlayer(teamId: TeamId, nickname: string, name: string, position: Position, jerseyNumber: bigint): Promise<PlayerId>;
     createTeam(name: string, area: string): Promise<TeamId>;
     deleteNews(newsId: NewsId): Promise<void>;
     getAllMVPVotes(): Promise<Array<T__6>>;
@@ -353,6 +357,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async adminAddPlayer(arg0: TeamId, arg1: string, arg2: string, arg3: Position, arg4: bigint): Promise<PlayerId> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminAddPlayer(arg0, arg1, arg2, to_candid_Position_n8(this._uploadFile, this._downloadFile, arg3), arg4);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.adminAddPlayer(arg0, arg1, arg2, to_candid_Position_n8(this._uploadFile, this._downloadFile, arg3), arg4);
+            return result;
+        }
+    }
     async adminCreateTeam(arg0: string, arg1: string, arg2: string): Promise<TeamId> {
         if (this.processError) {
             try {
@@ -370,14 +388,14 @@ export class Backend implements backendInterface {
     async adminCreateUser(arg0: string, arg1: string, arg2: string, arg3: Role, arg4: string): Promise<string> {
         if (this.processError) {
             try {
-                const result = await this.actor.adminCreateUser(arg0, arg1, arg2, to_candid_Role_n8(this._uploadFile, this._downloadFile, arg3), arg4);
+                const result = await this.actor.adminCreateUser(arg0, arg1, arg2, to_candid_Role_n10(this._uploadFile, this._downloadFile, arg3), arg4);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.adminCreateUser(arg0, arg1, arg2, to_candid_Role_n8(this._uploadFile, this._downloadFile, arg3), arg4);
+            const result = await this.actor.adminCreateUser(arg0, arg1, arg2, to_candid_Role_n10(this._uploadFile, this._downloadFile, arg3), arg4);
             return result;
         }
     }
@@ -398,14 +416,14 @@ export class Backend implements backendInterface {
     async assignCallerUserRole(arg0: Principal, arg1: UserRole): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.assignCallerUserRole(arg0, to_candid_UserRole_n10(this._uploadFile, this._downloadFile, arg1));
+                const result = await this.actor.assignCallerUserRole(arg0, to_candid_UserRole_n12(this._uploadFile, this._downloadFile, arg1));
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.assignCallerUserRole(arg0, to_candid_UserRole_n10(this._uploadFile, this._downloadFile, arg1));
+            const result = await this.actor.assignCallerUserRole(arg0, to_candid_UserRole_n12(this._uploadFile, this._downloadFile, arg1));
             return result;
         }
     }
@@ -423,17 +441,17 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async createMatch(arg0: TeamId, arg1: TeamId, arg2: Time): Promise<MatchId> {
+    async createMatch(arg0: TeamId, arg1: TeamId, arg2: Time, arg3: string): Promise<MatchId> {
         if (this.processError) {
             try {
-                const result = await this.actor.createMatch(arg0, arg1, arg2);
+                const result = await this.actor.createMatch(arg0, arg1, arg2, arg3);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.createMatch(arg0, arg1, arg2);
+            const result = await this.actor.createMatch(arg0, arg1, arg2, arg3);
             return result;
         }
     }
@@ -454,42 +472,42 @@ export class Backend implements backendInterface {
     async createNotification(arg0: UserId, arg1: Type, arg2: string): Promise<NotificationId> {
         if (this.processError) {
             try {
-                const result = await this.actor.createNotification(arg0, to_candid_Type_n12(this._uploadFile, this._downloadFile, arg1), arg2);
+                const result = await this.actor.createNotification(arg0, to_candid_Type_n14(this._uploadFile, this._downloadFile, arg1), arg2);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.createNotification(arg0, to_candid_Type_n12(this._uploadFile, this._downloadFile, arg1), arg2);
+            const result = await this.actor.createNotification(arg0, to_candid_Type_n14(this._uploadFile, this._downloadFile, arg1), arg2);
             return result;
         }
     }
     async createOrUpdateUserProfile(arg0: string, arg1: string, arg2: string, arg3: Role, arg4: string, arg5: TeamId | null): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.createOrUpdateUserProfile(arg0, arg1, arg2, to_candid_Role_n8(this._uploadFile, this._downloadFile, arg3), arg4, to_candid_opt_n14(this._uploadFile, this._downloadFile, arg5));
+                const result = await this.actor.createOrUpdateUserProfile(arg0, arg1, arg2, to_candid_Role_n10(this._uploadFile, this._downloadFile, arg3), arg4, to_candid_opt_n16(this._uploadFile, this._downloadFile, arg5));
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.createOrUpdateUserProfile(arg0, arg1, arg2, to_candid_Role_n8(this._uploadFile, this._downloadFile, arg3), arg4, to_candid_opt_n14(this._uploadFile, this._downloadFile, arg5));
+            const result = await this.actor.createOrUpdateUserProfile(arg0, arg1, arg2, to_candid_Role_n10(this._uploadFile, this._downloadFile, arg3), arg4, to_candid_opt_n16(this._uploadFile, this._downloadFile, arg5));
             return result;
         }
     }
-    async createPlayer(arg0: TeamId, arg1: string, arg2: Position, arg3: bigint): Promise<PlayerId> {
+    async createPlayer(arg0: TeamId, arg1: string, arg2: string, arg3: Position, arg4: bigint): Promise<PlayerId> {
         if (this.processError) {
             try {
-                const result = await this.actor.createPlayer(arg0, arg1, to_candid_Position_n15(this._uploadFile, this._downloadFile, arg2), arg3);
+                const result = await this.actor.createPlayer(arg0, arg1, arg2, to_candid_Position_n8(this._uploadFile, this._downloadFile, arg3), arg4);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.createPlayer(arg0, arg1, to_candid_Position_n15(this._uploadFile, this._downloadFile, arg2), arg3);
+            const result = await this.actor.createPlayer(arg0, arg1, arg2, to_candid_Position_n8(this._uploadFile, this._downloadFile, arg3), arg4);
             return result;
         }
     }
@@ -832,14 +850,14 @@ export class Backend implements backendInterface {
     async saveCallerUserProfile(arg0: string, arg1: string, arg2: string, arg3: Role, arg4: string, arg5: TeamId | null): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.saveCallerUserProfile(arg0, arg1, arg2, to_candid_Role_n8(this._uploadFile, this._downloadFile, arg3), arg4, to_candid_opt_n14(this._uploadFile, this._downloadFile, arg5));
+                const result = await this.actor.saveCallerUserProfile(arg0, arg1, arg2, to_candid_Role_n10(this._uploadFile, this._downloadFile, arg3), arg4, to_candid_opt_n16(this._uploadFile, this._downloadFile, arg5));
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.saveCallerUserProfile(arg0, arg1, arg2, to_candid_Role_n8(this._uploadFile, this._downloadFile, arg3), arg4, to_candid_opt_n14(this._uploadFile, this._downloadFile, arg5));
+            const result = await this.actor.saveCallerUserProfile(arg0, arg1, arg2, to_candid_Role_n10(this._uploadFile, this._downloadFile, arg3), arg4, to_candid_opt_n16(this._uploadFile, this._downloadFile, arg5));
             return result;
         }
     }
@@ -951,6 +969,7 @@ function from_candid_record_n19(_uploadFile: (file: ExternalBlob) => Promise<Uin
     awayScore: bigint;
     commentary: Array<string>;
     mvpPlayerId: [] | [_PlayerId];
+    kickoffTime: string;
 }): {
     status: Status;
     homeTeam: TeamId;
@@ -961,6 +980,7 @@ function from_candid_record_n19(_uploadFile: (file: ExternalBlob) => Promise<Uin
     awayScore: bigint;
     commentary: Array<string>;
     mvpPlayerId?: PlayerId;
+    kickoffTime: string;
 } {
     return {
         status: from_candid_Status_n20(_uploadFile, _downloadFile, value.status),
@@ -971,7 +991,8 @@ function from_candid_record_n19(_uploadFile: (file: ExternalBlob) => Promise<Uin
         awayTeam: value.awayTeam,
         awayScore: value.awayScore,
         commentary: value.commentary,
-        mvpPlayerId: record_opt_to_undefined(from_candid_opt_n22(_uploadFile, _downloadFile, value.mvpPlayerId))
+        mvpPlayerId: record_opt_to_undefined(from_candid_opt_n22(_uploadFile, _downloadFile, value.mvpPlayerId)),
+        kickoffTime: value.kickoffTime
     };
 }
 async function from_candid_record_n25(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
@@ -1030,8 +1051,10 @@ async function from_candid_record_n35(_uploadFile: (file: ExternalBlob) => Promi
     assists: bigint;
     userId: string;
     playerId: _PlayerId;
+    name: string;
     yellowCards: bigint;
     jerseyNumber: bigint;
+    isVerified: boolean;
     goals: bigint;
     redCards: bigint;
     matchesPlayed: bigint;
@@ -1043,8 +1066,10 @@ async function from_candid_record_n35(_uploadFile: (file: ExternalBlob) => Promi
     assists: bigint;
     userId: string;
     playerId: PlayerId;
+    name: string;
     yellowCards: bigint;
     jerseyNumber: bigint;
+    isVerified: boolean;
     goals: bigint;
     redCards: bigint;
     matchesPlayed: bigint;
@@ -1057,8 +1082,10 @@ async function from_candid_record_n35(_uploadFile: (file: ExternalBlob) => Promi
         assists: value.assists,
         userId: value.userId,
         playerId: value.playerId,
+        name: value.name,
         yellowCards: value.yellowCards,
         jerseyNumber: value.jerseyNumber,
+        isVerified: value.isVerified,
         goals: value.goals,
         redCards: value.redCards,
         matchesPlayed: value.matchesPlayed,
@@ -1212,20 +1239,20 @@ async function from_candid_vec_n38(_uploadFile: (file: ExternalBlob) => Promise<
 function from_candid_vec_n41(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_T>): Array<T> {
     return value.map((x)=>from_candid_T_n42(_uploadFile, _downloadFile, x));
 }
-function to_candid_Position_n15(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Position): _Position {
-    return to_candid_variant_n16(_uploadFile, _downloadFile, value);
-}
-function to_candid_Role_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Role): _Role {
+function to_candid_Position_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Position): _Position {
     return to_candid_variant_n9(_uploadFile, _downloadFile, value);
+}
+function to_candid_Role_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Role): _Role {
+    return to_candid_variant_n11(_uploadFile, _downloadFile, value);
 }
 function to_candid_Status_n51(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Status): _Status {
     return to_candid_variant_n52(_uploadFile, _downloadFile, value);
 }
-function to_candid_Type_n12(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Type): _Type {
-    return to_candid_variant_n13(_uploadFile, _downloadFile, value);
+function to_candid_Type_n14(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Type): _Type {
+    return to_candid_variant_n15(_uploadFile, _downloadFile, value);
 }
-function to_candid_UserRole_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserRole): _UserRole {
-    return to_candid_variant_n11(_uploadFile, _downloadFile, value);
+function to_candid_UserRole_n12(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserRole): _UserRole {
+    return to_candid_variant_n13(_uploadFile, _downloadFile, value);
 }
 function to_candid__CaffeineStorageRefillInformation_n2(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _CaffeineStorageRefillInformation): __CaffeineStorageRefillInformation {
     return to_candid_record_n3(_uploadFile, _downloadFile, value);
@@ -1233,7 +1260,7 @@ function to_candid__CaffeineStorageRefillInformation_n2(_uploadFile: (file: Exte
 function to_candid_opt_n1(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _CaffeineStorageRefillInformation | null): [] | [__CaffeineStorageRefillInformation] {
     return value === null ? candid_none() : candid_some(to_candid__CaffeineStorageRefillInformation_n2(_uploadFile, _downloadFile, value));
 }
-function to_candid_opt_n14(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: TeamId | null): [] | [_TeamId] {
+function to_candid_opt_n16(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: TeamId | null): [] | [_TeamId] {
     return value === null ? candid_none() : candid_some(value);
 }
 function to_candid_record_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
@@ -1245,7 +1272,26 @@ function to_candid_record_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8A
         proposed_top_up_amount: value.proposed_top_up_amount ? candid_some(value.proposed_top_up_amount) : candid_none()
     };
 }
-function to_candid_variant_n11(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserRole): {
+function to_candid_variant_n11(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Role): {
+    fan: null;
+} | {
+    admin: null;
+} | {
+    player: null;
+} | {
+    coach: null;
+} {
+    return value == Role.fan ? {
+        fan: null
+    } : value == Role.admin ? {
+        admin: null
+    } : value == Role.player ? {
+        player: null
+    } : value == Role.coach ? {
+        coach: null
+    } : value;
+}
+function to_candid_variant_n13(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserRole): {
     admin: null;
 } | {
     user: null;
@@ -1260,7 +1306,7 @@ function to_candid_variant_n11(_uploadFile: (file: ExternalBlob) => Promise<Uint
         guest: null
     } : value;
 }
-function to_candid_variant_n13(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Type): {
+function to_candid_variant_n15(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Type): {
     alert: null;
 } | {
     reminder: null;
@@ -1273,25 +1319,6 @@ function to_candid_variant_n13(_uploadFile: (file: ExternalBlob) => Promise<Uint
         reminder: null
     } : value == Type.message ? {
         message: null
-    } : value;
-}
-function to_candid_variant_n16(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Position): {
-    goalkeeper: null;
-} | {
-    midfielder: null;
-} | {
-    forward: null;
-} | {
-    defender: null;
-} {
-    return value == Position.goalkeeper ? {
-        goalkeeper: null
-    } : value == Position.midfielder ? {
-        midfielder: null
-    } : value == Position.forward ? {
-        forward: null
-    } : value == Position.defender ? {
-        defender: null
     } : value;
 }
 function to_candid_variant_n52(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Status): {
@@ -1309,23 +1336,23 @@ function to_candid_variant_n52(_uploadFile: (file: ExternalBlob) => Promise<Uint
         live: null
     } : value;
 }
-function to_candid_variant_n9(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Role): {
-    fan: null;
+function to_candid_variant_n9(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Position): {
+    goalkeeper: null;
 } | {
-    admin: null;
+    midfielder: null;
 } | {
-    player: null;
+    forward: null;
 } | {
-    coach: null;
+    defender: null;
 } {
-    return value == Role.fan ? {
-        fan: null
-    } : value == Role.admin ? {
-        admin: null
-    } : value == Role.player ? {
-        player: null
-    } : value == Role.coach ? {
-        coach: null
+    return value == Position.goalkeeper ? {
+        goalkeeper: null
+    } : value == Position.midfielder ? {
+        midfielder: null
+    } : value == Position.forward ? {
+        forward: null
+    } : value == Position.defender ? {
+        defender: null
     } : value;
 }
 export interface CreateActorOptions {

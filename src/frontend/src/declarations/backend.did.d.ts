@@ -53,8 +53,10 @@ export interface T__2 {
   'assists' : bigint,
   'userId' : string,
   'playerId' : PlayerId,
+  'name' : string,
   'yellowCards' : bigint,
   'jerseyNumber' : bigint,
+  'isVerified' : boolean,
   'goals' : bigint,
   'redCards' : bigint,
   'matchesPlayed' : bigint,
@@ -89,6 +91,7 @@ export interface T__5 {
   'awayScore' : bigint,
   'commentary' : Array<string>,
   'mvpPlayerId' : [] | [PlayerId],
+  'kickoffTime' : string,
 }
 export interface T__6 {
   'voteId' : VoteId,
@@ -135,6 +138,10 @@ export interface _SERVICE {
   >,
   '_caffeineStorageUpdateGatewayPrincipals' : ActorMethod<[], undefined>,
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
+  'adminAddPlayer' : ActorMethod<
+    [TeamId, string, string, Position, bigint],
+    PlayerId
+  >,
   'adminCreateTeam' : ActorMethod<[string, string, string], TeamId>,
   'adminCreateUser' : ActorMethod<
     [string, string, string, Role, string],
@@ -143,14 +150,17 @@ export interface _SERVICE {
   'approveTeam' : ActorMethod<[TeamId], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
   'createMVPVote' : ActorMethod<[MatchId, PlayerId], undefined>,
-  'createMatch' : ActorMethod<[TeamId, TeamId, Time], MatchId>,
+  'createMatch' : ActorMethod<[TeamId, TeamId, Time, string], MatchId>,
   'createNews' : ActorMethod<[string, string, boolean], NewsId>,
   'createNotification' : ActorMethod<[UserId, Type, string], NotificationId>,
   'createOrUpdateUserProfile' : ActorMethod<
     [string, string, string, Role, string, [] | [TeamId]],
     undefined
   >,
-  'createPlayer' : ActorMethod<[TeamId, string, Position, bigint], PlayerId>,
+  'createPlayer' : ActorMethod<
+    [TeamId, string, string, Position, bigint],
+    PlayerId
+  >,
   'createTeam' : ActorMethod<[string, string], TeamId>,
   'deleteNews' : ActorMethod<[NewsId], undefined>,
   'getAllMVPVotes' : ActorMethod<[], Array<T__6>>,

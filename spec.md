@@ -1,30 +1,36 @@
 # Lamu Sports Hub
 
 ## Current State
-A full-stack sports management app with 26 pages, bottom nav with a "More" sheet, Admin Panel with tabs for Users, Teams, Matches, News, Players, Referees, Awards, Officials, Settings, Inbox, Admins, and Recovery. Add User, Add Team, and Add News dialogs exist inside the Admin Panel page only.
+- Full app with Admin Panel, Coach Dashboard, news system, and player management
+- Backend has `createNews`, `adminCreateUser`, `createPlayer`, `adminCreateTeam` functions
+- `getUserRole` in access-control.mo calls `Runtime.trap("User is not registered")` for any principal not in the ACL map -- this causes ALL write operations to crash for any user who hasn't gone through `_initializeAccessControlWithSecret`
+- News posting in Admin Panel calls `actor.createNews(...)` but the backend rejects it because `hasPermission` traps instead of returning false
+- Player registration in CoachDashboardPage uses mock setTimeout -- never calls the backend
+- Admin Players tab in AdminPanelPage also uses mock data (MOCK_PLAYERS) -- never persists to backend
+- The `createPlayer` backend function requires the caller to be both a registered user AND the team's coach OR admin
 
 ## Requested Changes (Diff)
 
 ### Add
-- Three new quick-action icon tiles inside the "More" bottom sheet, visible only to admins:
-  - "Add Player" — opens a sheet/dialog to register a new player (name, position, team, jersey number, description/bio)
-  - "Add Coach" — opens a sheet/dialog to register a new coach (name, area, contact, description of coaching style/experience)
-  - "Add News" — opens a sheet/dialog to create and publish a news post (title, body, photo upload, publish toggle)
-- A role-aware section header "Officials Quick Actions" above these three tiles in the More sheet, shown only when role === "admin"
+- Backend: `addPlayer` admin function that allows any registered admin/user to add a player to any team (bypasses coach restriction) -- used for officials
+- Backend: new `createNewsOpen` path -- allow `createNews` to work without the user role check trapping, by making `hasPermission` return false gracefully
 
 ### Modify
-- BottomNav component: accept and pass `role` prop into the More sheet render; show the three new quick-action tiles only when role is "admin"
-- The three dialogs/sheets within BottomNav are self-contained mini-forms that call the same backend APIs already wired in AdminPanelPage (adminCreateUser for players/coaches, createNews for news)
+- Backend: `getUserRole` in access-control.mo -- return `#guest` instead of trapping when user is not registered, so `hasPermission` returns false gracefully instead of crashing
+- Backend: `createPlayer` -- relax restriction so admins can create players for any team
+- Frontend AdminPanelPage: Players tab -- wire "Add Player" button and confirmation checkboxes to backend (currently mock only)
+- Frontend AdminPanelPage: News tab -- ensure `createNews` succeeds by ensuring actor is initialized before call
+- Frontend CoachDashboardPage: `handleAddPlayer` -- call `actor.createPlayer(...)` for real instead of setTimeout mock
+- Frontend AdminPanelPage: Add Player quick form (from More menu) -- connect to real backend `createPlayer` call
 
 ### Remove
 - Nothing removed
 
 ## Implementation Plan
-1. Update BottomNav to receive and use `role` prop (already received, just needs to be threaded into the More sheet render)
-2. Add three quick-action tiles in the More sheet under an "Officials Quick Actions" section, visible only when role === "admin"
-3. Implement three Dialog components inline in BottomNav (or extract to a small helper component):
-   - AddPlayerQuickDialog: name, team selector (from mock teams), position select, jersey number, short bio/description
-   - AddCoachQuickDialog: name, area select, phone, email, coaching description
-   - AddNewsQuickDialog: title, body textarea, publish toggle, photo upload button
-4. Wire each dialog to call actor APIs via useActor hook
-5. Show toast feedback on success/failure
+1. Fix `getUserRole` in access-control.mo to return `#guest` instead of trapping for unregistered users
+2. Fix `createPlayer` backend to allow admins to add players to any team
+3. Add a backend `adminAddPlayer` function that takes teamId + full player fields and does not require the coach restriction
+4. In AdminPanelPage Players tab, add a real "Add Player" dialog that calls backend `createPlayer` with team selection
+5. In CoachDashboardPage, wire `handleAddPlayer` to call backend `createPlayer` for real
+6. Keep news posting as-is (it should now work after the getUserRole fix)
+7. After backend fix, confirm news + player flows work end-to-end
