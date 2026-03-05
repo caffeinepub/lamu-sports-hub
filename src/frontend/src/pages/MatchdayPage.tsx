@@ -6,7 +6,12 @@ import {
   formatMatchDate,
   formatTime,
 } from "@/data/mockData";
-import { getMatchReferees, getReferees } from "@/utils/localStore";
+import {
+  getMatchPitches,
+  getMatchReferees,
+  getPitches,
+  getReferees,
+} from "@/utils/localStore";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   AlertTriangle,
@@ -15,6 +20,7 @@ import {
   Clock,
   Flag,
   Info,
+  MapPin,
   Square,
   Target,
   User,
@@ -83,6 +89,14 @@ export function MatchdayPage() {
   const assignedRefereeId = matchRefereeMap[match.matchId];
   const assignedReferee = assignedRefereeId
     ? allReferees.find((r) => r.refereeId === assignedRefereeId)
+    : null;
+
+  // Pitch lookup
+  const matchPitchMap = getMatchPitches();
+  const allPitches = getPitches();
+  const assignedPitchId = matchPitchMap[match.matchId];
+  const assignedPitch = assignedPitchId
+    ? allPitches.find((p) => p.pitchId === assignedPitchId)
     : null;
 
   const reversedCommentary = [...match.commentary].reverse();
@@ -230,6 +244,14 @@ export function MatchdayPage() {
                 <span className="font-medium text-foreground">
                   {assignedReferee.name}
                 </span>
+              </span>
+            </div>
+          )}
+          {assignedPitch && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <MapPin className="w-3.5 h-3.5" />
+              <span className="font-medium text-foreground">
+                {assignedPitch.name}
               </span>
             </div>
           )}

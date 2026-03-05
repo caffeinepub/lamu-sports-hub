@@ -16,14 +16,24 @@ import {
 import { useActor } from "@/hooks/useActor";
 import {
   LSH_SYSTEM_STATUS_KEY,
+  type NewsConfirmation,
   type SystemStatus,
   getLocalStore,
+  getNewsConfirmations,
+  getUserSettings,
 } from "@/utils/localStore";
 import { useNavigate } from "@tanstack/react-router";
 import {
   AlertTriangle,
+  Award,
+  BarChart2,
+  Calendar,
+  CheckCircle,
   ChevronRight,
+  Compass,
   Newspaper,
+  RefreshCw,
+  Shield,
   Star,
   TrendingUp,
   Trophy,
@@ -31,7 +41,7 @@ import {
   Zap,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 interface DashboardPageProps {
   favoriteTeamId?: string;
@@ -111,31 +121,29 @@ export function DashboardPage({
   const [newsList, setNewsList] = useState<NewsItem[]>([]);
   const [newsLoading, setNewsLoading] = useState(false);
   const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
+  const [newsConfirmations, _setNewsConfirmations] =
+    useState<Record<string, NewsConfirmation>>(getNewsConfirmations);
 
-  useEffect(() => {
+  const fetchNews = useCallback(() => {
     if (!actor) return;
-    let cancelled = false;
     setNewsLoading(true);
     actor
       .getAllNews()
       .then((items) => {
-        if (!cancelled) {
-          const published = (items as NewsItem[])
-            .filter((n) => n.isPublished)
-            .slice(0, 3);
-          setNewsList(published);
-        }
+        // Backend already filters published, just take latest 3
+        setNewsList((items as NewsItem[]).slice(0, 3));
       })
       .catch((err) => {
         console.error("Failed to load news:", err);
       })
       .finally(() => {
-        if (!cancelled) setNewsLoading(false);
+        setNewsLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
   }, [actor]);
+
+  useEffect(() => {
+    fetchNews();
+  }, [fetchNews]);
 
   return (
     <div data-ocid="dashboard.page" className="min-h-screen pb-24 pt-14">
@@ -199,6 +207,55 @@ export function DashboardPage({
             🏝️ Island Pride. Island Football.
           </p>
         </motion.div>
+      </div>
+
+      {/* Quick Links Bar */}
+      <div className="overflow-x-auto scrollbar-hide mt-3 mb-1">
+        <div className="flex gap-2 px-4 pb-1 min-w-max">
+          {[
+            {
+              label: "Standings",
+              icon: <BarChart2 className="w-4 h-4" />,
+              to: "/standings",
+            },
+            {
+              label: "Matches",
+              icon: <Calendar className="w-4 h-4" />,
+              to: "/matches",
+            },
+            {
+              label: "Leaderboard",
+              icon: <Trophy className="w-4 h-4" />,
+              to: "/leaderboard",
+            },
+            {
+              label: "Awards",
+              icon: <Award className="w-4 h-4" />,
+              to: "/awards",
+            },
+            {
+              label: "Explore",
+              icon: <Compass className="w-4 h-4" />,
+              to: "/explore",
+            },
+            {
+              label: "Officials",
+              icon: <Shield className="w-4 h-4" />,
+              to: "/officials",
+            },
+          ].map((item) => (
+            <button
+              key={item.to}
+              type="button"
+              onClick={() => navigate({ to: item.to })}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-full border border-border bg-card text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all whitespace-nowrap flex-shrink-0"
+              data-ocid={"dashboard.quicklink.button"}
+            >
+              {item.icon}
+              {item.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="px-4 space-y-6 mt-4">
@@ -334,6 +391,101 @@ export function DashboardPage({
             </div>
           </motion.div>
         )}
+
+        {/* Favourite Player */}
+        {(() => {
+          const settings = getUserSettings();
+          const favPlayer = settings.favoritePlayerId
+            ? MOCK_PLAYERS.find((p) => p.playerId === settings.favoritePlayerId)
+            : null;
+          const favPlayerTeam = favPlayer
+            ? MOCK_TEAMS.find((t) => t.teamId === favPlayer.teamId)
+            : null;
+          if (!favPlayer || !favPlayerTeam) return null;
+          return (
+            <motion.div
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.18 }}
+              data-ocid="dashboard.fav_player.card"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide flex items-center gap-1.5">
+                  <Star className="w-4 h-4 text-yellow-400" />
+                  Favourite Player
+                </h2>
+                <button
+                  type="button"
+                  className="text-xs text-primary font-medium flex items-center gap-1"
+                  onClick={() =>
+                    navigate({ to: `/players/${favPlayer.playerId}` })
+                  }
+                  data-ocid="dashboard.fav_player.link"
+                >
+                  Profile <ChevronRight className="w-3 h-3" />
+                </button>
+              </div>
+              <button
+                type="button"
+                className="w-full rounded-xl p-4 border border-border bg-card hover:border-primary/40 transition-all text-left"
+                style={{
+                  background: `linear-gradient(135deg, ${favPlayerTeam.color}22 0%, oklch(0.16 0.04 255) 70%)`,
+                }}
+                onClick={() =>
+                  navigate({ to: `/players/${favPlayer.playerId}` })
+                }
+                data-ocid="dashboard.fav_player.button"
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-black font-stats flex-shrink-0"
+                    style={{
+                      backgroundColor: favPlayerTeam.color,
+                      color: favPlayerTeam.secondaryColor,
+                    }}
+                  >
+                    {favPlayer.jerseyNumber}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-sm text-foreground">
+                      {favPlayer.name}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      "{favPlayer.nickname}"
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <TeamBadge team={favPlayerTeam} size="xs" />
+                      <span className="text-xs text-muted-foreground capitalize">
+                        {favPlayer.position}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex gap-3 text-right flex-shrink-0">
+                    <div>
+                      <div
+                        className="font-black font-stats text-xl"
+                        style={{ color: "oklch(0.6 0.22 24)" }}
+                      >
+                        {favPlayer.goals}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">
+                        Goals
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-black font-stats text-xl text-primary">
+                        {favPlayer.assists}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">
+                        Assists
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </button>
+            </motion.div>
+          );
+        })()}
 
         {/* Top 5 standings snippet */}
         <motion.div
@@ -498,6 +650,19 @@ export function DashboardPage({
               />
               Latest News
             </h2>
+            <button
+              type="button"
+              onClick={fetchNews}
+              disabled={newsLoading}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
+              data-ocid="dashboard.news.refresh_button"
+              title="Refresh news"
+            >
+              <RefreshCw
+                className={`w-3 h-3 ${newsLoading ? "animate-spin" : ""}`}
+              />
+              <span>Refresh</span>
+            </button>
           </div>
 
           {newsLoading ? (
@@ -553,20 +718,43 @@ export function DashboardPage({
                   </div>
                   {/* Text content */}
                   <div className="flex-1 px-3 py-2.5 min-w-0">
-                    <p className="font-semibold text-xs text-foreground line-clamp-2 leading-tight">
-                      {item.title}
-                    </p>
+                    <div className="flex items-start gap-1.5">
+                      <p className="font-semibold text-xs text-foreground line-clamp-2 leading-tight flex-1">
+                        {item.title}
+                      </p>
+                      {newsConfirmations[item.newsId] && (
+                        <span
+                          className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 mt-0.5"
+                          style={{
+                            backgroundColor: "oklch(0.55 0.18 145 / 0.15)",
+                            color: "oklch(0.65 0.18 145)",
+                            border: "1px solid oklch(0.55 0.18 145 / 0.4)",
+                          }}
+                          title={`Confirmed by ${newsConfirmations[item.newsId].confirmedBy}`}
+                        >
+                          <CheckCircle className="w-2.5 h-2.5" />
+                          Official
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">
                       {item.body.length > 80
                         ? `${item.body.slice(0, 80)}...`
                         : item.body}
                     </p>
-                    <p
-                      className="text-[10px] mt-1.5 font-medium"
-                      style={{ color: "oklch(0.6 0.22 24)" }}
-                    >
-                      {timeAgo(item.timestamp)}
-                    </p>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <p
+                        className="text-[10px] font-medium"
+                        style={{ color: "oklch(0.6 0.22 24)" }}
+                      >
+                        {timeAgo(item.timestamp)}
+                      </p>
+                      {newsConfirmations[item.newsId] && (
+                        <p className="text-[10px] text-muted-foreground/60">
+                          · by {newsConfirmations[item.newsId].confirmedBy}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </button>
               ))}
@@ -657,12 +845,28 @@ export function DashboardPage({
                   {selectedNews.title}
                 </SheetTitle>
               </SheetHeader>
-              <p
-                className="text-xs font-medium mb-3"
-                style={{ color: "oklch(0.6 0.22 24)" }}
-              >
-                {timeAgo(selectedNews.timestamp)}
-              </p>
+              <div className="flex items-center gap-3 mb-3 flex-wrap">
+                <p
+                  className="text-xs font-medium"
+                  style={{ color: "oklch(0.6 0.22 24)" }}
+                >
+                  {timeAgo(selectedNews.timestamp)}
+                </p>
+                {newsConfirmations[selectedNews.newsId] && (
+                  <span
+                    className="flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full"
+                    style={{
+                      backgroundColor: "oklch(0.55 0.18 145 / 0.15)",
+                      color: "oklch(0.65 0.18 145)",
+                      border: "1px solid oklch(0.55 0.18 145 / 0.4)",
+                    }}
+                  >
+                    <CheckCircle className="w-3 h-3" />
+                    Officially Confirmed by{" "}
+                    {newsConfirmations[selectedNews.newsId].confirmedBy}
+                  </span>
+                )}
+              </div>
               <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
                 {selectedNews.body}
               </p>

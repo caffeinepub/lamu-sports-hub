@@ -349,6 +349,7 @@ export type UserSettings = {
   newsAlerts: boolean;
   mvpReminders: boolean;
   favoriteTeamId: string;
+  favoritePlayerId: string;
   displayName: string;
 };
 
@@ -360,6 +361,117 @@ export function getUserSettings(): UserSettings {
     newsAlerts: true,
     mvpReminders: false,
     favoriteTeamId: "team-001",
+    favoritePlayerId: "",
     displayName: "Hassan Mwende",
   });
+}
+
+// ── Match Pitches ─────────────────────────────────────────────────────────────
+export const LSH_MATCH_PITCHES_KEY = "lsh_match_pitches";
+
+export function getMatchPitches(): Record<string, string> {
+  return getLocalStore<Record<string, string>>(LSH_MATCH_PITCHES_KEY, {});
+}
+
+export function setMatchPitch(matchId: string, pitchId: string | null): void {
+  const current = getMatchPitches();
+  if (pitchId === null) {
+    delete current[matchId];
+  } else {
+    current[matchId] = pitchId;
+  }
+  setLocalStore(LSH_MATCH_PITCHES_KEY, current);
+}
+
+// ── Team Logos ────────────────────────────────────────────────────────────────
+export const LSH_TEAM_LOGOS_KEY = "lsh_team_logos";
+
+export function getTeamLogos(): Record<string, string> {
+  return getLocalStore<Record<string, string>>(LSH_TEAM_LOGOS_KEY, {});
+}
+
+export function setTeamLogo(teamId: string, base64: string): void {
+  const current = getTeamLogos();
+  current[teamId] = base64;
+  setLocalStore(LSH_TEAM_LOGOS_KEY, current);
+}
+
+// ── News Confirmations ────────────────────────────────────────────────────────
+// Maps newsId -> { confirmedBy: string; confirmedAt: string }
+export type NewsConfirmation = {
+  confirmedBy: string;
+  confirmedAt: string;
+};
+
+export const LSH_NEWS_CONFIRMATIONS_KEY = "lsh_news_confirmations";
+
+export function getNewsConfirmations(): Record<string, NewsConfirmation> {
+  return getLocalStore<Record<string, NewsConfirmation>>(
+    LSH_NEWS_CONFIRMATIONS_KEY,
+    {},
+  );
+}
+
+export function confirmNews(newsId: string, confirmedBy: string): void {
+  const current = getNewsConfirmations();
+  current[newsId] = {
+    confirmedBy,
+    confirmedAt: new Date().toISOString(),
+  };
+  setLocalStore(LSH_NEWS_CONFIRMATIONS_KEY, current);
+}
+
+export function unconfirmNews(newsId: string): void {
+  const current = getNewsConfirmations();
+  delete current[newsId];
+  setLocalStore(LSH_NEWS_CONFIRMATIONS_KEY, current);
+}
+
+// ── Recovery Requests ─────────────────────────────────────────────────────────
+export type RecoveryRequest = {
+  ticketId: string; // e.g. "LSH-REC-1234"
+  submittedAt: string; // ISO date
+  name: string;
+  contact: string; // phone or email
+  lastPrincipalId: string; // what the user remembers
+  issueDescription: string;
+  status: "pending" | "resolved" | "rejected";
+  adminReply: string;
+};
+
+export const LSH_RECOVERY_KEY = "lsh_recovery_requests";
+
+export function getRecoveryRequests(): RecoveryRequest[] {
+  return getLocalStore<RecoveryRequest[]>(LSH_RECOVERY_KEY, []);
+}
+
+export function addRecoveryRequest(
+  req: Omit<
+    RecoveryRequest,
+    "ticketId" | "submittedAt" | "status" | "adminReply"
+  >,
+): RecoveryRequest {
+  const all = getRecoveryRequests();
+  const ticket: RecoveryRequest = {
+    ...req,
+    ticketId: `LSH-REC-${Math.floor(1000 + Math.random() * 9000)}`,
+    submittedAt: new Date().toISOString(),
+    status: "pending",
+    adminReply: "",
+  };
+  all.push(ticket);
+  setLocalStore(LSH_RECOVERY_KEY, all);
+  return ticket;
+}
+
+export function updateRecoveryRequest(
+  ticketId: string,
+  updates: Partial<Pick<RecoveryRequest, "status" | "adminReply">>,
+): void {
+  const all = getRecoveryRequests();
+  const idx = all.findIndex((r) => r.ticketId === ticketId);
+  if (idx !== -1) {
+    all[idx] = { ...all[idx], ...updates };
+    setLocalStore(LSH_RECOVERY_KEY, all);
+  }
 }

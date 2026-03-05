@@ -1,13 +1,4 @@
-import { Separator } from "@/components/ui/separator";
-import {
-  Facebook,
-  Instagram,
-  Mail,
-  MessageCircle,
-  Phone,
-  Shield,
-  Twitter,
-} from "lucide-react";
+import { CheckCircle, Lock, Mail, Phone, Shield } from "lucide-react";
 import { motion } from "motion/react";
 import { SiFacebook, SiInstagram, SiWhatsapp, SiX } from "react-icons/si";
 
@@ -279,6 +270,146 @@ export function AboutPage() {
               <Phone className="w-5 h-5 text-muted-foreground" />
               <span>+254 700 000 000</span>
             </a>
+          </div>
+        </motion.section>
+
+        {/* App Safety & Security */}
+        <motion.section
+          initial={{ y: 10, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.38 }}
+          data-ocid="about.safety.section"
+          className="rounded-xl p-4 overflow-hidden relative"
+          style={{
+            background:
+              "linear-gradient(135deg, oklch(0.12 0.05 252) 0%, oklch(0.1 0.03 255) 100%)",
+            border: "1px solid oklch(0.55 0.18 252 / 0.35)",
+          }}
+        >
+          {/* Background shield watermark */}
+          <div
+            className="absolute -right-4 -bottom-4 opacity-5"
+            aria-hidden="true"
+          >
+            <Shield
+              className="w-28 h-28"
+              style={{ color: "oklch(0.7 0.18 252)" }}
+            />
+          </div>
+          <div className="flex items-center gap-2 mb-3 relative">
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: "oklch(0.55 0.18 252 / 0.2)" }}
+            >
+              <Shield
+                className="w-4 h-4"
+                style={{ color: "oklch(0.72 0.18 252)" }}
+              />
+            </div>
+            <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide">
+              App Safety &amp; Security
+            </h2>
+          </div>
+
+          <div className="space-y-3 relative">
+            {[
+              {
+                icon: (
+                  <CheckCircle
+                    className="w-3.5 h-3.5 flex-shrink-0 mt-0.5"
+                    style={{ color: "oklch(0.65 0.18 145)" }}
+                  />
+                ),
+                title: "On-chain storage",
+                desc: "All data (teams, players, matches, news) is stored on the Internet Computer blockchain — it cannot be deleted by anyone except authorised admins.",
+              },
+              {
+                icon: (
+                  <Lock
+                    className="w-3.5 h-3.5 flex-shrink-0 mt-0.5"
+                    style={{ color: "oklch(0.72 0.18 252)" }}
+                  />
+                ),
+                title: "Internet Identity login",
+                desc: "Only users with a verified Internet Identity can write data. Anonymous users can only read public info.",
+              },
+              {
+                icon: (
+                  <Shield
+                    className="w-3.5 h-3.5 flex-shrink-0 mt-0.5"
+                    style={{ color: "oklch(0.82 0.15 85)" }}
+                  />
+                ),
+                title: "Admin-only control",
+                desc: "Only accounts with the Admin role can create news, modify matches, manage users and teams. Fans and players cannot touch core data.",
+              },
+            ].map((item) => (
+              <div key={item.title} className="flex gap-2.5">
+                {item.icon}
+                <div>
+                  <p className="text-xs font-bold text-foreground">
+                    {item.title}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    {item.desc}
+                  </p>
+                </div>
+              </div>
+            ))}
+
+            {/* Manual protection steps */}
+            <div
+              className="rounded-lg p-3 mt-1"
+              style={{ background: "oklch(0.16 0.04 252 / 0.6)" }}
+            >
+              <p className="text-xs font-bold text-foreground mb-2">
+                How to protect your app manually:
+              </p>
+              <ol className="space-y-1.5 list-none">
+                {[
+                  {
+                    num: 1,
+                    text: "Never share your Internet Identity with anyone.",
+                  },
+                  {
+                    num: 2,
+                    text: "Only assign the Admin role to trusted people.",
+                  },
+                  {
+                    num: 3,
+                    text: "If you notice unauthorised changes, go to Admin Panel → Users and remove that person's admin access.",
+                  },
+                  {
+                    num: 4,
+                    text: "Use the Suggestions box to report any security concerns to officials.",
+                  },
+                ].map((step) => (
+                  <li
+                    key={step.num}
+                    className="flex items-start gap-2 text-[11px] text-muted-foreground leading-relaxed"
+                  >
+                    <span
+                      className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black"
+                      style={{
+                        background: "oklch(0.55 0.18 252 / 0.3)",
+                        color: "oklch(0.72 0.18 252)",
+                      }}
+                    >
+                      {step.num}
+                    </span>
+                    {step.text}
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              <strong className="text-foreground">
+                Urgent security issues?
+              </strong>{" "}
+              Contact Said Joseph directly through the official LSH channels
+              listed below.
+            </p>
           </div>
         </motion.section>
 

@@ -193,6 +193,15 @@ export function LandingPage({ onLogin }: LandingPageProps) {
             <p className="text-xs text-center text-muted-foreground mt-4">
               Secure, password-free login powered by Internet Computer
             </p>
+            <p className="text-xs text-center mt-2">
+              <a
+                href="/recovery"
+                className="text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+                data-ocid="landing.lost_access_link"
+              >
+                Lost access to your account?
+              </a>
+            </p>
           </div>
         </motion.div>
 

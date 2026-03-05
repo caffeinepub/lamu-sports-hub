@@ -41,33 +41,49 @@ import {
   LSH_SEASON_SETTINGS_KEY,
   LSH_SUGGESTIONS_KEY,
   LSH_SYSTEM_STATUS_KEY,
+  type NewsConfirmation,
   type Official,
   type Pitch,
+  type RecoveryRequest,
   type Referee,
   type SeasonSettings,
   type Suggestion,
   type SystemStatus,
+  confirmNews,
   getAwards,
   getLocalStore,
+  getMatchPitches,
   getMatchReferees,
+  getNewsConfirmations,
   getOfficials,
   getPitches,
   getPlayerConfirmations,
   getPlayerPhotos,
+  getRecoveryRequests,
   getReferees,
   getSeasonSettings,
+  getTeamLogos,
   setLocalStore,
+  setMatchPitch,
   setMatchReferee,
+  setTeamLogo,
+  unconfirmNews,
+  updateRecoveryRequest,
 } from "@/utils/localStore";
+import { useNavigate } from "@tanstack/react-router";
 import {
   AlertCircle,
   Bell,
   Calendar,
   CheckCircle,
+  ClipboardCopy,
   Cog,
   Edit,
   ImageIcon,
+  Info,
+  KeyRound,
   Loader2,
+  Lock,
   MessageSquare,
   Newspaper,
   Phone,
@@ -78,6 +94,7 @@ import {
   UserCheck,
   Users,
   X,
+  XCircle,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
@@ -156,13 +173,102 @@ function formatTimestamp(ts: bigint): string {
   return date.toLocaleDateString();
 }
 
+// ── AUTH GATE wrapper ──────────────────────────────────────────────────────────
 export function AdminPanelPage() {
+  const { actor, isFetching: actorFetching } = useActor();
+  const navigate = useNavigate();
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [adminCheckLoading, setAdminCheckLoading] = useState(true);
+
+  useEffect(() => {
+    if (actorFetching) return;
+    if (!actor) {
+      setAdminCheckLoading(false);
+      setIsAdmin(false);
+      return;
+    }
+    setAdminCheckLoading(true);
+    actor
+      .isCallerAdmin()
+      .then((result) => {
+        setIsAdmin(result);
+      })
+      .catch(() => {
+        setIsAdmin(false);
+      })
+      .finally(() => setAdminCheckLoading(false));
+  }, [actor, actorFetching]);
+
+  // Loading state while checking admin
+  if (adminCheckLoading || actorFetching) {
+    return (
+      <div
+        className="min-h-screen pb-24 pt-14 flex flex-col items-center justify-center gap-4"
+        data-ocid="admin.loading_state"
+      >
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">
+          Checking admin access...
+        </p>
+      </div>
+    );
+  }
+
+  // Access denied screen
+  if (!isAdmin) {
+    return (
+      <div
+        className="min-h-screen pb-24 pt-14 flex flex-col items-center justify-center gap-5 px-6 text-center"
+        data-ocid="admin.error_state"
+      >
+        <div
+          className="w-16 h-16 rounded-full flex items-center justify-center"
+          style={{ background: "oklch(0.6 0.22 24 / 0.15)" }}
+        >
+          <Lock className="w-8 h-8" style={{ color: "oklch(0.6 0.22 24)" }} />
+        </div>
+        <div>
+          <h2 className="font-display font-black text-xl text-foreground mb-2">
+            Admin Access Required
+          </h2>
+          <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
+            This panel is only accessible to verified LSH admins. If you are an
+            official, contact Said Joseph to get your account authorized.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate({ to: "/" })}
+          className="px-6 py-2.5 rounded-xl text-sm font-bold text-white transition-all active:scale-95"
+          style={{
+            background:
+              "linear-gradient(135deg, oklch(0.55 0.18 252) 0%, oklch(0.45 0.16 252) 100%)",
+          }}
+          data-ocid="admin.go_back.button"
+        >
+          Go Back
+        </button>
+      </div>
+    );
+  }
+
+  return <AdminPanelInner />;
+}
+
+// ── INNER PANEL (only rendered for verified admins) ────────────────────────────
+function AdminPanelInner() {
   const { actor } = useActor();
   const [showCreateMatch, setShowCreateMatch] = useState(false);
   const [inboxUnread, setInboxUnread] = useState<number>(() => {
     const suggestions = getLocalStore<Suggestion[]>(LSH_SUGGESTIONS_KEY, []);
     return suggestions.filter((s) => !s.isRead).length;
   });
+  const [recoveryRequests, setRecoveryRequests] = useState<RecoveryRequest[]>(
+    () => getRecoveryRequests(),
+  );
+  const recoveryPendingCount = recoveryRequests.filter(
+    (r) => r.status === "pending",
+  ).length;
   const [loading, setLoading] = useState(false);
   const [homeTeam, setHomeTeam] = useState("");
   const [awayTeam, setAwayTeam] = useState("");
@@ -195,6 +301,18 @@ export function AdminPanelPage() {
   // New match referee
   const [matchRefereeId, setMatchRefereeId] = useState<string>("");
 
+  // Match pitch assignments
+  const [matchPitches, setMatchPitchesState] =
+    useState<Record<string, string>>(getMatchPitches);
+  const [matchPitchId, setMatchPitchId] = useState<string>("");
+  const [editMatchPitchId, setEditMatchPitchId] = useState<string>("");
+
+  // Team logos
+  const [teamLogos, setTeamLogosState] =
+    useState<Record<string, string>>(getTeamLogos);
+  const teamLogoInputRef = useRef<HTMLInputElement>(null);
+  const [logoUploadTeamId, setLogoUploadTeamId] = useState<string | null>(null);
+
   // Add User state
   const [showAddUser, setShowAddUser] = useState(false);
   const [newUserName, setNewUserName] = useState("");
@@ -210,6 +328,22 @@ export function AdminPanelPage() {
   const [newTeamArea, setNewTeamArea] = useState<string>("Lamu Town");
   const [newTeamCoach, setNewTeamCoach] = useState("");
   const [addTeamLoading, setAddTeamLoading] = useState(false);
+
+  // News confirmations
+  const [newsConfirmations, setNewsConfirmations] =
+    useState<Record<string, NewsConfirmation>>(getNewsConfirmations);
+
+  const handleConfirmNews = (newsId: string) => {
+    confirmNews(newsId, "Admin");
+    setNewsConfirmations(getNewsConfirmations());
+    toast.success("News post officially confirmed!");
+  };
+
+  const handleUnconfirmNews = (newsId: string) => {
+    unconfirmNews(newsId);
+    setNewsConfirmations(getNewsConfirmations());
+    toast.success("Confirmation removed.");
+  };
 
   // News state
   const [newsList, setNewsList] = useState<NewsItem[]>([]);
@@ -281,6 +415,7 @@ export function AdminPanelPage() {
     setEditAwayScore(String(match.awayScore));
     setEditMatchStatus(match.status);
     setEditMatchRefereeId(matchReferees[match.matchId] ?? "");
+    setEditMatchPitchId(matchPitches[match.matchId] ?? "");
   };
 
   const handleSaveMatch = async () => {
@@ -289,6 +424,8 @@ export function AdminPanelPage() {
     if (editingMatch) {
       setMatchReferee(editingMatch.matchId, editMatchRefereeId || null);
       setMatchRefereesState(getMatchReferees());
+      setMatchPitch(editingMatch.matchId, editMatchPitchId || null);
+      setMatchPitchesState(getMatchPitches());
     }
     setLoading(false);
     setEditingMatch(null);
@@ -312,9 +449,14 @@ export function AdminPanelPage() {
       setMatchReferee(newMatchId, matchRefereeId);
       setMatchRefereesState(getMatchReferees());
     }
+    if (matchPitchId) {
+      setMatchPitch(newMatchId, matchPitchId);
+      setMatchPitchesState(getMatchPitches());
+    }
     setLoading(false);
     setShowCreateMatch(false);
     setMatchRefereeId("");
+    setMatchPitchId("");
     toast.success("Match scheduled successfully!");
   };
 
@@ -388,6 +530,22 @@ export function AdminPanelPage() {
     } finally {
       setAddTeamLoading(false);
     }
+  };
+
+  const handleTeamLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !logoUploadTeamId) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string;
+      setTeamLogo(logoUploadTeamId, dataUrl);
+      setTeamLogosState(getTeamLogos());
+      toast.success("Team logo updated!");
+      setLogoUploadTeamId(null);
+    };
+    reader.readAsDataURL(file);
+    // Reset input
+    e.target.value = "";
   };
 
   const handleNewsPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -494,8 +652,12 @@ export function AdminPanelPage() {
             <Shield className="w-6 h-6 text-primary" />
             Admin Panel
           </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Full platform management
+          <p
+            className="text-xs mt-0.5 font-semibold flex items-center gap-1"
+            style={{ color: "oklch(0.65 0.18 82)" }}
+          >
+            <Lock className="w-3 h-3" />
+            Officials only — all changes are recorded
           </p>
         </motion.div>
       </div>
@@ -624,18 +786,39 @@ export function AdminPanelPage() {
             Settings
           </TabsTrigger>
         </TabsList>
-        {/* Row 3 — Inbox */}
-        <TabsList className="w-full grid grid-cols-1 mb-4">
+        {/* Row 3 — Inbox + Admins + Recovery */}
+        <TabsList className="w-full grid grid-cols-3 mb-4">
           <TabsTrigger
             value="inbox"
-            className="text-[10px] px-1 gap-1.5"
+            className="text-[9px] px-0.5 gap-1"
             data-ocid="admin.inbox.tab"
           >
             <MessageSquare className="w-3 h-3" />
-            Suggestions Inbox
+            Inbox
             {inboxUnread > 0 && (
               <span className="ml-0.5 bg-accent text-accent-foreground text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none">
                 {inboxUnread}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger
+            value="admins"
+            className="text-[9px] px-0.5 gap-1"
+            data-ocid="admin.admins.tab"
+          >
+            <Shield className="w-3 h-3" />
+            Admins
+          </TabsTrigger>
+          <TabsTrigger
+            value="recovery"
+            className="text-[9px] px-0.5 gap-1"
+            data-ocid="admin.recovery_tab"
+          >
+            <KeyRound className="w-3 h-3" />
+            Recovery
+            {recoveryPendingCount > 0 && (
+              <span className="ml-0.5 bg-accent text-accent-foreground text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                {recoveryPendingCount}
               </span>
             )}
           </TabsTrigger>
@@ -776,6 +959,20 @@ export function AdminPanelPage() {
                     </Button>
                   )}
                 </div>
+                {/* Logo upload button */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`w-6 h-6 transition-colors ${teamLogos[team.teamId] ? "text-green-400 hover:text-green-300" : "text-muted-foreground hover:text-foreground"}`}
+                  data-ocid={`admin.team.upload_button.${i + 1}`}
+                  onClick={() => {
+                    setLogoUploadTeamId(team.teamId);
+                    teamLogoInputRef.current?.click();
+                  }}
+                  title="Upload team logo"
+                >
+                  <ImageIcon className="w-3 h-3" />
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -948,8 +1145,22 @@ export function AdminPanelPage() {
                     <div className="font-semibold text-xs text-foreground truncate">
                       {item.title}
                     </div>
-                    <div className="text-[10px] text-muted-foreground mt-0.5">
-                      {formatTimestamp(item.timestamp)}
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      <span className="text-[10px] text-muted-foreground">
+                        {formatTimestamp(item.timestamp)}
+                      </span>
+                      {newsConfirmations[item.newsId] && (
+                        <span
+                          className="flex items-center gap-0.5 text-[9px] font-bold px-1 py-0.5 rounded-full"
+                          style={{
+                            backgroundColor: "oklch(0.55 0.18 145 / 0.15)",
+                            color: "oklch(0.65 0.18 145)",
+                          }}
+                        >
+                          <CheckCircle className="w-2.5 h-2.5" />
+                          Confirmed
+                        </span>
+                      )}
                     </div>
                   </div>
                   <span
@@ -961,6 +1172,29 @@ export function AdminPanelPage() {
                   >
                     {item.isPublished ? "Live" : "Draft"}
                   </span>
+                  {/* Confirm / Unconfirm button */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={`w-6 h-6 flex-shrink-0 ${
+                      newsConfirmations[item.newsId]
+                        ? "text-green-400 hover:text-red-400"
+                        : "text-muted-foreground hover:text-green-400"
+                    }`}
+                    title={
+                      newsConfirmations[item.newsId]
+                        ? "Remove official confirmation"
+                        : "Mark as officially confirmed"
+                    }
+                    data-ocid={`admin.news.confirm_button.${i + 1}`}
+                    onClick={() =>
+                      newsConfirmations[item.newsId]
+                        ? handleUnconfirmNews(item.newsId)
+                        : handleConfirmNews(item.newsId)
+                    }
+                  >
+                    <CheckCircle className="w-3 h-3" />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -1014,6 +1248,19 @@ export function AdminPanelPage() {
         {/* Inbox Tab */}
         <TabsContent value="inbox">
           <AdminSuggestionsInboxTab onUnreadChange={setInboxUnread} />
+        </TabsContent>
+
+        {/* Admins Tab */}
+        <TabsContent value="admins">
+          <AdminsListTab />
+        </TabsContent>
+
+        {/* Recovery Tab */}
+        <TabsContent value="recovery">
+          <AdminRecoveryTab
+            requests={recoveryRequests}
+            onUpdate={() => setRecoveryRequests(getRecoveryRequests())}
+          />
         </TabsContent>
 
         {/* Notify Tab */}
@@ -1776,6 +2023,37 @@ export function AdminPanelPage() {
                       </SelectContent>
                     </Select>
                   </div>
+                  <div>
+                    <Label className="text-xs mb-1 block">Pitch</Label>
+                    <Select
+                      value={editMatchPitchId}
+                      onValueChange={setEditMatchPitchId}
+                    >
+                      <SelectTrigger
+                        className="h-9 text-sm"
+                        data-ocid="admin.match.pitch_edit.select"
+                      >
+                        <SelectValue placeholder="Select a pitch..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem
+                          value=""
+                          className="text-sm text-muted-foreground"
+                        >
+                          — No pitch assigned —
+                        </SelectItem>
+                        {getPitches().map((p) => (
+                          <SelectItem
+                            key={p.pitchId}
+                            value={p.pitchId}
+                            className="text-sm"
+                          >
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               );
             })()}
@@ -1808,12 +2086,24 @@ export function AdminPanelPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Hidden file input for team logo */}
+      <input
+        type="file"
+        accept="image/*"
+        ref={teamLogoInputRef}
+        className="hidden"
+        onChange={handleTeamLogoChange}
+      />
+
       {/* Create Match Dialog */}
       <Dialog
         open={showCreateMatch}
         onOpenChange={(open) => {
           setShowCreateMatch(open);
-          if (!open) setMatchRefereeId("");
+          if (!open) {
+            setMatchRefereeId("");
+            setMatchPitchId("");
+          }
         }}
       >
         <DialogContent data-ocid="admin.dialog">
@@ -1898,6 +2188,34 @@ export function AdminPanelPage() {
                         {r.name}
                       </SelectItem>
                     ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs mb-1 block">Pitch (optional)</Label>
+              <Select value={matchPitchId} onValueChange={setMatchPitchId}>
+                <SelectTrigger
+                  className="h-9 text-sm"
+                  data-ocid="admin.match.pitch.select"
+                >
+                  <SelectValue placeholder="Select a pitch..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    value=""
+                    className="text-sm text-muted-foreground"
+                  >
+                    — No pitch assigned —
+                  </SelectItem>
+                  {getPitches().map((p) => (
+                    <SelectItem
+                      key={p.pitchId}
+                      value={p.pitchId}
+                      className="text-sm"
+                    >
+                      {p.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -2798,6 +3116,174 @@ function AwardForm({
   );
 }
 
+// ─── ADMINS LIST TAB ──────────────────────────────────────────────────────────
+function AdminsListTab() {
+  const { actor } = useActor();
+  const [adminUsers, setAdminUsers] = useState<
+    Array<{ userId: string; name: string; area: string; email: string }>
+  >([]);
+  const [loading, setLoading] = useState(false);
+  const [myPrincipal, setMyPrincipal] = useState<string>("");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!actor) return;
+    setLoading(true);
+    Promise.all([actor.getAllUserProfiles(), actor.getUserIdFromCaller()])
+      .then(([profiles, principalId]) => {
+        const admins = profiles
+          .filter((p) => {
+            // Role enum: check string value
+            return String(p.role).toLowerCase() === "admin";
+          })
+          .map((p) => ({
+            userId: p.userId,
+            name: p.name,
+            area: p.area,
+            email: p.email,
+          }));
+        setAdminUsers(admins);
+        setMyPrincipal(principalId as string);
+      })
+      .catch(() => {
+        setAdminUsers([]);
+      })
+      .finally(() => setLoading(false));
+  }, [actor]);
+
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedId(id);
+      toast.success("Copied to clipboard!");
+      setTimeout(() => setCopiedId(null), 2000);
+    });
+  };
+
+  return (
+    <div data-ocid="admin.admins.panel" className="space-y-4">
+      {/* Your Principal ID */}
+      {myPrincipal && (
+        <div
+          className="rounded-xl border p-3"
+          style={{
+            borderColor: "oklch(0.55 0.18 252 / 0.4)",
+            background: "oklch(0.16 0.05 252 / 0.3)",
+          }}
+        >
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">
+            Your Principal ID
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="text-[10px] text-primary font-mono flex-1 truncate">
+              {myPrincipal}
+            </code>
+            <button
+              type="button"
+              onClick={() => copyToClipboard(myPrincipal, "mine")}
+              className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-muted transition-colors"
+              data-ocid="admin.admins.copy_button"
+              title="Copy your Principal ID"
+            >
+              <ClipboardCopy
+                className={`w-3.5 h-3.5 ${copiedId === "mine" ? "text-green-400" : "text-muted-foreground"}`}
+              />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Admins List */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <Shield className="w-4 h-4 text-primary" />
+          <h3 className="font-display font-bold text-sm text-foreground">
+            Verified Admins
+          </h3>
+        </div>
+
+        {loading ? (
+          <div
+            className="flex items-center justify-center py-8 gap-2 text-muted-foreground"
+            data-ocid="admin.admins.loading_state"
+          >
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span className="text-xs">Loading admins...</span>
+          </div>
+        ) : adminUsers.length === 0 ? (
+          <div
+            className="rounded-xl border border-border bg-card py-10 text-center text-sm text-muted-foreground"
+            data-ocid="admin.admins.empty_state"
+          >
+            No admin profiles found yet.
+          </div>
+        ) : (
+          <div className="space-y-2" data-ocid="admin.admins.list">
+            {adminUsers.map((user, i) => (
+              <div
+                key={user.userId}
+                className="rounded-xl border border-border bg-card px-3 py-2.5 flex items-center gap-3"
+                data-ocid={`admin.admins.item.${i + 1}`}
+              >
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
+                  style={{
+                    background: "oklch(0.22 0.06 252)",
+                    color: "oklch(0.82 0.15 85)",
+                  }}
+                >
+                  {user.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-xs text-foreground">
+                    {user.name}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground truncate">
+                    {user.area} {user.email ? `· ${user.email}` : ""}
+                  </p>
+                  <code className="text-[9px] text-muted-foreground/60 font-mono truncate block">
+                    {user.userId.slice(0, 30)}...
+                  </code>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(user.userId, user.userId)}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-muted transition-colors flex-shrink-0"
+                  title="Copy Principal ID"
+                  data-ocid={`admin.admins.copy_button.${i + 1}`}
+                >
+                  <ClipboardCopy
+                    className={`w-3.5 h-3.5 ${copiedId === user.userId ? "text-green-400" : "text-muted-foreground"}`}
+                  />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Info box */}
+      <div
+        className="rounded-xl p-3 flex gap-2.5"
+        style={{
+          background: "oklch(0.18 0.05 252 / 0.4)",
+          border: "1px solid oklch(0.55 0.18 252 / 0.25)",
+        }}
+      >
+        <Info
+          className="w-4 h-4 flex-shrink-0 mt-0.5"
+          style={{ color: "oklch(0.72 0.18 252)" }}
+        />
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          To grant admin access to a new person: they must log in with Internet
+          Identity first. Then go to{" "}
+          <strong className="text-foreground">Admin Panel &gt; Settings</strong>{" "}
+          and use the Access Control section to authorize their Principal ID.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ─── ADMIN OFFICIALS TAB ──────────────────────────────────────────────────────
 function AdminOfficialsTab() {
   const [officials, setOfficials] = useState<Official[]>(getOfficials);
@@ -3546,6 +4032,277 @@ function AdminSettingsTab() {
           tab above.
         </p>
       </div>
+    </div>
+  );
+}
+
+// ── ADMIN RECOVERY TAB ────────────────────────────────────────────────────────
+function AdminRecoveryTab({
+  requests,
+  onUpdate,
+}: {
+  requests: RecoveryRequest[];
+  onUpdate: () => void;
+}) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>(() =>
+    requests.reduce<Record<string, string>>((acc, r) => {
+      acc[r.ticketId] = r.adminReply;
+      return acc;
+    }, {}),
+  );
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  const handleSaveReply = async (ticketId: string) => {
+    setSavingId(ticketId);
+    await new Promise((r) => setTimeout(r, 400));
+    updateRecoveryRequest(ticketId, {
+      adminReply: replyDrafts[ticketId] ?? "",
+    });
+    onUpdate();
+    setSavingId(null);
+    toast.success("Reply saved!");
+  };
+
+  const handleResolve = (ticketId: string) => {
+    updateRecoveryRequest(ticketId, { status: "resolved" });
+    onUpdate();
+    toast.success("Request marked as resolved.");
+  };
+
+  const handleReject = (ticketId: string) => {
+    updateRecoveryRequest(ticketId, { status: "rejected" });
+    onUpdate();
+    toast.success("Request marked as rejected.");
+  };
+
+  const statusBadge = (status: RecoveryRequest["status"]) => {
+    if (status === "pending")
+      return (
+        <span
+          className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+          style={{
+            background: "oklch(0.75 0.18 82 / 0.2)",
+            color: "oklch(0.65 0.18 82)",
+          }}
+        >
+          Pending
+        </span>
+      );
+    if (status === "resolved")
+      return (
+        <span
+          className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+          style={{
+            background: "oklch(0.65 0.15 155 / 0.2)",
+            color: "oklch(0.65 0.15 155)",
+          }}
+        >
+          Resolved
+        </span>
+      );
+    return (
+      <span
+        className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+        style={{
+          background: "oklch(0.6 0.22 24 / 0.15)",
+          color: "oklch(0.6 0.22 24)",
+        }}
+      >
+        Rejected
+      </span>
+    );
+  };
+
+  if (requests.length === 0) {
+    return (
+      <div
+        className="flex flex-col items-center justify-center py-12 rounded-xl border border-border text-center gap-3"
+        data-ocid="admin.recovery.empty_state"
+        style={{ background: "oklch(0.14 0.04 255 / 0.5)" }}
+      >
+        <KeyRound className="w-8 h-8 text-muted-foreground opacity-50" />
+        <p className="text-sm font-medium text-muted-foreground">
+          No recovery requests yet
+        </p>
+        <p className="text-xs text-muted-foreground/60 max-w-[200px]">
+          Requests submitted by users at /recovery will appear here.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+          Recovery Requests ({requests.length})
+        </span>
+        <span
+          className="text-[9px] font-bold px-2 py-0.5 rounded-full"
+          style={{
+            background: "oklch(0.75 0.18 82 / 0.2)",
+            color: "oklch(0.65 0.18 82)",
+          }}
+        >
+          {requests.filter((r) => r.status === "pending").length} pending
+        </span>
+      </div>
+
+      {requests.map((req, i) => (
+        <div
+          key={req.ticketId}
+          className="rounded-xl border overflow-hidden"
+          data-ocid={`admin.recovery.item.${i + 1}`}
+          style={{
+            background: "oklch(0.14 0.04 255 / 0.7)",
+            borderColor:
+              req.status === "pending"
+                ? "oklch(0.75 0.18 82 / 0.3)"
+                : req.status === "resolved"
+                  ? "oklch(0.65 0.15 155 / 0.3)"
+                  : "oklch(0.6 0.22 24 / 0.3)",
+          }}
+        >
+          {/* Row header */}
+          <button
+            type="button"
+            className="w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-white/5 transition-colors"
+            onClick={() =>
+              setExpandedId(expandedId === req.ticketId ? null : req.ticketId)
+            }
+          >
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: "oklch(0.55 0.18 252 / 0.15)" }}
+            >
+              <KeyRound
+                className="w-3.5 h-3.5"
+                style={{ color: "oklch(0.55 0.18 252)" }}
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-mono text-[10px] font-bold text-foreground">
+                  {req.ticketId}
+                </span>
+                {statusBadge(req.status)}
+              </div>
+              <p className="text-[10px] text-muted-foreground truncate">
+                {req.name} · {req.contact}
+              </p>
+            </div>
+            <span className="text-[9px] text-muted-foreground flex-shrink-0">
+              {new Date(req.submittedAt).toLocaleDateString("en-GB", {
+                day: "2-digit",
+                month: "short",
+              })}
+            </span>
+          </button>
+
+          {/* Expanded section */}
+          {expandedId === req.ticketId && (
+            <div
+              className="px-3 pb-4 pt-2 space-y-3 border-t"
+              style={{ borderColor: "oklch(0.25 0.05 252)" }}
+            >
+              {/* Details */}
+              <div
+                className="rounded-lg p-2.5 space-y-1.5"
+                style={{ background: "oklch(0.1 0.03 248 / 0.5)" }}
+              >
+                {req.lastPrincipalId && (
+                  <div className="flex gap-2">
+                    <span className="text-[9px] text-muted-foreground w-16 flex-shrink-0 pt-0.5">
+                      Principal
+                    </span>
+                    <span className="text-[9px] font-mono text-foreground break-all">
+                      {req.lastPrincipalId}
+                    </span>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <span className="text-[9px] text-muted-foreground w-16 flex-shrink-0 pt-0.5">
+                    Issue
+                  </span>
+                  <span className="text-[9px] text-foreground leading-relaxed">
+                    {req.issueDescription}
+                  </span>
+                </div>
+              </div>
+
+              {/* Admin reply */}
+              <div>
+                <Label className="text-[9px] mb-1 block text-muted-foreground uppercase tracking-wide">
+                  Official Reply
+                </Label>
+                <Textarea
+                  data-ocid={`admin.recovery.reply_textarea.${i + 1}`}
+                  value={replyDrafts[req.ticketId] ?? ""}
+                  onChange={(e) =>
+                    setReplyDrafts((prev) => ({
+                      ...prev,
+                      [req.ticketId]: e.target.value,
+                    }))
+                  }
+                  placeholder="Type your reply to this user..."
+                  className="text-xs min-h-[60px] resize-none"
+                />
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  size="sm"
+                  className="text-[9px] h-7 px-2 gap-1"
+                  onClick={() => handleSaveReply(req.ticketId)}
+                  disabled={savingId === req.ticketId}
+                  data-ocid={`admin.recovery.save_reply_button.${i + 1}`}
+                  style={{
+                    background:
+                      "linear-gradient(135deg, oklch(0.55 0.18 252) 0%, oklch(0.45 0.16 252) 100%)",
+                  }}
+                >
+                  {savingId === req.ticketId ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <CheckCircle className="w-3 h-3" />
+                  )}
+                  Save Reply
+                </Button>
+                {req.status !== "resolved" && (
+                  <Button
+                    size="sm"
+                    className="text-[9px] h-7 px-2 gap-1"
+                    onClick={() => handleResolve(req.ticketId)}
+                    data-ocid={`admin.recovery.resolve_button.${i + 1}`}
+                    style={{
+                      background:
+                        "linear-gradient(135deg, oklch(0.65 0.15 155) 0%, oklch(0.55 0.13 155) 100%)",
+                    }}
+                  >
+                    <CheckCircle className="w-3 h-3" />
+                    Mark Resolved
+                  </Button>
+                )}
+                {req.status !== "rejected" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-[9px] h-7 px-2 gap-1 border-border/50"
+                    onClick={() => handleReject(req.ticketId)}
+                    data-ocid={`admin.recovery.reject_button.${i + 1}`}
+                    style={{ color: "oklch(0.6 0.22 24)" }}
+                  >
+                    <XCircle className="w-3 h-3" />
+                    Reject
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { type MockTeam, getAreaColor } from "@/data/mockData";
+import { getTeamLogos } from "@/utils/localStore";
 
 interface TeamBadgeProps {
   team: MockTeam;
@@ -29,13 +30,27 @@ export function TeamBadge({
     .slice(0, 3)
     .toUpperCase();
 
+  const uploadedLogo = getTeamLogos()[team.teamId];
+
   return (
     <div className={`flex items-center gap-2 ${className}`}>
       <div
-        className={`${s.outer} rounded-full flex items-center justify-center font-bold font-display flex-shrink-0 ring-2 ring-white/10`}
-        style={{ backgroundColor: team.color, color: team.secondaryColor }}
+        className={`${s.outer} rounded-full flex items-center justify-center font-bold font-display flex-shrink-0 ring-2 ring-white/10 overflow-hidden`}
+        style={
+          uploadedLogo
+            ? undefined
+            : { backgroundColor: team.color, color: team.secondaryColor }
+        }
       >
-        <span className={s.text}>{initials}</span>
+        {uploadedLogo ? (
+          <img
+            src={uploadedLogo}
+            alt={`${team.name} logo`}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <span className={s.text}>{initials}</span>
+        )}
       </div>
       {showName && (
         <span className="text-sm font-semibold text-foreground truncate">

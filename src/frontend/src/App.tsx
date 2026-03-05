@@ -1,4 +1,5 @@
 import { Toaster } from "@/components/ui/sonner";
+import { useActor } from "@/hooks/useActor";
 import { useInternetIdentity } from "@/hooks/useInternetIdentity";
 import {
   Outlet,
@@ -7,8 +8,9 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
+import { Loader2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { AboutPage } from "@/pages/AboutPage";
 import { AdminPanelPage } from "@/pages/AdminPanelPage";
@@ -22,10 +24,14 @@ import { LeaderboardPage } from "@/pages/LeaderboardPage";
 import { MVPVotePage } from "@/pages/MVPVotePage";
 import { MatchdayPage } from "@/pages/MatchdayPage";
 import { MatchesPage } from "@/pages/MatchesPage";
+import { MonetizePage } from "@/pages/MonetizePage";
 import { NotificationsPage } from "@/pages/NotificationsPage";
+import { OfficialsPage } from "@/pages/OfficialsPage";
 import { OnboardingPage } from "@/pages/OnboardingPage";
 import { PlayerProfilePage } from "@/pages/PlayerProfilePage";
 import { ProfilePage } from "@/pages/ProfilePage";
+import { RecoveryPage } from "@/pages/RecoveryPage";
+import { RecoveryStatusPage } from "@/pages/RecoveryStatusPage";
 import { RefereesPage } from "@/pages/RefereesPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { StandingsPage } from "@/pages/StandingsPage";
@@ -228,6 +234,30 @@ function buildRouter(
     component: SettingsPage,
   });
 
+  const officialsRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/officials",
+    component: OfficialsPage,
+  });
+
+  const monetizeRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/monetize",
+    component: MonetizePage,
+  });
+
+  const recoveryRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/recovery",
+    component: RecoveryPage,
+  });
+
+  const recoveryStatusRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/recovery-status",
+    component: RecoveryStatusPage,
+  });
+
   const routeTree = rootRoute.addChildren([
     dashboardRoute,
     standingsRoute,
@@ -249,6 +279,10 @@ function buildRouter(
     historyRoute,
     suggestionsRoute,
     settingsRoute,
+    officialsRoute,
+    monetizeRoute,
+    recoveryRoute,
+    recoveryStatusRoute,
   ]);
 
   return createRouter({ routeTree });
@@ -257,15 +291,36 @@ function buildRouter(
 // --- Main App ---
 export default function App() {
   const { identity } = useInternetIdentity();
+  const { actor, isFetching: actorFetching } = useActor();
   const [appState, setAppState] = useState<AppState>({
-    role: "admin",
+    role: "fan",
     favoriteTeamId: "team-001",
-    userName: "Hassan Mwende",
+    userName: "",
     hasOnboarded: true,
   });
+  const [roleLoading, setRoleLoading] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [loginTriggered, setLoginTriggered] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+
+  // Detect real role once actor is available
+  useEffect(() => {
+    if (!actor || actorFetching) return;
+    setRoleLoading(true);
+    actor
+      .isCallerAdmin()
+      .then((isAdmin) => {
+        setAppState((prev) => ({
+          ...prev,
+          role: isAdmin ? "admin" : "fan",
+        }));
+      })
+      .catch(() => {
+        // On error, default to fan
+        setAppState((prev) => ({ ...prev, role: "fan" }));
+      })
+      .finally(() => setRoleLoading(false));
+  }, [actor, actorFetching]);
 
   const handleLoginClick = () => {
     setLoginTriggered(true);
@@ -280,6 +335,26 @@ export default function App() {
     setShowOnboarding(false);
   };
 
+  // Recovery pages are standalone — accessible without login
+  const currentPath =
+    typeof window !== "undefined" ? window.location.pathname : "";
+  if (currentPath === "/recovery") {
+    return (
+      <>
+        <RecoveryPage />
+        <Toaster position="top-center" />
+      </>
+    );
+  }
+  if (currentPath === "/recovery-status") {
+    return (
+      <>
+        <RecoveryStatusPage />
+        <Toaster position="top-center" />
+      </>
+    );
+  }
+
   // If not logged in, show landing page
   if (!identity && !loginTriggered) {
     return (
@@ -287,6 +362,19 @@ export default function App() {
         <LandingPage onLogin={handleLoginClick} />
         <Toaster position="top-center" />
       </>
+    );
+  }
+
+  // Show role detection spinner while checking after login
+  if (identity && roleLoading) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">
+          Verifying your access...
+        </p>
+        <Toaster position="top-center" />
+      </div>
     );
   }
 
