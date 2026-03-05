@@ -1,6 +1,7 @@
 import { MatchCard } from "@/components/shared/MatchCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MOCK_MATCHES, MOCK_TEAMS } from "@/data/mockData";
+import { getMatchReferees, getReferees } from "@/utils/localStore";
 import { useNavigate } from "@tanstack/react-router";
 import { Calendar } from "lucide-react";
 import { motion } from "motion/react";
@@ -16,6 +17,15 @@ export function MatchesPage() {
   ).reverse();
 
   const defaultTab = liveMatches.length > 0 ? "live" : "upcoming";
+
+  // Referee lookup
+  const allReferees = getReferees();
+  const matchRefereeMap = getMatchReferees();
+  const getRefereeName = (matchId: string): string | undefined => {
+    const refId = matchRefereeMap[matchId];
+    if (!refId) return undefined;
+    return allReferees.find((r) => r.refereeId === refId)?.name;
+  };
 
   return (
     <div data-ocid="matches.page" className="min-h-screen pb-24 pt-14">
@@ -92,6 +102,7 @@ export function MatchesPage() {
                       homeTeam={home}
                       awayTeam={away}
                       onClick={() => navigate({ to: "/matches" })}
+                      refereeName={getRefereeName(match.matchId)}
                     />
                   </motion.div>
                 );
@@ -136,6 +147,7 @@ export function MatchesPage() {
                       onClick={() =>
                         navigate({ to: `/matchday/${match.matchId}` })
                       }
+                      refereeName={getRefereeName(match.matchId)}
                     />
                   </motion.div>
                 );
@@ -169,6 +181,7 @@ export function MatchesPage() {
                     onClick={() =>
                       navigate({ to: `/matchday/${match.matchId}` })
                     }
+                    refereeName={getRefereeName(match.matchId)}
                   />
                 </motion.div>
               );

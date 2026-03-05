@@ -9,6 +9,7 @@ import {
   getPositionColor,
   getPositionLabel,
 } from "@/data/mockData";
+import { getPlayerPhotos } from "@/utils/localStore";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   AlertTriangle,
@@ -30,6 +31,8 @@ export function PlayerProfilePage() {
   const team = MOCK_TEAMS.find((t) => t.teamId === player.teamId)!;
   const posColor = getPositionColor(player.position);
   const posLabel = getPositionLabel(player.position);
+  const playerPhotos = getPlayerPhotos();
+  const playerPhoto = playerPhotos[player.playerId];
 
   return (
     <div data-ocid="player_profile.page" className="min-h-screen pb-24 pt-14">
@@ -64,16 +67,29 @@ export function PlayerProfilePage() {
         >
           <div className="flex items-start gap-4">
             {/* Avatar */}
-            <div
-              className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-black font-stats border-4 flex-shrink-0"
-              style={{
-                backgroundColor: team.color,
-                color: team.secondaryColor,
-                borderColor: `${team.secondaryColor}66`,
-              }}
-            >
-              {player.jerseyNumber}
-            </div>
+            {playerPhoto ? (
+              <div
+                className="w-20 h-20 rounded-full border-4 flex-shrink-0 overflow-hidden"
+                style={{ borderColor: `${team.secondaryColor}66` }}
+              >
+                <img
+                  src={playerPhoto}
+                  alt={player.name}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            ) : (
+              <div
+                className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-black font-stats border-4 flex-shrink-0"
+                style={{
+                  backgroundColor: team.color,
+                  color: team.secondaryColor,
+                  borderColor: `${team.secondaryColor}66`,
+                }}
+              >
+                {player.jerseyNumber}
+              </div>
+            )}
 
             <div className="flex-1 pt-1">
               <div className="flex items-center gap-2 flex-wrap">

@@ -41,6 +41,7 @@ export type MockMatch = {
   date: string;
   status: "scheduled" | "live" | "played";
   mvpPlayerId?: string;
+  refereeId?: string;
   commentary: CommentaryEntry[];
 };
 

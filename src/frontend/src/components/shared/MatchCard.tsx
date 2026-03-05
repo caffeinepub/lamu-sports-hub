@@ -4,7 +4,7 @@ import {
   formatMatchDate,
   formatTime,
 } from "@/data/mockData";
-import { Calendar, Clock } from "lucide-react";
+import { Calendar, Clock, User } from "lucide-react";
 import { TeamBadge } from "./TeamBadge";
 
 interface MatchCardProps {
@@ -14,6 +14,7 @@ interface MatchCardProps {
   onClick?: () => void;
   compact?: boolean;
   className?: string;
+  refereeName?: string;
 }
 
 export function MatchCard({
@@ -23,6 +24,7 @@ export function MatchCard({
   onClick,
   compact = false,
   className = "",
+  refereeName,
 }: MatchCardProps) {
   const isPlayed = match.status === "played";
   const isLive = match.status === "live";
@@ -157,6 +159,17 @@ export function MatchCard({
             </span>
           </div>
         </div>
+
+        {/* Referee */}
+        {refereeName && (
+          <div className="mt-3 pt-3 border-t border-border/50 flex items-center justify-center gap-1.5">
+            <User className="w-3 h-3 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">
+              Referee:{" "}
+              <span className="font-medium text-foreground">{refereeName}</span>
+            </span>
+          </div>
+        )}
       </div>
     </button>
   );

@@ -16,9 +16,23 @@ import {
 } from "@/components/ui/select";
 import { MOCK_PLAYERS, MOCK_TEAMS } from "@/data/mockData";
 import { useInternetIdentity } from "@/hooks/useInternetIdentity";
-import { Calendar, Edit3, LogOut, Save, Target, User, Zap } from "lucide-react";
+import {
+  LSH_PROFILE_PHOTO_KEY,
+  getProfilePhoto,
+  setLocalStore,
+} from "@/utils/localStore";
+import {
+  Calendar,
+  Camera,
+  Edit3,
+  LogOut,
+  Save,
+  Target,
+  User,
+  Zap,
+} from "lucide-react";
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 interface ProfilePageProps {
@@ -48,6 +62,23 @@ export function ProfilePage({
   const [name, setName] = useState(userName || "Hassan Mwende");
   const [area, setArea] = useState("Shela");
   const [favTeam, setFavTeam] = useState(favoriteTeamId || "team-001");
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(
+    getProfilePhoto,
+  );
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string;
+      setProfilePhoto(dataUrl);
+      setLocalStore(LSH_PROFILE_PHOTO_KEY, dataUrl);
+      toast.success("Profile photo updated!");
+    };
+    reader.readAsDataURL(file);
+  };
 
   const favoriteTeam =
     MOCK_TEAMS.find((t) => t.teamId === favTeam) || MOCK_TEAMS[0];
@@ -82,15 +113,47 @@ export function ProfilePage({
           className="flex items-start gap-4"
         >
           {/* Avatar */}
-          <div
-            className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-black font-stats border-3 flex-shrink-0"
-            style={{
-              background:
-                "linear-gradient(135deg, oklch(0.55 0.18 252), oklch(0.45 0.15 252))",
-              border: "3px solid oklch(0.55 0.18 252 / 0.4)",
-            }}
-          >
-            {name.charAt(0).toUpperCase()}
+          <div className="relative flex-shrink-0">
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handlePhotoChange}
+            />
+            {profilePhoto ? (
+              <img
+                src={profilePhoto}
+                alt="Profile"
+                className="w-16 h-16 rounded-full object-cover"
+                style={{ border: "3px solid oklch(0.55 0.18 252 / 0.4)" }}
+              />
+            ) : (
+              <div
+                className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-black font-stats"
+                style={{
+                  background:
+                    "linear-gradient(135deg, oklch(0.55 0.18 252), oklch(0.45 0.15 252))",
+                  border: "3px solid oklch(0.55 0.18 252 / 0.4)",
+                }}
+              >
+                {name.charAt(0).toUpperCase()}
+              </div>
+            )}
+            {/* Camera overlay button */}
+            <button
+              type="button"
+              className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center"
+              style={{
+                background: "oklch(0.6 0.22 24)",
+                border: "2px solid oklch(0.12 0.04 252)",
+              }}
+              onClick={() => photoInputRef.current?.click()}
+              title="Upload profile photo"
+              data-ocid="profile.upload_button"
+            >
+              <Camera className="w-3 h-3 text-white" />
+            </button>
           </div>
 
           <div className="flex-1">

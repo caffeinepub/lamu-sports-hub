@@ -10,9 +10,13 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 
+import { AboutPage } from "@/pages/AboutPage";
 import { AdminPanelPage } from "@/pages/AdminPanelPage";
+import { AwardsPage } from "@/pages/AwardsPage";
 import { CoachDashboardPage } from "@/pages/CoachDashboardPage";
 import { DashboardPage } from "@/pages/DashboardPage";
+import { ExplorePage } from "@/pages/ExplorePage";
+import { HistoryPage } from "@/pages/HistoryPage";
 import { LandingPage } from "@/pages/LandingPage";
 import { LeaderboardPage } from "@/pages/LeaderboardPage";
 import { MVPVotePage } from "@/pages/MVPVotePage";
@@ -22,7 +26,10 @@ import { NotificationsPage } from "@/pages/NotificationsPage";
 import { OnboardingPage } from "@/pages/OnboardingPage";
 import { PlayerProfilePage } from "@/pages/PlayerProfilePage";
 import { ProfilePage } from "@/pages/ProfilePage";
+import { RefereesPage } from "@/pages/RefereesPage";
+import { SettingsPage } from "@/pages/SettingsPage";
 import { StandingsPage } from "@/pages/StandingsPage";
+import { SuggestionsPage } from "@/pages/SuggestionsPage";
 import { TeamProfilePage } from "@/pages/TeamProfilePage";
 import { TeamsPage } from "@/pages/TeamsPage";
 
@@ -179,6 +186,48 @@ function buildRouter(
     component: AdminPanelPage,
   });
 
+  const refereesRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/referees",
+    component: RefereesPage,
+  });
+
+  const awardsRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/awards",
+    component: AwardsPage,
+  });
+
+  const exploreRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/explore",
+    component: ExplorePage,
+  });
+
+  const aboutRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/about",
+    component: AboutPage,
+  });
+
+  const historyRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/history",
+    component: HistoryPage,
+  });
+
+  const suggestionsRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/suggestions",
+    component: SuggestionsPage,
+  });
+
+  const settingsRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/settings",
+    component: SettingsPage,
+  });
+
   const routeTree = rootRoute.addChildren([
     dashboardRoute,
     standingsRoute,
@@ -193,6 +242,13 @@ function buildRouter(
     profileRoute,
     coachRoute,
     adminRoute,
+    refereesRoute,
+    awardsRoute,
+    exploreRoute,
+    aboutRoute,
+    historyRoute,
+    suggestionsRoute,
+    settingsRoute,
   ]);
 
   return createRouter({ routeTree });

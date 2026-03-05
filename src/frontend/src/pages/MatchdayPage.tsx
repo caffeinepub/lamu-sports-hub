@@ -1,14 +1,23 @@
 import { TeamBadge } from "@/components/shared/TeamBadge";
-import { MOCK_MATCHES, MOCK_PLAYERS, MOCK_TEAMS } from "@/data/mockData";
+import {
+  MOCK_MATCHES,
+  MOCK_PLAYERS,
+  MOCK_TEAMS,
+  formatMatchDate,
+  formatTime,
+} from "@/data/mockData";
+import { getMatchReferees, getReferees } from "@/utils/localStore";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   AlertTriangle,
+  Calendar,
   ChevronLeft,
   Clock,
   Flag,
   Info,
   Square,
   Target,
+  User,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 
@@ -67,6 +76,14 @@ export function MatchdayPage() {
 
   const isLive = match.status === "live";
   const isPlayed = match.status === "played";
+
+  // Referee lookup
+  const matchRefereeMap = getMatchReferees();
+  const allReferees = getReferees();
+  const assignedRefereeId = matchRefereeMap[match.matchId];
+  const assignedReferee = assignedRefereeId
+    ? allReferees.find((r) => r.refereeId === assignedRefereeId)
+    : null;
 
   const reversedCommentary = [...match.commentary].reverse();
 
@@ -189,6 +206,34 @@ export function MatchdayPage() {
             </div>
           </motion.div>
         )}
+
+        {/* Match Meta: Date, Time, Referee */}
+        <motion.div
+          initial={{ y: 8, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          className="mt-4 flex flex-wrap items-center justify-center gap-3"
+        >
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Calendar className="w-3.5 h-3.5" />
+            <span>{formatMatchDate(match.date)}</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Clock className="w-3.5 h-3.5" />
+            <span>KO {formatTime(match.date)}</span>
+          </div>
+          {assignedReferee && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <User className="w-3.5 h-3.5" />
+              <span>
+                Referee:{" "}
+                <span className="font-medium text-foreground">
+                  {assignedReferee.name}
+                </span>
+              </span>
+            </div>
+          )}
+        </motion.div>
       </div>
 
       {/* Matchday Stories Commentary */}

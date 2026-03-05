@@ -1,6 +1,7 @@
 import { PlayerCard } from "@/components/shared/PlayerCard";
 import { AreaBadge, TeamBadge } from "@/components/shared/TeamBadge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -17,8 +18,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { MOCK_MATCHES, MOCK_PLAYERS, MOCK_TEAMS } from "@/data/mockData";
-import { BarChart2, Loader2, Plus, Users } from "lucide-react";
+import {
+  LSH_PLAYER_CONFIRMATIONS_KEY,
+  getPlayerConfirmations,
+  setLocalStore,
+} from "@/utils/localStore";
+import {
+  BarChart2,
+  CheckSquare,
+  Loader2,
+  Plus,
+  UserPlus,
+  Users,
+} from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -35,6 +49,7 @@ export function CoachDashboardPage() {
 
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [showMatchStats, setShowMatchStats] = useState(false);
+  const [showBulkRegister, setShowBulkRegister] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const [nickname, setNickname] = useState("");
@@ -44,6 +59,41 @@ export function CoachDashboardPage() {
   const [selectedMatch, setSelectedMatch] = useState("");
   const [homeScore, setHomeScore] = useState("");
   const [awayScore, setAwayScore] = useState("");
+
+  const [bulkText, setBulkText] = useState("");
+
+  // Player confirmations
+  const [confirmations, setConfirmations] = useState<Record<string, boolean>>(
+    getPlayerConfirmations,
+  );
+
+  const toggleConfirmation = (playerId: string, checked: boolean) => {
+    const updated = { ...confirmations, [playerId]: checked };
+    setConfirmations(updated);
+    setLocalStore(LSH_PLAYER_CONFIRMATIONS_KEY, updated);
+    toast.success(
+      checked ? "Player confirmed ✓" : "Player confirmation removed",
+    );
+  };
+
+  const handleBulkRegister = async () => {
+    if (!bulkText.trim()) {
+      toast.error("Please enter at least one player");
+      return;
+    }
+    const lines = bulkText
+      .trim()
+      .split("\n")
+      .filter((l) => l.trim());
+    setLoading(true);
+    await new Promise((r) => setTimeout(r, 800));
+    setLoading(false);
+    setShowBulkRegister(false);
+    setBulkText("");
+    toast.success(
+      `${lines.length} player${lines.length > 1 ? "s" : ""} registered to squad!`,
+    );
+  };
 
   const handleAddPlayer = async () => {
     if (!nickname || !jerseyNumber) {
@@ -158,7 +208,7 @@ export function CoachDashboardPage() {
         </motion.div>
 
         {/* Action buttons */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-2">
           <Button
             variant="outline"
             className="h-14 flex-col gap-1 text-xs border-primary/40 hover:border-primary text-primary"
@@ -170,32 +220,90 @@ export function CoachDashboardPage() {
           </Button>
           <Button
             variant="outline"
+            className="h-14 flex-col gap-1 text-xs border-green-400/40 hover:border-green-400 text-green-400"
+            onClick={() => setShowBulkRegister(true)}
+            data-ocid="coach.bulk_register.button"
+          >
+            <UserPlus className="w-5 h-5" />
+            Bulk Register
+          </Button>
+          <Button
+            variant="outline"
             className="h-14 flex-col gap-1 text-xs border-accent/40 hover:border-accent text-accent"
             onClick={() => setShowMatchStats(true)}
             data-ocid="coach.match_stats.button"
           >
             <BarChart2 className="w-5 h-5" />
-            Enter Match Stats
+            Match Stats
           </Button>
         </div>
 
-        {/* Squad */}
+        {/* Squad with confirmation */}
         <div>
-          <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide mb-3">
-            Squad
+          <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide mb-1 flex items-center gap-1.5">
+            <CheckSquare className="w-4 h-4 text-green-400" />
+            Squad — Confirm Players
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {players.map((player, i) => (
-              <motion.div
-                key={player.playerId}
-                initial={{ y: 10, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: i * 0.05 }}
-                data-ocid={`coach.player.item.${i + 1}`}
-              >
-                <PlayerCard player={player} team={team} />
-              </motion.div>
-            ))}
+          <p className="text-[11px] text-muted-foreground mb-3">
+            Tick to confirm player registration. Confirmed players receive their
+            registration card.
+          </p>
+          <div className="space-y-2">
+            {players.map((player, i) => {
+              const isConfirmed = confirmations[player.playerId] ?? false;
+              return (
+                <motion.div
+                  key={player.playerId}
+                  initial={{ y: 10, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: i * 0.05 }}
+                  className="rounded-xl border bg-card px-4 py-3 flex items-center gap-3"
+                  style={{
+                    borderColor: isConfirmed
+                      ? "oklch(0.55 0.18 145 / 0.4)"
+                      : "oklch(0.3 0.02 252)",
+                    background: isConfirmed
+                      ? "oklch(0.16 0.04 145 / 0.2)"
+                      : undefined,
+                  }}
+                  data-ocid={`coach.player.item.${i + 1}`}
+                >
+                  {/* Jersey badge */}
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-black font-stats flex-shrink-0"
+                    style={{
+                      backgroundColor: team.color,
+                      color: team.secondaryColor,
+                    }}
+                  >
+                    {player.jerseyNumber}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-xs text-foreground">
+                      {player.name}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground capitalize">
+                      {player.position} · #{player.jerseyNumber}
+                    </p>
+                  </div>
+                  {/* Confirm checkbox */}
+                  <div className="flex items-center gap-2">
+                    {isConfirmed && (
+                      <span className="text-[9px] font-bold text-green-400 px-1.5 py-0.5 rounded-full bg-green-500/10">
+                        Confirmed
+                      </span>
+                    )}
+                    <Checkbox
+                      checked={isConfirmed}
+                      onCheckedChange={(v) =>
+                        toggleConfirmation(player.playerId, !!v)
+                      }
+                      data-ocid={`coach.player.checkbox.${i + 1}`}
+                    />
+                  </div>
+                </motion.div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -269,6 +377,72 @@ export function CoachDashboardPage() {
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 "Add Player"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Register Dialog */}
+      <Dialog open={showBulkRegister} onOpenChange={setShowBulkRegister}>
+        <DialogContent data-ocid="coach.bulk_register.dialog">
+          <DialogHeader>
+            <DialogTitle className="font-display">
+              Bulk Player Registration
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Enter one player per line in the format:{" "}
+              <code className="bg-muted px-1 rounded">
+                Name, Position, Jersey#
+              </code>
+            </p>
+            <div>
+              <Label className="text-xs mb-1 block">Players *</Label>
+              <Textarea
+                value={bulkText}
+                onChange={(e) => setBulkText(e.target.value)}
+                placeholder={
+                  "Hassan Mwende, forward, 9\nOmar Kiprotich, midfielder, 8\nAli Ndegwa, defender, 4"
+                }
+                className="text-sm min-h-[120px] font-mono resize-none"
+                data-ocid="coach.bulk_register.textarea"
+              />
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              {
+                bulkText
+                  .trim()
+                  .split("\n")
+                  .filter((l) => l.trim()).length
+              }{" "}
+              player(s) to register
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowBulkRegister(false)}
+              data-ocid="coach.bulk_register.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleBulkRegister}
+              disabled={loading}
+              data-ocid="coach.bulk_register.submit_button"
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.55 0.18 145) 0%, oklch(0.45 0.16 145) 100%)",
+              }}
+            >
+              {loading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                "Register All"
               )}
             </Button>
           </DialogFooter>

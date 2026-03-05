@@ -2,6 +2,7 @@ import { type ExternalBlob, Role } from "@/backend";
 import { AreaBadge, TeamBadge } from "@/components/shared/TeamBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -30,17 +31,51 @@ import {
 } from "@/data/mockData";
 import { useActor } from "@/hooks/useActor";
 import {
+  type Award,
+  LSH_AWARDS_KEY,
+  LSH_OFFICIALS_KEY,
+  LSH_PITCHES_KEY,
+  LSH_PLAYER_CONFIRMATIONS_KEY,
+  LSH_PLAYER_PHOTOS_KEY,
+  LSH_REFEREES_KEY,
+  LSH_SEASON_SETTINGS_KEY,
+  LSH_SUGGESTIONS_KEY,
+  LSH_SYSTEM_STATUS_KEY,
+  type Official,
+  type Pitch,
+  type Referee,
+  type SeasonSettings,
+  type Suggestion,
+  type SystemStatus,
+  getAwards,
+  getLocalStore,
+  getMatchReferees,
+  getOfficials,
+  getPitches,
+  getPlayerConfirmations,
+  getPlayerPhotos,
+  getReferees,
+  getSeasonSettings,
+  setLocalStore,
+  setMatchReferee,
+} from "@/utils/localStore";
+import {
+  AlertCircle,
   Bell,
   Calendar,
   CheckCircle,
+  Cog,
   Edit,
   ImageIcon,
   Loader2,
+  MessageSquare,
   Newspaper,
+  Phone,
   Plus,
   Shield,
   Trash2,
   Trophy,
+  UserCheck,
   Users,
   X,
 } from "lucide-react";
@@ -124,6 +159,10 @@ function formatTimestamp(ts: bigint): string {
 export function AdminPanelPage() {
   const { actor } = useActor();
   const [showCreateMatch, setShowCreateMatch] = useState(false);
+  const [inboxUnread, setInboxUnread] = useState<number>(() => {
+    const suggestions = getLocalStore<Suggestion[]>(LSH_SUGGESTIONS_KEY, []);
+    return suggestions.filter((s) => !s.isRead).length;
+  });
   const [loading, setLoading] = useState(false);
   const [homeTeam, setHomeTeam] = useState("");
   const [awayTeam, setAwayTeam] = useState("");
@@ -147,6 +186,14 @@ export function AdminPanelPage() {
   const [editMatchStatus, setEditMatchStatus] = useState<
     "scheduled" | "live" | "played"
   >("scheduled");
+  const [editMatchRefereeId, setEditMatchRefereeId] = useState<string>("");
+
+  // Match referee assignments from localStorage
+  const [matchReferees, setMatchRefereesState] =
+    useState<Record<string, string>>(getMatchReferees);
+
+  // New match referee
+  const [matchRefereeId, setMatchRefereeId] = useState<string>("");
 
   // Add User state
   const [showAddUser, setShowAddUser] = useState(false);
@@ -233,11 +280,16 @@ export function AdminPanelPage() {
     setEditHomeScore(String(match.homeScore));
     setEditAwayScore(String(match.awayScore));
     setEditMatchStatus(match.status);
+    setEditMatchRefereeId(matchReferees[match.matchId] ?? "");
   };
 
   const handleSaveMatch = async () => {
     setLoading(true);
     await new Promise((r) => setTimeout(r, 600));
+    if (editingMatch) {
+      setMatchReferee(editingMatch.matchId, editMatchRefereeId || null);
+      setMatchRefereesState(getMatchReferees());
+    }
     setLoading(false);
     setEditingMatch(null);
     toast.success("Match details updated!");
@@ -254,8 +306,15 @@ export function AdminPanelPage() {
     }
     setLoading(true);
     await new Promise((r) => setTimeout(r, 800));
+    // Generate a temporary matchId for the newly created match
+    const newMatchId = `M-${Date.now()}`;
+    if (matchRefereeId) {
+      setMatchReferee(newMatchId, matchRefereeId);
+      setMatchRefereesState(getMatchReferees());
+    }
     setLoading(false);
     setShowCreateMatch(false);
+    setMatchRefereeId("");
     toast.success("Match scheduled successfully!");
   };
 
@@ -467,31 +526,118 @@ export function AdminPanelPage() {
         className="px-4 pt-2"
         onValueChange={(v) => {
           if (v === "news") fetchNews();
+          if (v === "inbox") {
+            const suggestions = getLocalStore<Suggestion[]>(
+              LSH_SUGGESTIONS_KEY,
+              [],
+            );
+            setInboxUnread(suggestions.filter((s) => !s.isRead).length);
+          }
         }}
       >
+        {/* Row 1 */}
         <TabsList
-          className="w-full grid grid-cols-5 mb-4"
+          className="w-full grid grid-cols-5 mb-1"
           data-ocid="admin.tab"
         >
-          <TabsTrigger value="users" className="text-[10px] px-0.5">
+          <TabsTrigger
+            value="users"
+            className="text-[9px] px-0.5"
+            data-ocid="admin.users.tab"
+          >
             <Users className="w-3 h-3 mr-0.5" />
             Users
           </TabsTrigger>
-          <TabsTrigger value="teams" className="text-[10px] px-0.5">
+          <TabsTrigger
+            value="teams"
+            className="text-[9px] px-0.5"
+            data-ocid="admin.teams.tab"
+          >
             <Trophy className="w-3 h-3 mr-0.5" />
             Teams
           </TabsTrigger>
-          <TabsTrigger value="matches" className="text-[10px] px-0.5">
+          <TabsTrigger
+            value="matches"
+            className="text-[9px] px-0.5"
+            data-ocid="admin.matches.tab"
+          >
             <Calendar className="w-3 h-3 mr-0.5" />
             Matches
           </TabsTrigger>
-          <TabsTrigger value="news" className="text-[10px] px-0.5">
+          <TabsTrigger
+            value="news"
+            className="text-[9px] px-0.5"
+            data-ocid="admin.news.tab"
+          >
             <Newspaper className="w-3 h-3 mr-0.5" />
             News
           </TabsTrigger>
-          <TabsTrigger value="notify" className="text-[10px] px-0.5">
+          <TabsTrigger
+            value="notify"
+            className="text-[9px] px-0.5"
+            data-ocid="admin.notify.tab"
+          >
             <Bell className="w-3 h-3 mr-0.5" />
             Notify
+          </TabsTrigger>
+        </TabsList>
+        {/* Row 2 */}
+        <TabsList className="w-full grid grid-cols-5 mb-4">
+          <TabsTrigger
+            value="players"
+            className="text-[9px] px-0.5"
+            data-ocid="admin.players.tab"
+          >
+            <UserCheck className="w-3 h-3 mr-0.5" />
+            Players
+          </TabsTrigger>
+          <TabsTrigger
+            value="referees"
+            className="text-[9px] px-0.5"
+            data-ocid="admin.referees.tab"
+          >
+            <Shield className="w-3 h-3 mr-0.5" />
+            Refs
+          </TabsTrigger>
+          <TabsTrigger
+            value="awards"
+            className="text-[9px] px-0.5"
+            data-ocid="admin.awards.tab"
+          >
+            <Trophy className="w-3 h-3 mr-0.5" />
+            Awards
+          </TabsTrigger>
+          <TabsTrigger
+            value="officials"
+            className="text-[9px] px-0.5"
+            data-ocid="admin.officials.tab"
+          >
+            <Users className="w-3 h-3 mr-0.5" />
+            Officials
+          </TabsTrigger>
+          <TabsTrigger
+            value="admin-settings"
+            className="text-[9px] px-0.5"
+            data-ocid="admin.settings.tab"
+          >
+            <Cog className="w-3 h-3 mr-0.5" />
+            Settings
+          </TabsTrigger>
+        </TabsList>
+        {/* Row 3 — Inbox */}
+        <TabsList className="w-full grid grid-cols-1 mb-4">
+          <TabsTrigger
+            value="inbox"
+            className="text-[10px] px-1 gap-1.5"
+            data-ocid="admin.inbox.tab"
+          >
+            <MessageSquare className="w-3 h-3" />
+            Suggestions Inbox
+            {inboxUnread > 0 && (
+              <span className="ml-0.5 bg-accent text-accent-foreground text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                {inboxUnread}
+              </span>
+            )}
           </TabsTrigger>
         </TabsList>
 
@@ -837,6 +983,37 @@ export function AdminPanelPage() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        {/* Suggestions tab (read-only between notify and players for now) */}
+        {/* Players Tab */}
+        <TabsContent value="players">
+          <AdminPlayersTab />
+        </TabsContent>
+
+        {/* Referees Tab */}
+        <TabsContent value="referees">
+          <AdminRefereesTab />
+        </TabsContent>
+
+        {/* Awards Tab */}
+        <TabsContent value="awards">
+          <AdminAwardsTab />
+        </TabsContent>
+
+        {/* Officials Tab */}
+        <TabsContent value="officials">
+          <AdminOfficialsTab />
+        </TabsContent>
+
+        {/* Admin Settings Tab */}
+        <TabsContent value="admin-settings">
+          <AdminSettingsTab />
+        </TabsContent>
+
+        {/* Inbox Tab */}
+        <TabsContent value="inbox">
+          <AdminSuggestionsInboxTab onUnreadChange={setInboxUnread} />
         </TabsContent>
 
         {/* Notify Tab */}
@@ -1566,6 +1743,39 @@ export function AdminPanelPage() {
                       </SelectContent>
                     </Select>
                   </div>
+                  <div>
+                    <Label className="text-xs mb-1 block">Referee</Label>
+                    <Select
+                      value={editMatchRefereeId}
+                      onValueChange={setEditMatchRefereeId}
+                    >
+                      <SelectTrigger
+                        className="h-9 text-sm"
+                        data-ocid="admin.match.referee_edit.select"
+                      >
+                        <SelectValue placeholder="Assign a referee..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem
+                          value=""
+                          className="text-sm text-muted-foreground"
+                        >
+                          — No referee assigned —
+                        </SelectItem>
+                        {getReferees()
+                          .filter((r) => r.isActive)
+                          .map((r) => (
+                            <SelectItem
+                              key={r.refereeId}
+                              value={r.refereeId}
+                              className="text-sm"
+                            >
+                              {r.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               );
             })()}
@@ -1599,7 +1809,13 @@ export function AdminPanelPage() {
       </Dialog>
 
       {/* Create Match Dialog */}
-      <Dialog open={showCreateMatch} onOpenChange={setShowCreateMatch}>
+      <Dialog
+        open={showCreateMatch}
+        onOpenChange={(open) => {
+          setShowCreateMatch(open);
+          if (!open) setMatchRefereeId("");
+        }}
+      >
         <DialogContent data-ocid="admin.dialog">
           <DialogHeader>
             <DialogTitle className="font-display">
@@ -1655,6 +1871,36 @@ export function AdminPanelPage() {
                 data-ocid="admin.input"
               />
             </div>
+            <div>
+              <Label className="text-xs mb-1 block">Referee (optional)</Label>
+              <Select value={matchRefereeId} onValueChange={setMatchRefereeId}>
+                <SelectTrigger
+                  className="h-9 text-sm"
+                  data-ocid="admin.match.referee.select"
+                >
+                  <SelectValue placeholder="Assign a referee..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    value=""
+                    className="text-sm text-muted-foreground"
+                  >
+                    — No referee assigned —
+                  </SelectItem>
+                  {getReferees()
+                    .filter((r) => r.isActive)
+                    .map((r) => (
+                      <SelectItem
+                        key={r.refereeId}
+                        value={r.refereeId}
+                        className="text-sm"
+                      >
+                        {r.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <DialogFooter className="gap-2">
             <Button
@@ -1684,6 +1930,1622 @@ export function AdminPanelPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ─── ADMIN PLAYERS TAB ────────────────────────────────────────────────────────
+function AdminPlayersTab() {
+  const [confirmations, setConfirmations] = useState<Record<string, boolean>>(
+    getPlayerConfirmations,
+  );
+  const [photos, setPhotos] = useState<Record<string, string>>(getPlayerPhotos);
+  const photoInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const toggle = (playerId: string, checked: boolean) => {
+    const updated = { ...confirmations, [playerId]: checked };
+    setConfirmations(updated);
+    setLocalStore(LSH_PLAYER_CONFIRMATIONS_KEY, updated);
+    toast.success(checked ? "Player confirmed ✓" : "Confirmation removed");
+  };
+
+  const handlePhoto = (playerId: string, file: File) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string;
+      const updated = { ...photos, [playerId]: dataUrl };
+      setPhotos(updated);
+      setLocalStore(LSH_PLAYER_PHOTOS_KEY, updated);
+      toast.success("Player photo uploaded!");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <div className="space-y-2" data-ocid="admin.players.panel">
+      <p className="text-xs text-muted-foreground mb-3">
+        Confirm player registrations and upload player photos.
+      </p>
+      {MOCK_PLAYERS.map((player, i) => {
+        const team = MOCK_TEAMS.find((t) => t.teamId === player.teamId)!;
+        const isConfirmed = confirmations[player.playerId] ?? false;
+        const photo = photos[player.playerId];
+        return (
+          <div
+            key={player.playerId}
+            className="rounded-xl border bg-card px-3 py-2.5 flex items-center gap-3"
+            style={{
+              borderColor: isConfirmed
+                ? "oklch(0.55 0.18 145 / 0.4)"
+                : "oklch(0.3 0.02 252)",
+            }}
+            data-ocid={`admin.player.row.${i + 1}`}
+          >
+            {photo ? (
+              <img
+                src={photo}
+                alt={player.name}
+                className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+              />
+            ) : (
+              <div
+                className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
+                style={{
+                  backgroundColor: team.color,
+                  color: team.secondaryColor,
+                }}
+              >
+                {player.jerseyNumber}
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-xs text-foreground">
+                {player.name}
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                {team.name} · #{player.jerseyNumber}
+              </p>
+            </div>
+            {isConfirmed && (
+              <span className="text-[9px] font-bold text-green-400 px-1.5 py-0.5 rounded-full bg-green-500/10 flex-shrink-0">
+                ✓ Card
+              </span>
+            )}
+            {/* Photo upload */}
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              ref={(el) => {
+                photoInputRefs.current[player.playerId] = el;
+              }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handlePhoto(player.playerId, file);
+              }}
+            />
+            <button
+              type="button"
+              className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+              onClick={() => photoInputRefs.current[player.playerId]?.click()}
+              data-ocid={`admin.player.upload_button.${i + 1}`}
+            >
+              <ImageIcon className="w-3.5 h-3.5" />
+            </button>
+            <Checkbox
+              checked={isConfirmed}
+              onCheckedChange={(v) => toggle(player.playerId, !!v)}
+              data-ocid={`admin.player.checkbox.${i + 1}`}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── ADMIN REFEREES TAB ────────────────────────────────────────────────────────
+function AdminRefereesTab() {
+  const [referees, setReferees] = useState<Referee[]>(getReferees);
+  const [showAdd, setShowAdd] = useState(false);
+  const [editingRef, setEditingRef] = useState<Referee | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // Form fields
+  const [name, setName] = useState("");
+  const [contact, setContact] = useState("");
+  const [licenseNumber, setLicenseNumber] = useState("");
+  const [isActive, setIsActive] = useState(true);
+
+  const save = (refs: Referee[]) => {
+    setReferees(refs);
+    setLocalStore(LSH_REFEREES_KEY, refs);
+  };
+
+  const openAdd = () => {
+    setName("");
+    setContact("");
+    setLicenseNumber("");
+    setIsActive(true);
+    setShowAdd(true);
+  };
+
+  const openEdit = (ref: Referee) => {
+    setEditingRef(ref);
+    setName(ref.name);
+    setContact(ref.contact);
+    setLicenseNumber(ref.licenseNumber);
+    setIsActive(ref.isActive);
+  };
+
+  const handleAdd = () => {
+    if (!name.trim()) {
+      toast.error("Name is required");
+      return;
+    }
+    const newRef: Referee = {
+      refereeId: `ref-${Date.now()}`,
+      name: name.trim(),
+      contact: contact.trim(),
+      licenseNumber: licenseNumber.trim(),
+      isActive,
+    };
+    save([...referees, newRef]);
+    setShowAdd(false);
+    toast.success("Referee added!");
+  };
+
+  const handleEdit = () => {
+    if (!editingRef || !name.trim()) return;
+    save(
+      referees.map((r) =>
+        r.refereeId === editingRef.refereeId
+          ? {
+              ...r,
+              name: name.trim(),
+              contact: contact.trim(),
+              licenseNumber: licenseNumber.trim(),
+              isActive,
+            }
+          : r,
+      ),
+    );
+    setEditingRef(null);
+    toast.success("Referee updated!");
+  };
+
+  const handleDelete = () => {
+    if (!deleteId) return;
+    save(referees.filter((r) => r.refereeId !== deleteId));
+    setDeleteId(null);
+    toast.success("Referee removed.");
+  };
+
+  return (
+    <div data-ocid="admin.referees.panel">
+      <div className="flex justify-end mb-3">
+        <Button
+          size="sm"
+          className="text-xs gap-1"
+          onClick={openAdd}
+          data-ocid="admin.referees.open_modal_button"
+          style={{
+            background:
+              "linear-gradient(135deg, oklch(0.6 0.22 24) 0%, oklch(0.55 0.25 20) 100%)",
+          }}
+        >
+          <Plus className="w-3 h-3" /> Add Referee
+        </Button>
+      </div>
+      {referees.length === 0 ? (
+        <div
+          className="rounded-xl border border-border bg-card py-10 text-center text-sm text-muted-foreground"
+          data-ocid="admin.referees.empty_state"
+        >
+          No referees yet.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {referees.map((ref, i) => (
+            <div
+              key={ref.refereeId}
+              className="rounded-xl border border-border bg-card px-3 py-2.5 flex items-center gap-3"
+              data-ocid={`admin.referee.row.${i + 1}`}
+            >
+              <div
+                className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
+                style={{
+                  background: "oklch(0.22 0.06 252)",
+                  color: "oklch(0.82 0.08 82)",
+                }}
+              >
+                {ref.name
+                  .split(" ")
+                  .map((n) => n[0])
+                  .join("")
+                  .slice(0, 2)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-xs text-foreground">
+                  {ref.name}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  {ref.licenseNumber} · {ref.contact}
+                </p>
+              </div>
+              <span
+                className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${ref.isActive ? "bg-green-500/20 text-green-400" : "bg-muted text-muted-foreground"}`}
+              >
+                {ref.isActive ? "Active" : "Inactive"}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-6 h-6"
+                onClick={() => openEdit(ref)}
+                data-ocid={`admin.referee.edit_button.${i + 1}`}
+              >
+                <Edit className="w-3 h-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-6 h-6 text-red-400"
+                onClick={() => setDeleteId(ref.refereeId)}
+                data-ocid={`admin.referee.delete_button.${i + 1}`}
+              >
+                <Trash2 className="w-3 h-3" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add Dialog */}
+      <Dialog open={showAdd} onOpenChange={setShowAdd}>
+        <DialogContent data-ocid="admin.add_referee.dialog">
+          <DialogHeader>
+            <DialogTitle className="font-display">Add Referee</DialogTitle>
+          </DialogHeader>
+          <RefereeForm
+            name={name}
+            setName={setName}
+            contact={contact}
+            setContact={setContact}
+            licenseNumber={licenseNumber}
+            setLicenseNumber={setLicenseNumber}
+            isActive={isActive}
+            setIsActive={setIsActive}
+          />
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAdd(false)}
+              data-ocid="admin.add_referee.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleAdd}
+              data-ocid="admin.add_referee.submit_button"
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.6 0.22 24) 0%, oklch(0.55 0.25 20) 100%)",
+              }}
+            >
+              Add
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog
+        open={!!editingRef}
+        onOpenChange={(o) => {
+          if (!o) setEditingRef(null);
+        }}
+      >
+        <DialogContent data-ocid="admin.edit_referee.dialog">
+          <DialogHeader>
+            <DialogTitle className="font-display">Edit Referee</DialogTitle>
+          </DialogHeader>
+          <RefereeForm
+            name={name}
+            setName={setName}
+            contact={contact}
+            setContact={setContact}
+            licenseNumber={licenseNumber}
+            setLicenseNumber={setLicenseNumber}
+            isActive={isActive}
+            setIsActive={setIsActive}
+          />
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditingRef(null)}
+              data-ocid="admin.edit_referee.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleEdit}
+              data-ocid="admin.edit_referee.save_button"
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.6 0.22 24) 0%, oklch(0.55 0.25 20) 100%)",
+              }}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirm */}
+      <Dialog
+        open={!!deleteId}
+        onOpenChange={(o) => {
+          if (!o) setDeleteId(null);
+        }}
+      >
+        <DialogContent data-ocid="admin.delete_referee.dialog">
+          <DialogHeader>
+            <DialogTitle className="font-display">Remove Referee?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This action cannot be undone.
+          </p>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDeleteId(null)}
+              data-ocid="admin.delete_referee.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={handleDelete}
+              data-ocid="admin.delete_referee.confirm_button"
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function RefereeForm({
+  name,
+  setName,
+  contact,
+  setContact,
+  licenseNumber,
+  setLicenseNumber,
+  isActive,
+  setIsActive,
+}: {
+  name: string;
+  setName: (v: string) => void;
+  contact: string;
+  setContact: (v: string) => void;
+  licenseNumber: string;
+  setLicenseNumber: (v: string) => void;
+  isActive: boolean;
+  setIsActive: (v: boolean) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <Label className="text-xs mb-1 block">Full Name *</Label>
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="h-9 text-sm"
+          data-ocid="admin.referee.input"
+        />
+      </div>
+      <div>
+        <Label className="text-xs mb-1 block">Contact</Label>
+        <Input
+          value={contact}
+          onChange={(e) => setContact(e.target.value)}
+          placeholder="+254 7XX XXX XXX"
+          className="h-9 text-sm"
+        />
+      </div>
+      <div>
+        <Label className="text-xs mb-1 block">License Number</Label>
+        <Input
+          value={licenseNumber}
+          onChange={(e) => setLicenseNumber(e.target.value)}
+          placeholder="KFF-2024-XXX"
+          className="h-9 text-sm"
+        />
+      </div>
+      <div className="flex items-center justify-between">
+        <Label className="text-xs">Active</Label>
+        <Switch
+          checked={isActive}
+          onCheckedChange={setIsActive}
+          data-ocid="admin.referee.switch"
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── ADMIN AWARDS TAB ─────────────────────────────────────────────────────────
+function AdminAwardsTab() {
+  const [awards, setAwards] = useState<Award[]>(getAwards);
+  const [showAdd, setShowAdd] = useState(false);
+  const [editingAward, setEditingAward] = useState<Award | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const [title, setTitle] = useState("");
+  const [recipientName, setRecipientName] = useState("");
+  const [recipientType, setRecipientType] = useState<"player" | "team">(
+    "player",
+  );
+  const [season, setSeason] = useState("2025/26");
+  const [description, setDescription] = useState("");
+  const [isConfirmed, setIsConfirmed] = useState(false);
+
+  const save = (a: Award[]) => {
+    setAwards(a);
+    setLocalStore(LSH_AWARDS_KEY, a);
+  };
+
+  const resetForm = () => {
+    setTitle("");
+    setRecipientName("");
+    setRecipientType("player");
+    setSeason("2025/26");
+    setDescription("");
+    setIsConfirmed(false);
+  };
+
+  const openEdit = (a: Award) => {
+    setEditingAward(a);
+    setTitle(a.title);
+    setRecipientName(a.recipientName);
+    setRecipientType(a.recipientType);
+    setSeason(a.season);
+    setDescription(a.description);
+    setIsConfirmed(a.isConfirmed);
+  };
+
+  const handleAdd = () => {
+    if (!title.trim() || !recipientName.trim()) {
+      toast.error("Title and recipient are required");
+      return;
+    }
+    const award: Award = {
+      awardId: `award-${Date.now()}`,
+      title: title.trim(),
+      recipientName: recipientName.trim(),
+      recipientType,
+      season,
+      description: description.trim(),
+      isConfirmed,
+      awardDate: new Date().toISOString().split("T")[0],
+    };
+    save([...awards, award]);
+    setShowAdd(false);
+    resetForm();
+    toast.success("Award added!");
+  };
+
+  const handleEdit = () => {
+    if (!editingAward) return;
+    save(
+      awards.map((a) =>
+        a.awardId === editingAward.awardId
+          ? {
+              ...a,
+              title: title.trim(),
+              recipientName: recipientName.trim(),
+              recipientType,
+              season,
+              description: description.trim(),
+              isConfirmed,
+            }
+          : a,
+      ),
+    );
+    setEditingAward(null);
+    toast.success("Award updated!");
+  };
+
+  const handleConfirm = (awardId: string) => {
+    save(
+      awards.map((a) =>
+        a.awardId === awardId ? { ...a, isConfirmed: true } : a,
+      ),
+    );
+    toast.success("Award confirmed! 🏆");
+  };
+
+  const handleDelete = () => {
+    if (!deleteId) return;
+    save(awards.filter((a) => a.awardId !== deleteId));
+    setDeleteId(null);
+    toast.success("Award removed.");
+  };
+
+  return (
+    <div data-ocid="admin.awards.panel">
+      <div className="flex justify-end mb-3">
+        <Button
+          size="sm"
+          className="text-xs gap-1"
+          onClick={() => {
+            resetForm();
+            setShowAdd(true);
+          }}
+          data-ocid="admin.awards.open_modal_button"
+          style={{
+            background:
+              "linear-gradient(135deg, oklch(0.6 0.22 24) 0%, oklch(0.55 0.25 20) 100%)",
+          }}
+        >
+          <Plus className="w-3 h-3" /> Add Award
+        </Button>
+      </div>
+
+      {awards.length === 0 ? (
+        <div
+          className="rounded-xl border border-border bg-card py-10 text-center text-sm text-muted-foreground"
+          data-ocid="admin.awards.empty_state"
+        >
+          No awards yet.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {awards.map((award, i) => (
+            <div
+              key={award.awardId}
+              className="rounded-xl border border-border bg-card px-3 py-2.5 flex items-center gap-3"
+              data-ocid={`admin.award.row.${i + 1}`}
+            >
+              <div className="text-xl flex-shrink-0">🏆</div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-xs text-foreground">
+                  {award.title}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  {award.recipientName} · {award.season}
+                </p>
+              </div>
+              {award.isConfirmed ? (
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 flex-shrink-0">
+                  ✓ Confirmed
+                </span>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-6 text-[9px] px-1.5 flex-shrink-0"
+                  onClick={() => handleConfirm(award.awardId)}
+                  data-ocid={`admin.award.confirm_button.${i + 1}`}
+                >
+                  Confirm
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-6 h-6"
+                onClick={() => openEdit(award)}
+                data-ocid={`admin.award.edit_button.${i + 1}`}
+              >
+                <Edit className="w-3 h-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-6 h-6 text-red-400"
+                onClick={() => setDeleteId(award.awardId)}
+                data-ocid={`admin.award.delete_button.${i + 1}`}
+              >
+                <Trash2 className="w-3 h-3" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add Dialog */}
+      <Dialog open={showAdd} onOpenChange={setShowAdd}>
+        <DialogContent
+          className="max-h-[90vh] overflow-y-auto"
+          data-ocid="admin.add_award.dialog"
+        >
+          <DialogHeader>
+            <DialogTitle className="font-display">Add Award</DialogTitle>
+          </DialogHeader>
+          <AwardForm
+            title={title}
+            setTitle={setTitle}
+            recipientName={recipientName}
+            setRecipientName={setRecipientName}
+            recipientType={recipientType}
+            setRecipientType={setRecipientType}
+            season={season}
+            setSeason={setSeason}
+            description={description}
+            setDescription={setDescription}
+            isConfirmed={isConfirmed}
+            setIsConfirmed={setIsConfirmed}
+          />
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAdd(false)}
+              data-ocid="admin.add_award.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleAdd}
+              data-ocid="admin.add_award.submit_button"
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.6 0.22 24) 0%, oklch(0.55 0.25 20) 100%)",
+              }}
+            >
+              Add
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog
+        open={!!editingAward}
+        onOpenChange={(o) => {
+          if (!o) setEditingAward(null);
+        }}
+      >
+        <DialogContent
+          className="max-h-[90vh] overflow-y-auto"
+          data-ocid="admin.edit_award.dialog"
+        >
+          <DialogHeader>
+            <DialogTitle className="font-display">Edit Award</DialogTitle>
+          </DialogHeader>
+          <AwardForm
+            title={title}
+            setTitle={setTitle}
+            recipientName={recipientName}
+            setRecipientName={setRecipientName}
+            recipientType={recipientType}
+            setRecipientType={setRecipientType}
+            season={season}
+            setSeason={setSeason}
+            description={description}
+            setDescription={setDescription}
+            isConfirmed={isConfirmed}
+            setIsConfirmed={setIsConfirmed}
+          />
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditingAward(null)}
+              data-ocid="admin.edit_award.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleEdit}
+              data-ocid="admin.edit_award.save_button"
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.6 0.22 24) 0%, oklch(0.55 0.25 20) 100%)",
+              }}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete */}
+      <Dialog
+        open={!!deleteId}
+        onOpenChange={(o) => {
+          if (!o) setDeleteId(null);
+        }}
+      >
+        <DialogContent data-ocid="admin.delete_award.dialog">
+          <DialogHeader>
+            <DialogTitle className="font-display">Delete Award?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This cannot be undone.
+          </p>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDeleteId(null)}
+              data-ocid="admin.delete_award.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={handleDelete}
+              data-ocid="admin.delete_award.confirm_button"
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function AwardForm({
+  title,
+  setTitle,
+  recipientName,
+  setRecipientName,
+  recipientType,
+  setRecipientType,
+  season,
+  setSeason,
+  description,
+  setDescription,
+  isConfirmed,
+  setIsConfirmed,
+}: {
+  title: string;
+  setTitle: (v: string) => void;
+  recipientName: string;
+  setRecipientName: (v: string) => void;
+  recipientType: "player" | "team";
+  setRecipientType: (v: "player" | "team") => void;
+  season: string;
+  setSeason: (v: string) => void;
+  description: string;
+  setDescription: (v: string) => void;
+  isConfirmed: boolean;
+  setIsConfirmed: (v: boolean) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <Label className="text-xs mb-1 block">Award Title *</Label>
+        <Input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="e.g. Golden Boot"
+          className="h-9 text-sm"
+          data-ocid="admin.award.input"
+        />
+      </div>
+      <div>
+        <Label className="text-xs mb-1 block">Recipient Name *</Label>
+        <Input
+          value={recipientName}
+          onChange={(e) => setRecipientName(e.target.value)}
+          placeholder="Player or team name"
+          className="h-9 text-sm"
+        />
+      </div>
+      <div>
+        <Label className="text-xs mb-1 block">Type</Label>
+        <Select
+          value={recipientType}
+          onValueChange={(v) => setRecipientType(v as "player" | "team")}
+        >
+          <SelectTrigger className="h-9 text-sm" data-ocid="admin.award.select">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="player" className="text-sm">
+              Player Award
+            </SelectItem>
+            <SelectItem value="team" className="text-sm">
+              Team Award
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label className="text-xs mb-1 block">Season</Label>
+        <Input
+          value={season}
+          onChange={(e) => setSeason(e.target.value)}
+          placeholder="2025/26"
+          className="h-9 text-sm"
+        />
+      </div>
+      <div>
+        <Label className="text-xs mb-1 block">Description</Label>
+        <Textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          className="text-sm min-h-[70px] resize-none"
+          data-ocid="admin.award.textarea"
+        />
+      </div>
+      <div className="flex items-center justify-between">
+        <Label className="text-xs">Confirmed</Label>
+        <Switch
+          checked={isConfirmed}
+          onCheckedChange={setIsConfirmed}
+          data-ocid="admin.award.switch"
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── ADMIN OFFICIALS TAB ──────────────────────────────────────────────────────
+function AdminOfficialsTab() {
+  const [officials, setOfficials] = useState<Official[]>(getOfficials);
+  const [showAdd, setShowAdd] = useState(false);
+  const [editingOfficial, setEditingOfficial] = useState<Official | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const [name, setName] = useState("");
+  const [title, setTitle] = useState("");
+  const [contact, setContact] = useState("");
+  const [email, setEmail] = useState("");
+
+  const save = (o: Official[]) => {
+    setOfficials(o);
+    setLocalStore(LSH_OFFICIALS_KEY, o);
+  };
+  const resetForm = () => {
+    setName("");
+    setTitle("");
+    setContact("");
+    setEmail("");
+  };
+
+  const openEdit = (o: Official) => {
+    setEditingOfficial(o);
+    setName(o.name);
+    setTitle(o.title);
+    setContact(o.contact);
+    setEmail(o.email);
+  };
+
+  const handleAdd = () => {
+    if (!name.trim() || !title.trim()) {
+      toast.error("Name and title are required");
+      return;
+    }
+    save([
+      ...officials,
+      {
+        officialId: `off-${Date.now()}`,
+        name: name.trim(),
+        title: title.trim(),
+        contact: contact.trim(),
+        email: email.trim(),
+        displayOrder: officials.length + 1,
+      },
+    ]);
+    setShowAdd(false);
+    resetForm();
+    toast.success("Official added!");
+  };
+
+  const handleEdit = () => {
+    if (!editingOfficial) return;
+    save(
+      officials.map((o) =>
+        o.officialId === editingOfficial.officialId
+          ? {
+              ...o,
+              name: name.trim(),
+              title: title.trim(),
+              contact: contact.trim(),
+              email: email.trim(),
+            }
+          : o,
+      ),
+    );
+    setEditingOfficial(null);
+    toast.success("Official updated!");
+  };
+
+  const handleDelete = () => {
+    if (!deleteId) return;
+    save(officials.filter((o) => o.officialId !== deleteId));
+    setDeleteId(null);
+    toast.success("Official removed.");
+  };
+
+  return (
+    <div data-ocid="admin.officials.panel">
+      <div className="flex justify-end mb-3">
+        <Button
+          size="sm"
+          className="text-xs gap-1"
+          onClick={() => {
+            resetForm();
+            setShowAdd(true);
+          }}
+          data-ocid="admin.officials.open_modal_button"
+          style={{
+            background:
+              "linear-gradient(135deg, oklch(0.6 0.22 24) 0%, oklch(0.55 0.25 20) 100%)",
+          }}
+        >
+          <Plus className="w-3 h-3" /> Add Official
+        </Button>
+      </div>
+      <div className="space-y-2">
+        {officials
+          .sort((a, b) => a.displayOrder - b.displayOrder)
+          .map((o, i) => (
+            <div
+              key={o.officialId}
+              className="rounded-xl border border-border bg-card px-3 py-3 flex items-start gap-3"
+              data-ocid={`admin.official.row.${i + 1}`}
+            >
+              <div
+                className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-black flex-shrink-0"
+                style={{
+                  background:
+                    "linear-gradient(135deg, oklch(0.45 0.18 252) 0%, oklch(0.35 0.14 252) 100%)",
+                  color: "oklch(0.9 0.05 82)",
+                }}
+              >
+                {o.name
+                  .split(" ")
+                  .map((n) => n[0])
+                  .join("")
+                  .slice(0, 2)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-xs text-foreground">
+                  {o.name}
+                </p>
+                <p
+                  className="text-[10px]"
+                  style={{ color: "oklch(0.6 0.22 24)" }}
+                >
+                  {o.title}
+                </p>
+                {o.contact && (
+                  <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                    <Phone className="w-3 h-3" />
+                    {o.contact}
+                  </p>
+                )}
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-6 h-6"
+                onClick={() => openEdit(o)}
+                data-ocid={`admin.official.edit_button.${i + 1}`}
+              >
+                <Edit className="w-3 h-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-6 h-6 text-red-400"
+                onClick={() => setDeleteId(o.officialId)}
+                data-ocid={`admin.official.delete_button.${i + 1}`}
+              >
+                <Trash2 className="w-3 h-3" />
+              </Button>
+            </div>
+          ))}
+      </div>
+
+      {/* Add */}
+      <Dialog open={showAdd} onOpenChange={setShowAdd}>
+        <DialogContent data-ocid="admin.add_official.dialog">
+          <DialogHeader>
+            <DialogTitle className="font-display">Add Official</DialogTitle>
+          </DialogHeader>
+          <OfficialForm
+            name={name}
+            setName={setName}
+            title={title}
+            setTitle={setTitle}
+            contact={contact}
+            setContact={setContact}
+            email={email}
+            setEmail={setEmail}
+          />
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAdd(false)}
+              data-ocid="admin.add_official.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleAdd}
+              data-ocid="admin.add_official.submit_button"
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.6 0.22 24) 0%, oklch(0.55 0.25 20) 100%)",
+              }}
+            >
+              Add
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit */}
+      <Dialog
+        open={!!editingOfficial}
+        onOpenChange={(o) => {
+          if (!o) setEditingOfficial(null);
+        }}
+      >
+        <DialogContent data-ocid="admin.edit_official.dialog">
+          <DialogHeader>
+            <DialogTitle className="font-display">Edit Official</DialogTitle>
+          </DialogHeader>
+          <OfficialForm
+            name={name}
+            setName={setName}
+            title={title}
+            setTitle={setTitle}
+            contact={contact}
+            setContact={setContact}
+            email={email}
+            setEmail={setEmail}
+          />
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditingOfficial(null)}
+              data-ocid="admin.edit_official.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleEdit}
+              data-ocid="admin.edit_official.save_button"
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.6 0.22 24) 0%, oklch(0.55 0.25 20) 100%)",
+              }}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete */}
+      <Dialog
+        open={!!deleteId}
+        onOpenChange={(o) => {
+          if (!o) setDeleteId(null);
+        }}
+      >
+        <DialogContent data-ocid="admin.delete_official.dialog">
+          <DialogHeader>
+            <DialogTitle className="font-display">Remove Official?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This cannot be undone.
+          </p>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDeleteId(null)}
+              data-ocid="admin.delete_official.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={handleDelete}
+              data-ocid="admin.delete_official.confirm_button"
+            >
+              Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function OfficialForm({
+  name,
+  setName,
+  title,
+  setTitle,
+  contact,
+  setContact,
+  email,
+  setEmail,
+}: {
+  name: string;
+  setName: (v: string) => void;
+  title: string;
+  setTitle: (v: string) => void;
+  contact: string;
+  setContact: (v: string) => void;
+  email: string;
+  setEmail: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <Label className="text-xs mb-1 block">Full Name *</Label>
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="h-9 text-sm"
+          data-ocid="admin.official.input"
+        />
+      </div>
+      <div>
+        <Label className="text-xs mb-1 block">Title / Role *</Label>
+        <Input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="e.g. Chairman"
+          className="h-9 text-sm"
+        />
+      </div>
+      <div>
+        <Label className="text-xs mb-1 block">Contact</Label>
+        <Input
+          value={contact}
+          onChange={(e) => setContact(e.target.value)}
+          placeholder="+254 7XX XXX XXX"
+          className="h-9 text-sm"
+        />
+      </div>
+      <div>
+        <Label className="text-xs mb-1 block">Email</Label>
+        <Input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="official@lamu.ke"
+          className="h-9 text-sm"
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── ADMIN SUGGESTIONS INBOX TAB ─────────────────────────────────────────────
+function AdminSuggestionsInboxTab({
+  onUnreadChange,
+}: {
+  onUnreadChange: (count: number) => void;
+}) {
+  const [suggestions, setSuggestions] = useState<Suggestion[]>(() =>
+    getLocalStore<Suggestion[]>(LSH_SUGGESTIONS_KEY, []).sort(
+      (a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+    ),
+  );
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+
+  const unread = suggestions.filter((s) => !s.isRead).length;
+
+  const markRead = (id: string) => {
+    const updated = suggestions.map((s) =>
+      s.suggestionId === id ? { ...s, isRead: true } : s,
+    );
+    setSuggestions(updated);
+    setLocalStore(LSH_SUGGESTIONS_KEY, updated);
+    const newUnread = updated.filter((s) => !s.isRead).length;
+    onUnreadChange(newUnread);
+  };
+
+  const markAllRead = () => {
+    const updated = suggestions.map((s) => ({ ...s, isRead: true }));
+    setSuggestions(updated);
+    setLocalStore(LSH_SUGGESTIONS_KEY, updated);
+    onUnreadChange(0);
+  };
+
+  const saveReply = (id: string) => {
+    const reply = (replyDrafts[id] ?? "").trim();
+    const updated = suggestions.map((s) =>
+      s.suggestionId === id ? { ...s, officialReply: reply, isRead: true } : s,
+    );
+    setSuggestions(updated);
+    setLocalStore(LSH_SUGGESTIONS_KEY, updated);
+    const newUnread = updated.filter((s) => !s.isRead).length;
+    onUnreadChange(newUnread);
+    toast.success("Reply saved!");
+    setExpandedId(null);
+  };
+
+  const toggleExpand = (id: string) => {
+    setExpandedId((prev) => (prev === id ? null : id));
+    // Pre-fill draft if reply already exists
+    const s = suggestions.find((x) => x.suggestionId === id);
+    if (s?.officialReply && !replyDrafts[id]) {
+      setReplyDrafts((prev) => ({ ...prev, [id]: s.officialReply }));
+    }
+  };
+
+  return (
+    <div className="space-y-4" data-ocid="admin.inbox.panel">
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <h3 className="font-display font-bold text-sm text-foreground flex items-center gap-1.5">
+            <MessageSquare className="w-4 h-4 text-primary" />
+            Suggestions Inbox
+          </h3>
+          {unread > 0 && (
+            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-accent/20 text-accent">
+              {unread} unread
+            </span>
+          )}
+        </div>
+        {unread > 0 && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 text-[10px] text-muted-foreground"
+            onClick={markAllRead}
+            data-ocid="admin.inbox.mark_all.button"
+          >
+            Mark all read
+          </Button>
+        )}
+      </div>
+
+      {suggestions.length === 0 ? (
+        <div
+          className="rounded-xl border border-border bg-card py-10 flex flex-col items-center gap-3 text-center"
+          data-ocid="admin.inbox.empty_state"
+        >
+          <MessageSquare className="w-8 h-8 text-muted-foreground/30" />
+          <p className="text-xs text-muted-foreground">
+            No submissions yet. Players & fans can submit from the Suggestions
+            page.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {suggestions.map((s, i) => {
+            const isExpanded = expandedId === s.suggestionId;
+            const draft = replyDrafts[s.suggestionId] ?? s.officialReply ?? "";
+            return (
+              <motion.div
+                key={s.suggestionId}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.04 }}
+                className={`rounded-xl border bg-card overflow-hidden transition-all ${
+                  s.isRead
+                    ? "border-border/40 opacity-60"
+                    : "border-l-4 border-l-primary border-border/60"
+                }`}
+                data-ocid={`admin.suggestion.row.${i + 1}`}
+              >
+                <div className="px-3 py-3">
+                  {/* Type + date row */}
+                  <div className="flex items-center gap-2 mb-2">
+                    <span
+                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                        s.suggestionType === "problem_report"
+                          ? "bg-red-500/20 text-red-400"
+                          : "bg-blue-500/20 text-blue-400"
+                      }`}
+                    >
+                      {s.suggestionType === "problem_report"
+                        ? "⚠ Problem"
+                        : "💡 Suggestion"}
+                    </span>
+                    {!s.isRead && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
+                    )}
+                    <span className="text-[9px] text-muted-foreground ml-auto">
+                      {new Date(s.timestamp).toLocaleDateString("en-GB", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </div>
+
+                  {/* Message */}
+                  <p className="text-xs text-foreground leading-relaxed mb-2">
+                    {s.message}
+                  </p>
+
+                  {/* Existing reply preview */}
+                  {s.officialReply && !isExpanded && (
+                    <div
+                      className="rounded-lg px-3 py-2 mb-2 flex items-start gap-2"
+                      style={{
+                        background: "oklch(0.2 0.06 155 / 0.4)",
+                        borderLeft: "3px solid oklch(0.55 0.15 155)",
+                      }}
+                    >
+                      <CheckCircle className="w-3 h-3 text-green-400 flex-shrink-0 mt-0.5" />
+                      <p className="text-[11px] text-green-300 leading-relaxed">
+                        <span className="font-bold">Official reply: </span>
+                        {s.officialReply}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Action row */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 text-[10px] px-2 text-primary border border-primary/20"
+                      onClick={() => toggleExpand(s.suggestionId)}
+                      data-ocid={`admin.suggestion.expand_button.${i + 1}`}
+                    >
+                      {isExpanded
+                        ? "Cancel"
+                        : s.officialReply
+                          ? "Edit Reply"
+                          : "Reply"}
+                    </Button>
+                    {!s.isRead && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 text-[10px] px-2 text-muted-foreground"
+                        onClick={() => markRead(s.suggestionId)}
+                        data-ocid={`admin.suggestion.mark_read.${i + 1}`}
+                      >
+                        Mark read
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Reply composer (expanded) */}
+                {isExpanded && (
+                  <div
+                    className="px-3 pb-3 pt-2 space-y-2 border-t border-border/40"
+                    style={{ background: "oklch(0.14 0.03 252 / 0.5)" }}
+                  >
+                    <Label className="text-[10px] font-semibold text-muted-foreground block">
+                      Official Reply
+                    </Label>
+                    <Textarea
+                      value={draft}
+                      onChange={(e) =>
+                        setReplyDrafts((prev) => ({
+                          ...prev,
+                          [s.suggestionId]: e.target.value,
+                        }))
+                      }
+                      placeholder="Write a reply that will be visible on the submission..."
+                      className="text-xs min-h-[80px] resize-none"
+                      data-ocid={`admin.suggestion.reply.textarea.${i + 1}`}
+                    />
+                    <Button
+                      size="sm"
+                      className="w-full text-xs h-7"
+                      onClick={() => saveReply(s.suggestionId)}
+                      disabled={!draft.trim()}
+                      data-ocid={`admin.suggestion.reply.save_button.${i + 1}`}
+                      style={{
+                        background:
+                          "linear-gradient(135deg, oklch(0.55 0.15 155) 0%, oklch(0.45 0.12 155) 100%)",
+                      }}
+                    >
+                      <CheckCircle className="w-3 h-3 mr-1" />
+                      Save Reply
+                    </Button>
+                  </div>
+                )}
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── ADMIN SETTINGS TAB ───────────────────────────────────────────────────────
+function AdminSettingsTab() {
+  const [settings, setSettings] = useState<SeasonSettings>(getSeasonSettings);
+  const [pitches] = useState<Pitch[]>(getPitches);
+  const [systemStatus, setSystemStatusState] = useState<SystemStatus>(() =>
+    getLocalStore<SystemStatus>(LSH_SYSTEM_STATUS_KEY, {
+      isActive: false,
+      message: "",
+    }),
+  );
+  const [statusMessage, setStatusMessage] = useState(systemStatus.message);
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  const handleSaveSettings = async () => {
+    setSavingSettings(true);
+    await new Promise((r) => setTimeout(r, 400));
+    setLocalStore(LSH_SEASON_SETTINGS_KEY, settings);
+    setSavingSettings(false);
+    toast.success("Season settings saved!");
+  };
+
+  const handleSaveStatus = () => {
+    const updated = { ...systemStatus, message: statusMessage };
+    setSystemStatusState(updated);
+    setLocalStore(LSH_SYSTEM_STATUS_KEY, updated);
+    toast.success("System status updated!");
+  };
+
+  return (
+    <div className="space-y-5" data-ocid="admin.settings.panel">
+      {/* Season Settings */}
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <h3 className="font-display font-bold text-sm text-foreground">
+          Season Settings
+        </h3>
+        <div>
+          <Label className="text-xs mb-1 block">Tournament Name</Label>
+          <Input
+            value={settings.tournamentName}
+            onChange={(e) =>
+              setSettings((p) => ({ ...p, tournamentName: e.target.value }))
+            }
+            className="h-9 text-sm"
+            data-ocid="admin.season.tournament.input"
+          />
+        </div>
+        <div>
+          <Label className="text-xs mb-1 block">Season Name</Label>
+          <Input
+            value={settings.seasonName}
+            onChange={(e) =>
+              setSettings((p) => ({ ...p, seasonName: e.target.value }))
+            }
+            className="h-9 text-sm"
+            data-ocid="admin.season.name.input"
+          />
+        </div>
+        <div>
+          <Label className="text-xs mb-1 block">Current Year</Label>
+          <Input
+            value={settings.currentYear}
+            onChange={(e) =>
+              setSettings((p) => ({ ...p, currentYear: e.target.value }))
+            }
+            className="h-9 text-sm"
+            data-ocid="admin.season.year.input"
+          />
+        </div>
+        <Button
+          size="sm"
+          className="w-full text-xs"
+          onClick={handleSaveSettings}
+          disabled={savingSettings}
+          data-ocid="admin.season.save_button"
+          style={{
+            background:
+              "linear-gradient(135deg, oklch(0.6 0.22 24) 0%, oklch(0.55 0.25 20) 100%)",
+          }}
+        >
+          {savingSettings ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : (
+            "Save Season Settings"
+          )}
+        </Button>
+      </div>
+
+      {/* System Status */}
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <h3 className="font-display font-bold text-sm text-foreground">
+          System Status Banner
+        </h3>
+        <div className="flex items-center justify-between">
+          <Label className="text-xs">Show banner on homepage</Label>
+          <Switch
+            checked={systemStatus.isActive}
+            onCheckedChange={(v) => {
+              const updated = { ...systemStatus, isActive: v };
+              setSystemStatusState(updated);
+              setLocalStore(LSH_SYSTEM_STATUS_KEY, updated);
+            }}
+            data-ocid="admin.system_status.switch"
+          />
+        </div>
+        <div>
+          <Label className="text-xs mb-1 block">Banner Message</Label>
+          <Textarea
+            value={statusMessage}
+            onChange={(e) => setStatusMessage(e.target.value)}
+            placeholder="e.g. Matchday 7 has been postponed due to weather..."
+            className="text-sm min-h-[60px] resize-none"
+            data-ocid="admin.system_status.textarea"
+          />
+        </div>
+        <Button
+          size="sm"
+          className="w-full text-xs"
+          onClick={handleSaveStatus}
+          data-ocid="admin.system_status.save_button"
+          style={{
+            background:
+              "linear-gradient(135deg, oklch(0.55 0.18 252) 0%, oklch(0.45 0.16 252) 100%)",
+          }}
+        >
+          Save Status
+        </Button>
+      </div>
+
+      {/* Pitches */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <h3 className="font-display font-bold text-sm text-foreground mb-3">
+          Pitches
+        </h3>
+        <div className="space-y-2">
+          {pitches.map((pitch, i) => (
+            <div
+              key={pitch.pitchId}
+              className="flex items-center gap-3 py-2 border-b border-border/40 last:border-0"
+              data-ocid={`admin.pitch.row.${i + 1}`}
+            >
+              <span className="text-lg">🏟️</span>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-xs text-foreground">
+                  {pitch.name}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  {pitch.surface} · Cap. {pitch.capacity}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Inbox note */}
+      <div
+        className="rounded-xl border border-primary/20 p-3 flex items-center gap-3"
+        style={{ background: "oklch(0.18 0.05 252 / 0.4)" }}
+      >
+        <MessageSquare className="w-4 h-4 text-primary flex-shrink-0" />
+        <p className="text-xs text-muted-foreground">
+          Player & fan submissions are in the{" "}
+          <span className="text-primary font-semibold">Suggestions Inbox</span>{" "}
+          tab above.
+        </p>
+      </div>
     </div>
   );
 }

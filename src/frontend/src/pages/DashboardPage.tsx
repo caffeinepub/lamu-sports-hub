@@ -14,13 +14,20 @@ import {
   computeStandings,
 } from "@/data/mockData";
 import { useActor } from "@/hooks/useActor";
+import {
+  LSH_SYSTEM_STATUS_KEY,
+  type SystemStatus,
+  getLocalStore,
+} from "@/utils/localStore";
 import { useNavigate } from "@tanstack/react-router";
 import {
+  AlertTriangle,
   ChevronRight,
   Newspaper,
   Star,
   TrendingUp,
   Trophy,
+  X,
   Zap,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -70,7 +77,7 @@ export function DashboardPage({
   userName,
 }: DashboardPageProps) {
   const navigate = useNavigate();
-  const { actor, isFetching: actorFetching } = useActor();
+  const { actor } = useActor();
   const standings = computeStandings();
 
   const favoriteTeam = favoriteTeamId
@@ -91,21 +98,36 @@ export function DashboardPage({
     (s) => s.team.teamId === favoriteTeam?.teamId,
   );
 
+  // System status banner
+  const systemStatus = getLocalStore<SystemStatus>(LSH_SYSTEM_STATUS_KEY, {
+    isActive: false,
+    message: "",
+  });
+  const [showBanner, setShowBanner] = useState(
+    systemStatus.isActive && !!systemStatus.message,
+  );
+
   // News state
   const [newsList, setNewsList] = useState<NewsItem[]>([]);
-  const [newsLoading, setNewsLoading] = useState(true);
+  const [newsLoading, setNewsLoading] = useState(false);
   const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
 
   useEffect(() => {
-    if (!actor || actorFetching) return;
+    if (!actor) return;
     let cancelled = false;
+    setNewsLoading(true);
     actor
       .getAllNews()
       .then((items) => {
-        if (!cancelled) setNewsList((items as NewsItem[]).slice(0, 3));
+        if (!cancelled) {
+          const published = (items as NewsItem[])
+            .filter((n) => n.isPublished)
+            .slice(0, 3);
+          setNewsList(published);
+        }
       })
-      .catch(() => {
-        // Silently fail -- news is optional
+      .catch((err) => {
+        console.error("Failed to load news:", err);
       })
       .finally(() => {
         if (!cancelled) setNewsLoading(false);
@@ -113,10 +135,44 @@ export function DashboardPage({
     return () => {
       cancelled = true;
     };
-  }, [actor, actorFetching]);
+  }, [actor]);
 
   return (
     <div data-ocid="dashboard.page" className="min-h-screen pb-24 pt-14">
+      {/* System Status Banner */}
+      <AnimatePresence>
+        {showBanner && systemStatus.isActive && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+            data-ocid="dashboard.status_banner.panel"
+          >
+            <div
+              className="flex items-center gap-3 px-4 py-2.5"
+              style={{
+                background:
+                  "linear-gradient(90deg, oklch(0.45 0.14 50) 0%, oklch(0.4 0.16 48) 100%)",
+              }}
+            >
+              <AlertTriangle className="w-4 h-4 text-yellow-300 flex-shrink-0" />
+              <p className="text-xs text-yellow-100 flex-1 font-medium">
+                {systemStatus.message}
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowBanner(false)}
+                className="text-yellow-200 hover:text-white transition-colors flex-shrink-0"
+                data-ocid="dashboard.status_banner.close_button"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Hero banner */}
       <div
         className="px-4 py-6"
