@@ -1,12 +1,33 @@
 import type { ExternalBlob } from "@/backend";
+import { type T__1 as BackendTeam, Position, Role } from "@/backend";
 import { MatchCard } from "@/components/shared/MatchCard";
+import { OfficialAccessModal } from "@/components/shared/OfficialAccessModal";
 import { AreaBadge, TeamBadge } from "@/components/shared/TeamBadge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
   MOCK_MATCHES,
   MOCK_PLAYERS,
@@ -32,17 +53,22 @@ import {
   CheckCircle,
   ChevronRight,
   Compass,
+  FilePlus,
+  Loader2,
   Newspaper,
   RefreshCw,
   Shield,
   Star,
   TrendingUp,
   Trophy,
+  UserPlus,
+  Users,
   X,
   Zap,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 interface DashboardPageProps {
   favoriteTeamId?: string;
@@ -83,13 +109,31 @@ const NEWS_GRADIENTS = [
   "linear-gradient(135deg, oklch(0.2 0.05 82) 0%, oklch(0.14 0.04 255) 100%)",
 ];
 
+const positionMap: Record<string, Position> = {
+  goalkeeper: Position.goalkeeper,
+  defender: Position.defender,
+  midfielder: Position.midfielder,
+  forward: Position.forward,
+};
+
+const AREAS = [
+  "Shela",
+  "Hindi",
+  "Mkunguni",
+  "Langoni",
+  "Mkomani",
+  "Lamu Town",
+] as const;
+
 export function DashboardPage({
   favoriteTeamId,
   userName,
+  role,
 }: DashboardPageProps) {
   const navigate = useNavigate();
   const { actor } = useActor();
   const standings = computeStandings();
+  const isAdmin = role === "admin";
 
   const favoriteTeam = favoriteTeamId
     ? MOCK_TEAMS.find((t) => t.teamId === favoriteTeamId)
@@ -117,6 +161,11 @@ export function DashboardPage({
   const [showBanner, setShowBanner] = useState(
     systemStatus.isActive && !!systemStatus.message,
   );
+
+  // Admin quick-action dialog state
+  const [showAdminAddTeam, setShowAdminAddTeam] = useState(false);
+  const [showAdminAddPlayer, setShowAdminAddPlayer] = useState(false);
+  const [showAdminAddNews, setShowAdminAddNews] = useState(false);
 
   // News state
   const [newsList, setNewsList] = useState<NewsItem[]>([]);
@@ -225,6 +274,78 @@ export function DashboardPage({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Official Controls Quick-Launch — admin only */}
+      {isAdmin && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="px-4 pt-3"
+          data-ocid="dashboard.official_controls.panel"
+        >
+          <div
+            className="rounded-xl p-3 border flex flex-wrap items-center gap-2"
+            style={{
+              background:
+                "linear-gradient(135deg, oklch(0.18 0.06 252 / 0.8) 0%, oklch(0.14 0.05 252 / 0.8) 100%)",
+              borderColor: "oklch(0.38 0.1 252 / 0.5)",
+            }}
+          >
+            <div className="flex items-center gap-2 mr-1">
+              <Shield
+                className="w-4 h-4"
+                style={{ color: "oklch(0.65 0.12 252)" }}
+              />
+              <span className="text-xs font-bold text-foreground">
+                Official Controls
+              </span>
+            </div>
+            <button
+              type="button"
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all hover:opacity-90"
+              style={{
+                background: "oklch(0.3 0.1 252 / 0.5)",
+                color: "oklch(0.8 0.08 252)",
+                border: "1px solid oklch(0.4 0.1 252 / 0.4)",
+              }}
+              onClick={() => setShowAdminAddTeam(true)}
+              data-ocid="dashboard.official.add_team.button"
+            >
+              <Users className="w-3.5 h-3.5" />
+              Add Team
+            </button>
+            <button
+              type="button"
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all hover:opacity-90"
+              style={{
+                background: "oklch(0.28 0.1 155 / 0.4)",
+                color: "oklch(0.65 0.15 155)",
+                border: "1px solid oklch(0.4 0.12 155 / 0.4)",
+              }}
+              onClick={() => setShowAdminAddPlayer(true)}
+              data-ocid="dashboard.official.add_player.button"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              Add Player
+            </button>
+            <button
+              type="button"
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all hover:opacity-90"
+              style={{
+                background: "oklch(0.3 0.1 24 / 0.3)",
+                color: "oklch(0.65 0.2 24)",
+                border: "1px solid oklch(0.4 0.12 24 / 0.4)",
+              }}
+              onClick={() => setShowAdminAddNews(true)}
+              data-ocid="dashboard.official.add_news.button"
+            >
+              <FilePlus className="w-3.5 h-3.5" />
+              Post News
+            </button>
+          </div>
+        </motion.div>
+      )}
 
       {/* Hero banner */}
       <div
@@ -936,6 +1057,456 @@ export function DashboardPage({
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Admin Quick-Action: Add Team */}
+      {isAdmin && (
+        <DashboardAddTeamDialog
+          open={showAdminAddTeam}
+          onOpenChange={setShowAdminAddTeam}
+        />
+      )}
+      {/* Admin Quick-Action: Add Player */}
+      {isAdmin && (
+        <DashboardAddPlayerDialog
+          open={showAdminAddPlayer}
+          onOpenChange={setShowAdminAddPlayer}
+        />
+      )}
+      {/* Admin Quick-Action: Post News */}
+      {isAdmin && (
+        <DashboardAddNewsDialog
+          open={showAdminAddNews}
+          onOpenChange={setShowAdminAddNews}
+        />
+      )}
     </div>
+  );
+}
+
+// ── Dashboard Admin Quick-Action Dialogs ──────────────────────────────────────
+
+function DashboardAddTeamDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const { actor } = useActor();
+  const [name, setName] = useState("");
+  const [area, setArea] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  function reset() {
+    setName("");
+    setArea("");
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || !area) {
+      toast.error("Team name and area are required.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await actor?.createTeam(name.trim(), area);
+      toast.success(`${name} registered!`);
+      reset();
+      onOpenChange(false);
+    } catch {
+      toast.error("Failed to add team. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!loading) {
+          if (!v) reset();
+          onOpenChange(v);
+        }
+      }}
+    >
+      <DialogContent
+        className="max-w-sm mx-auto rounded-2xl"
+        data-ocid="dashboard.add_team.dialog"
+      >
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 font-display text-lg">
+            <Users className="w-5 h-5 text-primary" />
+            Add Team
+          </DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 mt-1">
+          <div className="space-y-1.5">
+            <Label htmlFor="dt-name">Team Name *</Label>
+            <Input
+              id="dt-name"
+              placeholder="e.g. Shela United FC"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              data-ocid="dashboard.add_team.input"
+              required
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="dt-area">Area *</Label>
+            <Select value={area} onValueChange={setArea}>
+              <SelectTrigger id="dt-area" data-ocid="dashboard.add_team.select">
+                <SelectValue placeholder="Select area…" />
+              </SelectTrigger>
+              <SelectContent>
+                {AREAS.map((a) => (
+                  <SelectItem key={a} value={a}>
+                    {a}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={() => {
+                reset();
+                onOpenChange(false);
+              }}
+              disabled={loading}
+              data-ocid="dashboard.add_team.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              className="flex-1"
+              disabled={loading}
+              data-ocid="dashboard.add_team.submit_button"
+            >
+              {loading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                "Add Team"
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DashboardAddPlayerDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const { actor } = useActor();
+  const [name, setName] = useState("");
+  const [teamId, setTeamId] = useState("");
+  const [position, setPosition] = useState("");
+  const [jerseyNumber, setJerseyNumber] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [teams, setTeams] = useState<BackendTeam[]>([]);
+  const [teamsLoading, setTeamsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open || !actor) return;
+    setTeamsLoading(true);
+    actor
+      .getAllTeams()
+      .then((t) => setTeams(t))
+      .catch(() => setTeams([]))
+      .finally(() => setTeamsLoading(false));
+  }, [open, actor]);
+
+  function reset() {
+    setName("");
+    setTeamId("");
+    setPosition("");
+    setJerseyNumber("");
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || !teamId || !position) {
+      toast.error("Name, team, and position are required.");
+      return;
+    }
+    const posEnum = positionMap[position];
+    if (!posEnum) {
+      toast.error("Invalid position.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await actor?.adminAddPlayer(
+        teamId,
+        "",
+        name.trim(),
+        posEnum,
+        BigInt(jerseyNumber || 0),
+      );
+      toast.success("Player registered!");
+      reset();
+      onOpenChange(false);
+    } catch {
+      toast.error("Failed to register player.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!loading) {
+          if (!v) reset();
+          onOpenChange(v);
+        }
+      }}
+    >
+      <DialogContent
+        className="max-w-sm mx-auto rounded-2xl"
+        data-ocid="dashboard.add_player.dialog"
+      >
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 font-display text-lg">
+            <UserPlus className="w-5 h-5 text-primary" />
+            Register Player
+          </DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 mt-1">
+          <div className="space-y-1.5">
+            <Label htmlFor="dp-name">Full Name *</Label>
+            <Input
+              id="dp-name"
+              placeholder="e.g. Hassan Mwende"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              data-ocid="dashboard.add_player.input"
+              required
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Team *</Label>
+            {teamsLoading ? (
+              <div className="flex items-center gap-2 h-10 px-3 rounded-md border border-input text-sm text-muted-foreground">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Loading…
+              </div>
+            ) : teams.length === 0 ? (
+              <div className="flex items-center h-10 px-3 rounded-md border border-destructive/40 bg-destructive/5 text-xs text-destructive">
+                No teams found. Add a team first.
+              </div>
+            ) : (
+              <Select value={teamId} onValueChange={setTeamId}>
+                <SelectTrigger data-ocid="dashboard.add_player.select">
+                  <SelectValue placeholder="Select team…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {teams.map((t) => (
+                    <SelectItem key={t.teamId} value={t.teamId}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label>Position *</Label>
+            <Select value={position} onValueChange={setPosition}>
+              <SelectTrigger data-ocid="dashboard.add_player.select">
+                <SelectValue placeholder="Select position…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="goalkeeper">Goalkeeper</SelectItem>
+                <SelectItem value="defender">Defender</SelectItem>
+                <SelectItem value="midfielder">Midfielder</SelectItem>
+                <SelectItem value="forward">Forward</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="dp-jersey">Jersey Number</Label>
+            <Input
+              id="dp-jersey"
+              type="number"
+              min={1}
+              max={99}
+              placeholder="10"
+              value={jerseyNumber}
+              onChange={(e) => setJerseyNumber(e.target.value)}
+            />
+          </div>
+          <DialogFooter className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={() => {
+                reset();
+                onOpenChange(false);
+              }}
+              disabled={loading}
+              data-ocid="dashboard.add_player.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              className="flex-1"
+              disabled={loading}
+              data-ocid="dashboard.add_player.submit_button"
+            >
+              {loading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                "Register"
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DashboardAddNewsDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const { actor } = useActor();
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [isPublished, setIsPublished] = useState(true);
+  const [loading, setLoading] = useState(false);
+
+  function reset() {
+    setTitle("");
+    setBody("");
+    setIsPublished(true);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!title.trim() || !body.trim()) {
+      toast.error("Title and body are required.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await actor?.createNews(title.trim(), body.trim(), isPublished);
+      toast.success(isPublished ? "News published!" : "Saved as draft.");
+      reset();
+      onOpenChange(false);
+    } catch {
+      toast.error("Failed to publish. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!loading) {
+          if (!v) reset();
+          onOpenChange(v);
+        }
+      }}
+    >
+      <DialogContent
+        className="max-w-sm mx-auto rounded-2xl"
+        data-ocid="dashboard.add_news.dialog"
+      >
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 font-display text-lg">
+            <FilePlus className="w-5 h-5 text-primary" />
+            Post News
+          </DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 mt-1">
+          <div className="space-y-1.5">
+            <Label htmlFor="dn-title">Title *</Label>
+            <Input
+              id="dn-title"
+              placeholder="e.g. Shela United Win Derby 3-1"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              data-ocid="dashboard.add_news.input"
+              required
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="dn-body">Story *</Label>
+            <Textarea
+              id="dn-body"
+              placeholder="Write the full story…"
+              rows={4}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              data-ocid="dashboard.add_news.textarea"
+              required
+            />
+          </div>
+          <div className="flex items-center justify-between rounded-xl border border-border bg-muted/20 px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold">Publish immediately</p>
+              <p className="text-xs text-muted-foreground">
+                Off = save as draft
+              </p>
+            </div>
+            <Switch
+              checked={isPublished}
+              onCheckedChange={setIsPublished}
+              data-ocid="dashboard.add_news.switch"
+            />
+          </div>
+          <DialogFooter className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={() => {
+                reset();
+                onOpenChange(false);
+              }}
+              disabled={loading}
+              data-ocid="dashboard.add_news.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              className="flex-1"
+              disabled={loading}
+              data-ocid="dashboard.add_news.submit_button"
+            >
+              {loading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : isPublished ? (
+                "Publish"
+              ) : (
+                "Save Draft"
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

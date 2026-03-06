@@ -2,8 +2,9 @@ import { Button } from "@/components/ui/button";
 import { MOCK_NOTIFICATIONS } from "@/data/mockData";
 import { useActor } from "@/hooks/useActor";
 import { useInternetIdentity } from "@/hooks/useInternetIdentity";
+import { getAppLogo, isOfficialSessionVerified } from "@/utils/localStore";
 import { useNavigate } from "@tanstack/react-router";
-import { Bell, LogOut } from "lucide-react";
+import { Bell, LogOut, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 
 interface TopNavProps {
@@ -14,6 +15,11 @@ export function TopNav({ onNotificationsClick }: TopNavProps) {
   const navigate = useNavigate();
   const { identity, clear } = useInternetIdentity();
   const { actor, isFetching: actorFetching } = useActor();
+  const officialSession = isOfficialSessionVerified();
+  const customLogo = getAppLogo();
+  const logoSrc =
+    customLogo ??
+    "/assets/generated/lamu-sports-hub-logo-transparent.dim_400x400.png";
 
   // Start with mock unread count; replace with backend count when actor is ready
   const mockUnread = MOCK_NOTIFICATIONS.filter((n) => !n.isRead).length;
@@ -54,7 +60,7 @@ export function TopNav({ onNotificationsClick }: TopNavProps) {
         data-ocid="nav.link"
       >
         <img
-          src="/assets/generated/lamu-sports-hub-logo-transparent.dim_400x400.png"
+          src={logoSrc}
           alt="Lamu Sports Hub"
           className="w-8 h-8 object-contain"
         />
@@ -65,6 +71,29 @@ export function TopNav({ onNotificationsClick }: TopNavProps) {
       </button>
 
       <div className="flex-1" />
+
+      {/* Official Mode indicator */}
+      {officialSession && (
+        <span
+          className="hidden sm:flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full"
+          style={{
+            background: "oklch(0.22 0.08 155 / 0.3)",
+            border: "1px solid oklch(0.4 0.12 155 / 0.5)",
+            color: "oklch(0.65 0.15 155)",
+          }}
+        >
+          <ShieldCheck className="w-3 h-3" />
+          Official
+        </span>
+      )}
+      {/* Mobile official dot */}
+      {officialSession && (
+        <span
+          className="sm:hidden w-2 h-2 rounded-full flex-shrink-0"
+          style={{ background: "oklch(0.65 0.15 155)" }}
+          title="Official Mode Active"
+        />
+      )}
 
       {/* Notification Bell */}
       <button

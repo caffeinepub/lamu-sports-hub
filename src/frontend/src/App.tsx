@@ -43,6 +43,10 @@ import { TeamsPage } from "@/pages/TeamsPage";
 
 import { BottomNav } from "@/components/layout/BottomNav";
 import { TopNav } from "@/components/layout/TopNav";
+import {
+  clearOfficialSession,
+  isOfficialSessionVerified,
+} from "@/utils/localStore";
 import { applyStoredTheme } from "@/utils/themeUtils";
 
 // --- App State ---
@@ -59,9 +63,15 @@ interface AppState {
 function AppLayout({
   appState,
   onNotificationsClick,
+  onOfficialSessionVerified,
+  onLockOfficialSession,
+  isOfficialSession,
 }: {
   appState: AppState;
   onNotificationsClick: () => void;
+  onOfficialSessionVerified: () => void;
+  onLockOfficialSession: () => void;
+  isOfficialSession: boolean;
 }) {
   const year = new Date().getFullYear();
   const footerLink = `https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(typeof window !== "undefined" ? window.location.hostname : "")}`;
@@ -86,7 +96,12 @@ function AppLayout({
         </p>
         <p className="mt-1 opacity-60">Island Pride. Island Football. 🏝️</p>
       </footer>
-      <BottomNav role={appState.role} />
+      <BottomNav
+        role={appState.role}
+        isOfficialSession={isOfficialSession}
+        onOfficialSessionVerified={onOfficialSessionVerified}
+        onLockOfficialSession={onLockOfficialSession}
+      />
     </div>
   );
 }
@@ -95,12 +110,18 @@ function AppLayout({
 function buildRouter(
   appState: AppState,
   setShowNotifications: (v: boolean) => void,
+  onOfficialSessionVerified: () => void,
+  onLockOfficialSession: () => void,
+  isOfficialSession: boolean,
 ) {
   const rootRoute = createRootRoute({
     component: () => (
       <AppLayout
         appState={appState}
         onNotificationsClick={() => setShowNotifications(true)}
+        onOfficialSessionVerified={onOfficialSessionVerified}
+        onLockOfficialSession={onLockOfficialSession}
+        isOfficialSession={isOfficialSession}
       />
     ),
   });
@@ -325,9 +346,33 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [loginTriggered, setLoginTriggered] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  // Track official session so re-renders pick up session changes
+  const [officialSession, setOfficialSession] = useState(
+    isOfficialSessionVerified,
+  );
 
-  // Detect real role once actor is available
+  // Refresh official session state (called from BottomNav after code entry)
+  const refreshOfficialSession = () => {
+    setOfficialSession(isOfficialSessionVerified());
+  };
+
+  const lockOfficialSession = () => {
+    clearOfficialSession();
+    setOfficialSession(false);
+    setAppState((prev) => ({ ...prev, role: "fan" }));
+  };
+
+  // Detect role: official session alone grants admin UI access.
+  // isCallerAdmin() is checked as a secondary signal but is NOT required.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: officialSession intentionally re-runs role check
   useEffect(() => {
+    // If official session is already verified, set admin immediately — no backend check needed
+    if (isOfficialSessionVerified()) {
+      setAppState((prev) => ({ ...prev, role: "admin" }));
+      setRoleLoading(false);
+      return;
+    }
+
     if (!actor || actorFetching) return;
     setRoleLoading(true);
     actor
@@ -339,11 +384,10 @@ export default function App() {
         }));
       })
       .catch(() => {
-        // On error, default to fan
         setAppState((prev) => ({ ...prev, role: "fan" }));
       })
       .finally(() => setRoleLoading(false));
-  }, [actor, actorFetching]);
+  }, [actor, actorFetching, officialSession]);
 
   const handleLoginClick = () => {
     setLoginTriggered(true);
@@ -382,7 +426,10 @@ export default function App() {
   if (!identity && !loginTriggered) {
     return (
       <>
-        <LandingPage onLogin={handleLoginClick} />
+        <LandingPage
+          onLogin={handleLoginClick}
+          onOfficialSessionVerified={refreshOfficialSession}
+        />
         <Toaster position="top-center" />
       </>
     );
@@ -411,7 +458,13 @@ export default function App() {
     );
   }
 
-  const router = buildRouter(appState, setShowNotifications);
+  const router = buildRouter(
+    appState,
+    setShowNotifications,
+    refreshOfficialSession,
+    lockOfficialSession,
+    officialSession,
+  );
 
   return (
     <>

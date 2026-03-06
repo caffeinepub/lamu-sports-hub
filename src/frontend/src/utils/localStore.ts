@@ -489,3 +489,42 @@ export function updateRecoveryRequest(
     setLocalStore(LSH_RECOVERY_KEY, all);
   }
 }
+
+// ── Official Access Code ──────────────────────────────────────────────────────
+export const LSH_OFFICIAL_CODE_KEY = "lsh_official_code";
+const DEFAULT_OFFICIAL_CODE = "LSH2026";
+
+export function getOfficialCode(): string {
+  return getLocalStore<string>(LSH_OFFICIAL_CODE_KEY, DEFAULT_OFFICIAL_CODE);
+}
+
+export function setOfficialCode(code: string): void {
+  setLocalStore(LSH_OFFICIAL_CODE_KEY, code);
+}
+
+export function setOfficialSessionVerified(): void {
+  sessionStorage.setItem("lsh_official_session", "verified");
+}
+
+export function isOfficialSessionVerified(): boolean {
+  return sessionStorage.getItem("lsh_official_session") === "verified";
+}
+
+export function clearOfficialSession(): void {
+  sessionStorage.removeItem("lsh_official_session");
+}
+
+// ── App Logo ──────────────────────────────────────────────────────────────────
+export const LSH_APP_LOGO_KEY = "lsh_app_logo";
+
+export function getAppLogo(): string | null {
+  return getLocalStore<string | null>(LSH_APP_LOGO_KEY, null);
+}
+
+export function setAppLogo(base64: string): void {
+  setLocalStore(LSH_APP_LOGO_KEY, base64);
+}
+
+export function clearAppLogo(): void {
+  localStorage.removeItem(LSH_APP_LOGO_KEY);
+}

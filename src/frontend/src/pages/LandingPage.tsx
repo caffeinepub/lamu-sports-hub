@@ -1,19 +1,68 @@
+import { OfficialAccessModal } from "@/components/shared/OfficialAccessModal";
 import { Button } from "@/components/ui/button";
 import { useInternetIdentity } from "@/hooks/useInternetIdentity";
-import { Loader2, Star, Trophy, Users, Waves } from "lucide-react";
+import { getAppLogo, isOfficialSessionVerified } from "@/utils/localStore";
+import {
+  Loader2,
+  Shield,
+  ShieldCheck,
+  Star,
+  Trophy,
+  Users,
+  Waves,
+} from "lucide-react";
 import { motion } from "motion/react";
+import { useState } from "react";
 
 interface LandingPageProps {
   onLogin: () => void;
+  onOfficialSessionVerified?: () => void;
 }
 
-export function LandingPage({ onLogin }: LandingPageProps) {
-  const { login, isLoggingIn, isInitializing } = useInternetIdentity();
+export function LandingPage({
+  onLogin,
+  onOfficialSessionVerified,
+}: LandingPageProps) {
+  const { login, isLoggingIn, isInitializing, identity } =
+    useInternetIdentity();
+  const customLogo = getAppLogo();
+  const logoSrc =
+    customLogo ??
+    "/assets/generated/lamu-sports-hub-logo-transparent.dim_400x400.png";
+  const [showOfficialModal, setShowOfficialModal] = useState(false);
+  const [pendingOfficialAfterLogin, setPendingOfficialAfterLogin] =
+    useState(false);
+  const [officialActive, setOfficialActive] = useState(
+    isOfficialSessionVerified,
+  );
 
   const handleLogin = () => {
     login();
     onLogin();
   };
+
+  const handleOfficialClick = () => {
+    if (identity) {
+      // Already logged in — open modal directly
+      setShowOfficialModal(true);
+    } else {
+      // Not logged in — login first, then open modal
+      setPendingOfficialAfterLogin(true);
+      login();
+      onLogin();
+    }
+  };
+
+  const handleOfficialVerified = () => {
+    setOfficialActive(true);
+    onOfficialSessionVerified?.();
+  };
+
+  // After identity appears from the pending login, open the modal
+  if (pendingOfficialAfterLogin && identity && !showOfficialModal) {
+    setPendingOfficialAfterLogin(false);
+    setShowOfficialModal(true);
+  }
 
   return (
     <div
@@ -84,7 +133,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
               style={{ background: "oklch(0.55 0.18 252)" }}
             />
             <img
-              src="/assets/generated/lamu-sports-hub-logo-transparent.dim_400x400.png"
+              src={logoSrc}
               alt="Lamu Sports Hub"
               className="relative w-28 h-28 object-contain drop-shadow-2xl"
             />
@@ -180,7 +229,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
               disabled={isLoggingIn || isInitializing}
               data-ocid="landing.login_button"
             >
-              {isLoggingIn ? (
+              {isLoggingIn && !pendingOfficialAfterLogin ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   Connecting...
@@ -189,6 +238,37 @@ export function LandingPage({ onLogin }: LandingPageProps) {
                 "Sign In with Internet Identity"
               )}
             </Button>
+
+            {/* Official button */}
+            {officialActive ? (
+              <div
+                className="w-full flex items-center justify-center gap-2 py-2 rounded-xl mt-2 text-xs font-semibold"
+                style={{
+                  background: "oklch(0.22 0.08 155 / 0.3)",
+                  border: "1px solid oklch(0.4 0.12 155 / 0.5)",
+                  color: "oklch(0.65 0.15 155)",
+                }}
+              >
+                <ShieldCheck className="w-4 h-4" />
+                Official session active
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                className="w-full mt-2 h-10 text-sm font-semibold rounded-xl"
+                style={{
+                  borderColor: "oklch(0.35 0.08 252)",
+                  color: "oklch(0.7 0.06 252)",
+                  background: "oklch(0.18 0.04 252 / 0.5)",
+                }}
+                onClick={handleOfficialClick}
+                disabled={isLoggingIn || isInitializing}
+                data-ocid="landing.official_access.button"
+              >
+                <Shield className="w-4 h-4 mr-2" />
+                I&apos;m an Official
+              </Button>
+            )}
 
             <p className="text-xs text-center text-muted-foreground mt-4">
               Secure, password-free login powered by Internet Computer
@@ -244,6 +324,13 @@ export function LandingPage({ onLogin }: LandingPageProps) {
           Built with ❤️ using caffeine.ai
         </a>
       </div>
+
+      {/* Official Access Modal */}
+      <OfficialAccessModal
+        open={showOfficialModal}
+        onOpenChange={setShowOfficialModal}
+        onVerified={handleOfficialVerified}
+      />
     </div>
   );
 }

@@ -36,6 +36,7 @@ import {
   type MockTeam,
 } from "@/data/mockData";
 import { useActor } from "@/hooks/useActor";
+import { isOfficialSessionVerified } from "@/utils/localStore";
 import {
   type Award,
   LSH_AWARDS_KEY,
@@ -55,12 +56,15 @@ import {
   type SeasonSettings,
   type Suggestion,
   type SystemStatus,
+  clearAppLogo,
   confirmNews,
+  getAppLogo,
   getAwards,
   getLocalStore,
   getMatchPitches,
   getMatchReferees,
   getNewsConfirmations,
+  getOfficialCode,
   getOfficials,
   getPitches,
   getPlayerConfirmations,
@@ -69,9 +73,11 @@ import {
   getReferees,
   getSeasonSettings,
   getTeamLogos,
+  setAppLogo,
   setLocalStore,
   setMatchPitch,
   setMatchReferee,
+  setOfficialCode,
   setTeamLogo,
   unconfirmNews,
   updateRecoveryRequest,
@@ -187,6 +193,13 @@ export function AdminPanelPage() {
   const [adminCheckLoading, setAdminCheckLoading] = useState(true);
 
   useEffect(() => {
+    // Official session code is the primary gate — no backend check needed
+    if (isOfficialSessionVerified()) {
+      setIsAdmin(true);
+      setAdminCheckLoading(false);
+      return;
+    }
+
     if (actorFetching) return;
     if (!actor) {
       setAdminCheckLoading(false);
@@ -247,11 +260,12 @@ export function AdminPanelPage() {
         </div>
         <div>
           <h2 className="font-display font-black text-xl text-foreground mb-2">
-            Admin Access Required
+            Official Access Required
           </h2>
           <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
-            This panel is only accessible to verified LSH admins. If you are an
-            official, contact Said Joseph to get your account authorized.
+            Enter your Official Access Code first. Tap "More" in the navigation
+            bar, then "Official Access" and enter the code given to you by Said
+            Joseph.
           </p>
         </div>
         <button
@@ -4489,6 +4503,8 @@ function AdminSettingsTab() {
   );
   const [statusMessage, setStatusMessage] = useState(systemStatus.message);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [appLogo, setAppLogoState] = useState<string | null>(getAppLogo);
+  const appLogoInputRef = useRef<HTMLInputElement>(null);
 
   const handleSaveSettings = async () => {
     setSavingSettings(true);
@@ -4505,8 +4521,82 @@ function AdminSettingsTab() {
     toast.success("System status updated!");
   };
 
+  const handleAppLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string;
+      setAppLogo(dataUrl);
+      setAppLogoState(dataUrl);
+      toast.success("App logo updated! Reload the page to see it everywhere.");
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
   return (
     <div className="space-y-5" data-ocid="admin.settings.panel">
+      {/* App Logo */}
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <h3 className="font-display font-bold text-sm text-foreground flex items-center gap-2">
+          <ImageIcon className="w-4 h-4 text-primary" />
+          App Logo
+        </h3>
+        <div className="flex items-center gap-4">
+          <div className="relative w-16 h-16 rounded-full overflow-hidden border-2 border-border flex-shrink-0">
+            <img
+              src={
+                appLogo ??
+                "/assets/generated/lamu-sports-hub-logo-transparent.dim_400x400.png"
+              }
+              alt="App Logo"
+              className="w-full h-full object-contain"
+            />
+          </div>
+          <div className="flex-1 space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Upload a new logo for the app. It will appear in the top bar and
+              login screen.
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="file"
+                accept="image/*"
+                ref={appLogoInputRef}
+                className="hidden"
+                onChange={handleAppLogoChange}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs gap-1"
+                onClick={() => appLogoInputRef.current?.click()}
+                data-ocid="admin.app_logo.upload_button"
+              >
+                <ImageIcon className="w-3 h-3" />
+                Upload Logo
+              </Button>
+              {appLogo && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-xs text-red-400 hover:text-red-300"
+                  onClick={() => {
+                    clearAppLogo();
+                    setAppLogoState(null);
+                    toast.success("App logo reset to default.");
+                  }}
+                  data-ocid="admin.app_logo.delete_button"
+                >
+                  Reset
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Season Settings */}
       <div className="rounded-xl border border-border bg-card p-4 space-y-3">
         <h3 className="font-display font-bold text-sm text-foreground">
@@ -4643,6 +4733,173 @@ function AdminSettingsTab() {
           tab above.
         </p>
       </div>
+
+      {/* Security — Official Access Code */}
+      <AdminAccessCodeSection />
+    </div>
+  );
+}
+
+// ── OFFICIAL ACCESS CODE SECTION ─────────────────────────────────────────────
+function AdminAccessCodeSection() {
+  const [currentCode] = useState<string>(getOfficialCode);
+  const [showEdit, setShowEdit] = useState(false);
+  const [newCode, setNewCode] = useState("");
+  const [confirmCode, setConfirmCode] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [showCurrent, setShowCurrent] = useState(false);
+
+  const handleSave = async () => {
+    if (!newCode.trim()) {
+      toast.error("Code cannot be empty.");
+      return;
+    }
+    if (newCode.length < 4 || newCode.length > 12) {
+      toast.error("Code must be 4–12 characters.");
+      return;
+    }
+    if (!/^[a-zA-Z0-9]+$/.test(newCode)) {
+      toast.error("Code must be alphanumeric (letters and numbers only).");
+      return;
+    }
+    if (newCode !== confirmCode) {
+      toast.error("Codes do not match.");
+      return;
+    }
+    setSaving(true);
+    await new Promise((r) => setTimeout(r, 350));
+    setOfficialCode(newCode);
+    setSaving(false);
+    setShowEdit(false);
+    setNewCode("");
+    setConfirmCode("");
+    toast.success("Official access code updated!", {
+      description: "Share the new code privately with officials only.",
+    });
+  };
+
+  return (
+    <div
+      className="rounded-xl border p-4 space-y-3"
+      style={{
+        borderColor: "oklch(0.35 0.08 252)",
+        background: "oklch(0.12 0.04 252 / 0.5)",
+      }}
+      data-ocid="admin.security.panel"
+    >
+      <div className="flex items-center gap-2">
+        <KeyRound
+          className="w-4 h-4"
+          style={{ color: "oklch(0.65 0.12 252)" }}
+        />
+        <h3 className="font-display font-bold text-sm text-foreground">
+          Official Access Code
+        </h3>
+      </div>
+
+      <div
+        className="rounded-lg px-3 py-2.5 flex items-center justify-between"
+        style={{ background: "oklch(0.1 0.03 248 / 0.6)" }}
+      >
+        <div>
+          <p className="text-[10px] text-muted-foreground mb-0.5">
+            Current code
+          </p>
+          <p className="font-mono font-bold text-sm tracking-widest text-foreground">
+            {showCurrent ? currentCode : "•".repeat(currentCode.length)}
+          </p>
+        </div>
+        <button
+          type="button"
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded"
+          onClick={() => setShowCurrent((v) => !v)}
+          data-ocid="admin.security.toggle_code.button"
+        >
+          {showCurrent ? "Hide" : "Show"}
+        </button>
+      </div>
+
+      <p className="text-[11px] text-muted-foreground">
+        Current access code is known only to officials. Share it privately.
+      </p>
+
+      {!showEdit ? (
+        <Button
+          size="sm"
+          variant="outline"
+          className="w-full text-xs"
+          onClick={() => setShowEdit(true)}
+          data-ocid="admin.security.edit_code.button"
+          style={{
+            borderColor: "oklch(0.35 0.08 252)",
+            color: "oklch(0.65 0.12 252)",
+          }}
+        >
+          <Edit className="w-3 h-3 mr-1.5" />
+          Change Access Code
+        </Button>
+      ) : (
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs mb-1 block">
+              New Code (4–12 alphanumeric chars)
+            </Label>
+            <Input
+              type="password"
+              placeholder="New code…"
+              value={newCode}
+              onChange={(e) => setNewCode(e.target.value)}
+              className="h-9 text-sm font-mono tracking-widest"
+              maxLength={12}
+              data-ocid="admin.security.new_code.input"
+            />
+          </div>
+          <div>
+            <Label className="text-xs mb-1 block">Confirm New Code</Label>
+            <Input
+              type="password"
+              placeholder="Confirm code…"
+              value={confirmCode}
+              onChange={(e) => setConfirmCode(e.target.value)}
+              className="h-9 text-sm font-mono tracking-widest"
+              maxLength={12}
+              data-ocid="admin.security.confirm_code.input"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1 text-xs"
+              onClick={() => {
+                setShowEdit(false);
+                setNewCode("");
+                setConfirmCode("");
+              }}
+              data-ocid="admin.security.cancel_code.button"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="flex-1 text-xs"
+              onClick={handleSave}
+              disabled={saving}
+              data-ocid="admin.security.save_code.button"
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.55 0.18 252) 0%, oklch(0.45 0.16 252) 100%)",
+              }}
+            >
+              {saving ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                "Save Code"
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

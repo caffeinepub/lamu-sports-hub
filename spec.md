@@ -1,36 +1,32 @@
 # Lamu Sports Hub
 
 ## Current State
-- Full app with Admin Panel, Coach Dashboard, news system, and player management
-- Backend has `createNews`, `adminCreateUser`, `createPlayer`, `adminCreateTeam` functions
-- `getUserRole` in access-control.mo calls `Runtime.trap("User is not registered")` for any principal not in the ACL map -- this causes ALL write operations to crash for any user who hasn't gone through `_initializeAccessControlWithSecret`
-- News posting in Admin Panel calls `actor.createNews(...)` but the backend rejects it because `hasPermission` traps instead of returning false
-- Player registration in CoachDashboardPage uses mock setTimeout -- never calls the backend
-- Admin Players tab in AdminPanelPage also uses mock data (MOCK_PLAYERS) -- never persists to backend
-- The `createPlayer` backend function requires the caller to be both a registered user AND the team's coach OR admin
+The app has a two-layer auth system: (1) Official Access Code (`LSH2026`) verified in sessionStorage, and (2) `isCallerAdmin()` backend check. Both must pass for `role` to be set to `"admin"`. If `isCallerAdmin()` returns false (which it does for all users not explicitly added to the backend access control list), the Admin Panel shows a lock screen and the "Officials Quick Actions" in the More menu never appear — making Official Mode functionally identical to fan mode.
+
+The backend (`adminAddPlayer`, `adminCreateTeam`, `createNews`, `adminCreateUser`) only requires `isAuthenticated` (non-anonymous), NOT admin role. So the backend is fine — the frontend gatekeeping is the blocker.
+
+Team logos are stored in localStorage (not backend), which is fine for now.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Backend: `addPlayer` admin function that allows any registered admin/user to add a player to any team (bypasses coach restriction) -- used for officials
-- Backend: new `createNewsOpen` path -- allow `createNews` to work without the user role check trapping, by making `hasPermission` return false gracefully
+- App logo change option for officials (upload a new logo image from the Admin Panel Settings tab)
+- An "Add Team" quick action tile in the More menu alongside Add Player and Add News
 
 ### Modify
-- Backend: `getUserRole` in access-control.mo -- return `#guest` instead of trapping when user is not registered, so `hasPermission` returns false gracefully instead of crashing
-- Backend: `createPlayer` -- relax restriction so admins can create players for any team
-- Frontend AdminPanelPage: Players tab -- wire "Add Player" button and confirmation checkboxes to backend (currently mock only)
-- Frontend AdminPanelPage: News tab -- ensure `createNews` succeeds by ensuring actor is initialized before call
-- Frontend CoachDashboardPage: `handleAddPlayer` -- call `actor.createPlayer(...)` for real instead of setTimeout mock
-- Frontend AdminPanelPage: Add Player quick form (from More menu) -- connect to real backend `createPlayer` call
+- **Official Mode gate**: Change `role` logic so that if `isOfficialSessionVerified()` is true, role is set to `"admin"` regardless of `isCallerAdmin()` result. The Official Access Code IS the admin gate for the UI.
+- **Admin Panel auth gate**: If `isOfficialSessionVerified()` is true, bypass the backend `isCallerAdmin()` check and render `AdminPanelInner` directly. Add a banner explaining the code-based access.
+- **Add Team in More menu**: Add an "Add Team" quick action tile to the Officials Quick Actions section in the More sheet (alongside Add Player, Add Coach, Add News).
+- **Add Team dialog in BottomNav**: Wire a full Add Team dialog (name, area, coach name) in BottomNav similar to Add Player.
+- **Team logo upload**: In Admin Panel > Teams tab, the logo upload button should visually show a preview thumbnail after upload; store in localStorage keyed by teamId.
+- **Official Mode visual distinction**: When Official Mode is active, show a clearly visible persistent indicator (gold/green pill) in the TopNav so it's obvious the user is in official mode at all times.
 
 ### Remove
 - Nothing removed
 
 ## Implementation Plan
-1. Fix `getUserRole` in access-control.mo to return `#guest` instead of trapping for unregistered users
-2. Fix `createPlayer` backend to allow admins to add players to any team
-3. Add a backend `adminAddPlayer` function that takes teamId + full player fields and does not require the coach restriction
-4. In AdminPanelPage Players tab, add a real "Add Player" dialog that calls backend `createPlayer` with team selection
-5. In CoachDashboardPage, wire `handleAddPlayer` to call backend `createPlayer` for real
-6. Keep news posting as-is (it should now work after the getUserRole fix)
-7. After backend fix, confirm news + player flows work end-to-end
+1. Update `App.tsx` role detection: if official session is verified, set role to `"admin"` immediately (don't wait for or require `isCallerAdmin()` to return true)
+2. Update `AdminPanelPage.tsx` auth gate: if `isOfficialSessionVerified()` is true, skip the backend check and render `AdminPanelInner` directly
+3. Update `BottomNav.tsx`: add `AddTeamDialog` component and "Add Team" tile to Officials Quick Actions
+4. Update `TopNav.tsx`: show a persistent "Official Mode" gold pill badge when official session is active
+5. Add app logo upload in Admin Panel Settings tab (stores logo in localStorage, frontend reads from there)

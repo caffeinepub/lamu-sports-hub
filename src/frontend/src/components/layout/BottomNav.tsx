@@ -1,4 +1,5 @@
 import { type T__1 as BackendTeam, Position, Role } from "@/backend";
+import { OfficialAccessModal } from "@/components/shared/OfficialAccessModal";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,11 +26,13 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useActor } from "@/hooks/useActor";
+import { isOfficialSessionVerified } from "@/utils/localStore";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Award,
   BarChart2,
   BookOpen,
+  Building2,
   Calendar,
   Clock,
   Compass,
@@ -40,10 +43,12 @@ import {
   Home,
   Info,
   Loader2,
+  Lock,
   MessageSquare,
   Newspaper,
   Settings,
   Shield,
+  ShieldCheck,
   Trophy,
   User,
   UserCheck,
@@ -622,6 +627,150 @@ function AddCoachDialog({ open, onOpenChange }: AddCoachDialogProps) {
   );
 }
 
+// ─── Add Team Dialog ──────────────────────────────────────────────────────────
+
+interface AddTeamDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+function AddTeamDialog({ open, onOpenChange }: AddTeamDialogProps) {
+  const { actor } = useActor();
+  const [loading, setLoading] = useState(false);
+  const [name, setName] = useState("");
+  const [area, setArea] = useState("");
+  const [coachName, setCoachName] = useState("");
+
+  function resetForm() {
+    setName("");
+    setArea("");
+    setCoachName("");
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || !area) {
+      toast.error("Team name and area are required.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await actor?.adminCreateTeam(name.trim(), area, coachName.trim());
+      toast.success(`Team "${name}" created!`);
+      resetForm();
+      onOpenChange(false);
+    } catch {
+      toast.error("Failed to create team. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!loading) {
+          if (!v) resetForm();
+          onOpenChange(v);
+        }
+      }}
+    >
+      <DialogContent
+        className="max-w-sm mx-auto rounded-2xl"
+        data-ocid="more.add_team.dialog"
+      >
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 font-display text-lg">
+            <span className="w-8 h-8 rounded-full bg-accent/15 flex items-center justify-center">
+              <Building2 className="w-4 h-4 text-accent" />
+            </span>
+            Add Team
+          </DialogTitle>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4 mt-1">
+          {/* Team Name */}
+          <div className="space-y-1.5">
+            <Label htmlFor="team-name">
+              Team Name <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="team-name"
+              placeholder="e.g. Shela United FC"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              data-ocid="more.add_team.input"
+              required
+            />
+          </div>
+
+          {/* Area */}
+          <div className="space-y-1.5">
+            <Label htmlFor="team-area">
+              Area <span className="text-destructive">*</span>
+            </Label>
+            <Select value={area} onValueChange={setArea}>
+              <SelectTrigger id="team-area" data-ocid="more.add_team.select">
+                <SelectValue placeholder="Select area…" />
+              </SelectTrigger>
+              <SelectContent>
+                {AREAS.map((a) => (
+                  <SelectItem key={a} value={a}>
+                    {a}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Coach Name */}
+          <div className="space-y-1.5">
+            <Label htmlFor="team-coach">Coach Name (optional)</Label>
+            <Input
+              id="team-coach"
+              placeholder="e.g. Omar Kiprotich"
+              value={coachName}
+              onChange={(e) => setCoachName(e.target.value)}
+            />
+          </div>
+
+          <DialogFooter className="flex gap-2 pt-1">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={() => {
+                resetForm();
+                onOpenChange(false);
+              }}
+              disabled={loading}
+              data-ocid="more.add_team.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              className="flex-1 bg-accent hover:bg-accent/90 text-accent-foreground"
+              disabled={loading}
+              data-ocid="more.add_team.submit_button"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating…
+                </>
+              ) : (
+                "Create Team"
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Add News Dialog ──────────────────────────────────────────────────────────
 
 interface AddNewsDialogProps {
@@ -827,9 +976,17 @@ function AddNewsDialog({ open, onOpenChange }: AddNewsDialogProps) {
 
 interface BottomNavProps {
   role?: string;
+  isOfficialSession?: boolean;
+  onOfficialSessionVerified?: () => void;
+  onLockOfficialSession?: () => void;
 }
 
-export function BottomNav({ role }: BottomNavProps) {
+export function BottomNav({
+  role,
+  isOfficialSession,
+  onOfficialSessionVerified,
+  onLockOfficialSession,
+}: BottomNavProps) {
   const navigate = useNavigate();
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
@@ -837,6 +994,9 @@ export function BottomNav({ role }: BottomNavProps) {
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [showAddCoach, setShowAddCoach] = useState(false);
   const [showAddNews, setShowAddNews] = useState(false);
+  const [showAddTeam, setShowAddTeam] = useState(false);
+  const [showOfficialModal, setShowOfficialModal] = useState(false);
+  const [confirmLock, setConfirmLock] = useState(false);
 
   // Main nav: Home, Teams, Players, News + Profile
   const allItems = [...NAV_ITEMS, ...EXTRA_NAV];
@@ -848,9 +1008,11 @@ export function BottomNav({ role }: BottomNavProps) {
       (item.path !== "/" && currentPath.startsWith(item.path)),
   );
 
-  const isAdmin = role === "admin";
+  // Admin if role is admin OR official session is verified
+  const isAdmin = role === "admin" || isOfficialSessionVerified();
+  const effectiveRole = isAdmin ? "admin" : role;
   const roleNavItems = ROLE_NAV_ITEMS.filter(
-    (item) => role && item.roles.includes(role),
+    (item) => effectiveRole && item.roles.includes(effectiveRole),
   );
 
   return (
@@ -916,8 +1078,132 @@ export function BottomNav({ role }: BottomNavProps) {
           data-ocid="nav.more.sheet"
         >
           <SheetHeader className="mb-4">
-            <SheetTitle className="font-display text-left">More</SheetTitle>
+            <SheetTitle className="font-display text-left flex items-center justify-between">
+              <span>More</span>
+              {/* Official session indicator in sheet header */}
+              {isOfficialSession && (
+                <span
+                  className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full"
+                  style={{
+                    background: "oklch(0.22 0.08 155 / 0.3)",
+                    border: "1px solid oklch(0.4 0.12 155 / 0.5)",
+                    color: "oklch(0.65 0.15 155)",
+                  }}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  Official Mode
+                </span>
+              )}
+            </SheetTitle>
           </SheetHeader>
+
+          {/* Official Access toggle — always visible at top of sheet */}
+          {!isOfficialSession ? (
+            <button
+              type="button"
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border mb-4 transition-all hover:border-primary/40"
+              style={{
+                borderColor: "oklch(0.3 0.06 252)",
+                background: "oklch(0.15 0.04 252 / 0.4)",
+              }}
+              onClick={() => {
+                setShowMore(false);
+                setShowOfficialModal(true);
+              }}
+              data-ocid="more.official_access.button"
+            >
+              <span
+                className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                style={{ background: "oklch(0.28 0.08 252 / 0.5)" }}
+              >
+                <Shield
+                  className="w-4 h-4"
+                  style={{ color: "oklch(0.65 0.12 252)" }}
+                />
+              </span>
+              <div className="text-left flex-1">
+                <p className="text-sm font-semibold text-foreground">
+                  Official Access
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Enter code to unlock admin controls
+                </p>
+              </div>
+              <Lock className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            </button>
+          ) : (
+            <div
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border mb-4"
+              style={{
+                borderColor: "oklch(0.4 0.12 155 / 0.5)",
+                background: "oklch(0.15 0.07 155 / 0.3)",
+              }}
+            >
+              <span
+                className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                style={{ background: "oklch(0.28 0.1 155 / 0.5)" }}
+              >
+                <ShieldCheck
+                  className="w-4 h-4"
+                  style={{ color: "oklch(0.65 0.15 155)" }}
+                />
+              </span>
+              <div className="text-left flex-1">
+                <p
+                  className="text-sm font-semibold"
+                  style={{ color: "oklch(0.65 0.15 155)" }}
+                >
+                  Official Mode Active
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Admin controls are unlocked
+                </p>
+              </div>
+              {!confirmLock ? (
+                <button
+                  type="button"
+                  className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors hover:opacity-80"
+                  style={{
+                    background: "oklch(0.28 0.08 24 / 0.4)",
+                    color: "oklch(0.6 0.22 24)",
+                    border: "1px solid oklch(0.4 0.12 24 / 0.4)",
+                  }}
+                  onClick={() => setConfirmLock(true)}
+                  data-ocid="more.lock_official.button"
+                >
+                  <Lock className="w-3 h-3" />
+                  Lock
+                </button>
+              ) : (
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    className="text-xs font-bold px-2 py-1 rounded-lg"
+                    style={{
+                      background: "oklch(0.5 0.2 24 / 0.3)",
+                      color: "oklch(0.6 0.22 24)",
+                    }}
+                    onClick={() => {
+                      onLockOfficialSession?.();
+                      setConfirmLock(false);
+                      setShowMore(false);
+                    }}
+                    data-ocid="more.lock_official.confirm_button"
+                  >
+                    Yes
+                  </button>
+                  <button
+                    type="button"
+                    className="text-xs font-semibold px-2 py-1 rounded-lg text-muted-foreground"
+                    onClick={() => setConfirmLock(false)}
+                    data-ocid="more.lock_official.cancel_button"
+                  >
+                    No
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Standard MORE_ITEMS grid */}
           <div className="grid grid-cols-4 gap-3">
@@ -990,13 +1276,29 @@ export function BottomNav({ role }: BottomNavProps) {
             </div>
           )}
 
-          {/* Officials Quick Actions — admin only */}
+          {/* Officials Quick Actions — admin / official session only */}
           {isAdmin && (
             <div className="mt-5">
               <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3">
                 Officials Quick Actions
               </p>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-4 gap-2">
+                {/* Add Team */}
+                <button
+                  type="button"
+                  className="flex flex-col items-center gap-1.5 py-3 rounded-xl border border-accent/30 bg-accent/8 text-accent hover:bg-accent/15 hover:border-accent/60 transition-all"
+                  onClick={() => {
+                    setShowMore(false);
+                    setShowAddTeam(true);
+                  }}
+                  data-ocid="more.add_team.open_modal_button"
+                >
+                  <div className="w-8 h-8 flex items-center justify-center">
+                    <Building2 className="w-5 h-5" />
+                  </div>
+                  <span className="text-[10px] font-bold">Add Team</span>
+                </button>
+
                 {/* Add Player */}
                 <button
                   type="button"
@@ -1051,9 +1353,19 @@ export function BottomNav({ role }: BottomNavProps) {
       </Sheet>
 
       {/* Quick-action Dialogs */}
+      <AddTeamDialog open={showAddTeam} onOpenChange={setShowAddTeam} />
       <AddPlayerDialog open={showAddPlayer} onOpenChange={setShowAddPlayer} />
       <AddCoachDialog open={showAddCoach} onOpenChange={setShowAddCoach} />
       <AddNewsDialog open={showAddNews} onOpenChange={setShowAddNews} />
+
+      {/* Official Access Modal */}
+      <OfficialAccessModal
+        open={showOfficialModal}
+        onOpenChange={setShowOfficialModal}
+        onVerified={() => {
+          onOfficialSessionVerified?.();
+        }}
+      />
     </>
   );
 }
