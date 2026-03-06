@@ -25,10 +25,12 @@ import { MVPVotePage } from "@/pages/MVPVotePage";
 import { MatchdayPage } from "@/pages/MatchdayPage";
 import { MatchesPage } from "@/pages/MatchesPage";
 import { MonetizePage } from "@/pages/MonetizePage";
+import { NewsPage } from "@/pages/NewsPage";
 import { NotificationsPage } from "@/pages/NotificationsPage";
 import { OfficialsPage } from "@/pages/OfficialsPage";
 import { OnboardingPage } from "@/pages/OnboardingPage";
 import { PlayerProfilePage } from "@/pages/PlayerProfilePage";
+import { PlayersPage } from "@/pages/PlayersPage";
 import { ProfilePage } from "@/pages/ProfilePage";
 import { RecoveryPage } from "@/pages/RecoveryPage";
 import { RecoveryStatusPage } from "@/pages/RecoveryStatusPage";
@@ -133,10 +135,22 @@ function buildRouter(
     component: TeamProfilePage,
   });
 
+  const playersRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/players",
+    component: PlayersPage,
+  });
+
   const playerProfileRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/players/$playerId",
     component: PlayerProfilePage,
+  });
+
+  const newsRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/news",
+    component: NewsPage,
   });
 
   const matchesRoute = createRoute({
@@ -264,7 +278,9 @@ function buildRouter(
     standingsRoute,
     teamsRoute,
     teamProfileRoute,
+    playersRoute,
     playerProfileRoute,
+    newsRoute,
     matchesRoute,
     matchdayRoute,
     leaderboardRoute,

@@ -194,15 +194,27 @@ export function AdminPanelPage() {
       return;
     }
     setAdminCheckLoading(true);
+
+    // Safety timeout: if the admin check doesn't resolve within 5 seconds,
+    // treat as non-admin rather than hanging forever on the loading screen.
+    const timeout = setTimeout(() => {
+      setIsAdmin(false);
+      setAdminCheckLoading(false);
+    }, 5000);
+
     actor
       .isCallerAdmin()
       .then((result) => {
+        clearTimeout(timeout);
         setIsAdmin(result);
       })
       .catch(() => {
+        clearTimeout(timeout);
         setIsAdmin(false);
       })
       .finally(() => setAdminCheckLoading(false));
+
+    return () => clearTimeout(timeout);
   }, [actor, actorFetching]);
 
   // Loading state while checking admin
@@ -317,6 +329,13 @@ function AdminPanelInner() {
   const [matchPitchId, setMatchPitchId] = useState<string>("");
   const [editMatchPitchId, setEditMatchPitchId] = useState<string>("");
 
+  // Real backend teams (for match creation)
+  const [backendTeamsForMatch, setBackendTeamsForMatch] = useState<
+    BackendTeam[]
+  >([]);
+  const [backendTeamsForMatchLoading, setBackendTeamsForMatchLoading] =
+    useState(false);
+
   // Team logos
   const [teamLogos, setTeamLogosState] =
     useState<Record<string, string>>(getTeamLogos);
@@ -338,10 +357,25 @@ function AdminPanelInner() {
   const [newTeamArea, setNewTeamArea] = useState<string>("Lamu Town");
   const [newTeamCoach, setNewTeamCoach] = useState("");
   const [addTeamLoading, setAddTeamLoading] = useState(false);
+  // Increment to tell TeamsTabContent to refresh after a team is created
+  const [teamRefreshTrigger, setTeamRefreshTrigger] = useState(0);
 
   // News confirmations
   const [newsConfirmations, setNewsConfirmations] =
     useState<Record<string, NewsConfirmation>>(getNewsConfirmations);
+
+  // Load real backend teams whenever the matches tab is active or create-match dialog opens
+  // biome-ignore lint/correctness/useExhaustiveDependencies: showCreateMatch is intentional
+  useEffect(() => {
+    if (!actor) return;
+    if (activeTab !== "matches" && !showCreateMatch) return;
+    setBackendTeamsForMatchLoading(true);
+    actor
+      .getAllTeams()
+      .then((teams) => setBackendTeamsForMatch(teams))
+      .catch((err) => console.error("Failed to load teams for match:", err))
+      .finally(() => setBackendTeamsForMatchLoading(false));
+  }, [actor, activeTab, showCreateMatch]);
 
   const handleConfirmNews = (newsId: string) => {
     confirmNews(newsId, "Admin");
@@ -535,6 +569,9 @@ function AdminPanelInner() {
       setNewTeamName("");
       setNewTeamArea("Lamu Town");
       setNewTeamCoach("");
+      // Switch to teams tab and trigger a refresh of the backend teams list
+      setActiveTab("teams");
+      setTeamRefreshTrigger((n) => n + 1);
     } catch {
       toast.error("Failed to create team. Please try again.");
     } finally {
@@ -982,6 +1019,7 @@ function AdminPanelInner() {
             setLogoUploadTeamId={setLogoUploadTeamId}
             openEditTeam={openEditTeam}
             activeTab={activeTab}
+            refreshTrigger={teamRefreshTrigger}
           />
         </TabsContent>
 
@@ -2115,43 +2153,68 @@ function AdminPanelInner() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            {backendTeamsForMatch.length === 0 &&
+              !backendTeamsForMatchLoading && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-500/40 bg-amber-500/10 text-xs text-amber-400">
+                  <Info className="w-3 h-3 flex-shrink-0" />
+                  No teams on-chain yet. Add a team in the Teams tab first.
+                </div>
+              )}
             <div>
               <Label className="text-xs mb-1 block">Home Team *</Label>
-              <Select value={homeTeam} onValueChange={setHomeTeam}>
-                <SelectTrigger className="h-9 text-sm" data-ocid="admin.select">
-                  <SelectValue placeholder="Select home team..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {MOCK_TEAMS.map((t) => (
-                    <SelectItem
-                      key={t.teamId}
-                      value={t.teamId}
-                      className="text-sm"
-                    >
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {backendTeamsForMatchLoading ? (
+                <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-border bg-muted/20 text-xs text-muted-foreground">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Loading teams...
+                </div>
+              ) : (
+                <Select value={homeTeam} onValueChange={setHomeTeam}>
+                  <SelectTrigger
+                    className="h-9 text-sm"
+                    data-ocid="admin.select"
+                  >
+                    <SelectValue placeholder="Select home team..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {backendTeamsForMatch.map((t) => (
+                      <SelectItem
+                        key={t.teamId}
+                        value={t.teamId}
+                        className="text-sm"
+                      >
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div>
               <Label className="text-xs mb-1 block">Away Team *</Label>
-              <Select value={awayTeam} onValueChange={setAwayTeam}>
-                <SelectTrigger className="h-9 text-sm" data-ocid="admin.select">
-                  <SelectValue placeholder="Select away team..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {MOCK_TEAMS.map((t) => (
-                    <SelectItem
-                      key={t.teamId}
-                      value={t.teamId}
-                      className="text-sm"
-                    >
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {backendTeamsForMatchLoading ? (
+                <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-border bg-muted/20 text-xs text-muted-foreground">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Loading teams...
+                </div>
+              ) : (
+                <Select value={awayTeam} onValueChange={setAwayTeam}>
+                  <SelectTrigger
+                    className="h-9 text-sm"
+                    data-ocid="admin.select"
+                  >
+                    <SelectValue placeholder="Select away team..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {backendTeamsForMatch.map((t) => (
+                      <SelectItem
+                        key={t.teamId}
+                        value={t.teamId}
+                        className="text-sm"
+                      >
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div>
               <Label className="text-xs mb-1 block">Match Date & Time *</Label>
@@ -2279,6 +2342,7 @@ function TeamsTabContent({
   setLogoUploadTeamId,
   openEditTeam,
   activeTab,
+  refreshTrigger,
 }: {
   setShowAddTeam: (v: boolean) => void;
   teamLogos: Record<string, string>;
@@ -2286,11 +2350,13 @@ function TeamsTabContent({
   setLogoUploadTeamId: (id: string) => void;
   openEditTeam: (team: (typeof MOCK_TEAMS)[0]) => void;
   activeTab: string;
+  refreshTrigger?: number;
 }) {
   const { actor } = useActor();
   const [backendTeams, setBackendTeams] = useState<BackendTeam[]>([]);
   const [backendTeamsLoading, setBackendTeamsLoading] = useState(false);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshTrigger is intentional — it signals the parent created a new team
   useEffect(() => {
     if (activeTab !== "teams" || !actor) return;
     setBackendTeamsLoading(true);
@@ -2299,7 +2365,7 @@ function TeamsTabContent({
       .then((teams) => setBackendTeams(teams))
       .catch((err) => console.error("Failed to load backend teams:", err))
       .finally(() => setBackendTeamsLoading(false));
-  }, [activeTab, actor]);
+  }, [activeTab, actor, refreshTrigger]);
 
   return (
     <div>
@@ -2519,7 +2585,9 @@ function AdminPlayersTab({ autoOpenDialog }: { autoOpenDialog?: boolean }) {
       .finally(() => setBackendPlayersLoading(false));
   }, [actor]);
 
-  // Load backend teams for the Add Player team selector
+  // Load backend teams for the Add Player team selector.
+  // Re-fetch whenever the dialog opens so teams added just before are included.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: showAddPlayer is intentional — re-fetch teams when dialog opens
   useEffect(() => {
     if (!actor) return;
     setBackendTeamsLoading(true);
@@ -2528,7 +2596,7 @@ function AdminPlayersTab({ autoOpenDialog }: { autoOpenDialog?: boolean }) {
       .then((teams) => setBackendTeams(teams))
       .catch((err) => console.error("Failed to load teams:", err))
       .finally(() => setBackendTeamsLoading(false));
-  }, [actor]);
+  }, [actor, showAddPlayer]);
 
   const toggle = (playerId: string, checked: boolean) => {
     const updated = { ...confirmations, [playerId]: checked };

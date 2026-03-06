@@ -1,4 +1,4 @@
-import { Position, Role } from "@/backend";
+import { type T__1 as BackendTeam, Position, Role } from "@/backend";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -24,7 +24,6 @@ import {
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { MOCK_TEAMS } from "@/data/mockData";
 import { useActor } from "@/hooks/useActor";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import {
@@ -42,14 +41,16 @@ import {
   Info,
   Loader2,
   MessageSquare,
+  Newspaper,
   Settings,
   Shield,
   Trophy,
   User,
+  UserCheck,
   UserPlus,
   Users,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 interface NavItem {
@@ -68,6 +69,36 @@ const NAV_ITEMS: NavItem[] = [
     ocid: "nav.home.link",
   },
   {
+    path: "/teams",
+    label: "Teams",
+    icon: <Users className="w-5 h-5" />,
+    ocid: "nav.teams.link",
+  },
+  {
+    path: "/players",
+    label: "Players",
+    icon: <UserCheck className="w-5 h-5" />,
+    ocid: "nav.players.link",
+  },
+  {
+    path: "/news",
+    label: "News",
+    icon: <Newspaper className="w-5 h-5" />,
+    ocid: "nav.news.link",
+  },
+];
+
+const EXTRA_NAV: NavItem[] = [
+  {
+    path: "/profile",
+    label: "Profile",
+    icon: <User className="w-5 h-5" />,
+    ocid: "nav.profile.link",
+  },
+];
+
+const MORE_ITEMS = [
+  {
     path: "/standings",
     label: "Standings",
     icon: <BarChart2 className="w-5 h-5" />,
@@ -85,32 +116,6 @@ const NAV_ITEMS: NavItem[] = [
     icon: <Trophy className="w-5 h-5" />,
     ocid: "nav.leaderboard.link",
   },
-  {
-    path: "/profile",
-    label: "Profile",
-    icon: <User className="w-5 h-5" />,
-    ocid: "nav.profile.link",
-  },
-];
-
-const EXTRA_NAV: NavItem[] = [
-  {
-    path: "/coach",
-    label: "Coach",
-    icon: <Users className="w-5 h-5" />,
-    ocid: "nav.coach.link",
-    roles: ["coach", "admin"],
-  },
-  {
-    path: "/admin",
-    label: "Admin",
-    icon: <Shield className="w-5 h-5" />,
-    ocid: "nav.admin.link",
-    roles: ["admin"],
-  },
-];
-
-const MORE_ITEMS = [
   {
     path: "/referees",
     label: "Referees",
@@ -167,6 +172,23 @@ const MORE_ITEMS = [
   },
 ];
 
+const ROLE_NAV_ITEMS: (NavItem & { roles: string[] })[] = [
+  {
+    path: "/coach",
+    label: "Coach",
+    icon: <Users className="w-5 h-5" />,
+    ocid: "nav.coach.link",
+    roles: ["coach", "admin"],
+  },
+  {
+    path: "/admin",
+    label: "Admin Panel",
+    icon: <Shield className="w-5 h-5" />,
+    ocid: "nav.admin.link",
+    roles: ["admin"],
+  },
+];
+
 const AREAS = [
   "Shela",
   "Hindi",
@@ -199,6 +221,19 @@ function AddPlayerDialog({ open, onOpenChange }: AddPlayerDialogProps) {
   const [position, setPosition] = useState("");
   const [jerseyNumber, setJerseyNumber] = useState("");
   const [bio, setBio] = useState("");
+  const [teams, setTeams] = useState<BackendTeam[]>([]);
+  const [teamsLoading, setTeamsLoading] = useState(false);
+
+  // Load real teams from backend whenever dialog opens
+  useEffect(() => {
+    if (!open || !actor) return;
+    setTeamsLoading(true);
+    actor
+      .getAllTeams()
+      .then((t) => setTeams(t))
+      .catch(() => setTeams([]))
+      .finally(() => setTeamsLoading(false));
+  }, [open, actor]);
 
   function resetForm() {
     setName("");
@@ -295,21 +330,32 @@ function AddPlayerDialog({ open, onOpenChange }: AddPlayerDialogProps) {
             <Label htmlFor="player-team">
               Team <span className="text-destructive">*</span>
             </Label>
-            <Select value={teamId} onValueChange={setTeamId}>
-              <SelectTrigger
-                id="player-team"
-                data-ocid="more.add_player.select"
-              >
-                <SelectValue placeholder="Select team…" />
-              </SelectTrigger>
-              <SelectContent>
-                {MOCK_TEAMS.map((t) => (
-                  <SelectItem key={t.teamId} value={t.teamId}>
-                    {t.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {teamsLoading ? (
+              <div className="flex items-center gap-2 h-10 px-3 rounded-md border border-input text-sm text-muted-foreground">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Loading teams…
+              </div>
+            ) : teams.length === 0 ? (
+              <div className="flex items-center h-10 px-3 rounded-md border border-destructive/40 bg-destructive/5 text-xs text-destructive">
+                No teams found. Add a team in Admin Panel first.
+              </div>
+            ) : (
+              <Select value={teamId} onValueChange={setTeamId}>
+                <SelectTrigger
+                  id="player-team"
+                  data-ocid="more.add_player.select"
+                >
+                  <SelectValue placeholder="Select team…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {teams.map((t) => (
+                    <SelectItem key={t.teamId} value={t.teamId}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           {/* Position */}
@@ -792,10 +838,8 @@ export function BottomNav({ role }: BottomNavProps) {
   const [showAddCoach, setShowAddCoach] = useState(false);
   const [showAddNews, setShowAddNews] = useState(false);
 
-  const extraItems = EXTRA_NAV.filter(
-    (item) => item.roles && role && item.roles.includes(role),
-  );
-  const allItems = [...NAV_ITEMS.slice(0, 4), ...extraItems, NAV_ITEMS[4]];
+  // Main nav: Home, Teams, Players, News + Profile
+  const allItems = [...NAV_ITEMS, ...EXTRA_NAV];
 
   // Check if current path is one of the "more" items
   const isMoreActive = MORE_ITEMS.some(
@@ -805,6 +849,9 @@ export function BottomNav({ role }: BottomNavProps) {
   );
 
   const isAdmin = role === "admin";
+  const roleNavItems = ROLE_NAV_ITEMS.filter(
+    (item) => role && item.roles.includes(role),
+  );
 
   return (
     <>
@@ -903,6 +950,45 @@ export function BottomNav({ role }: BottomNavProps) {
               );
             })}
           </div>
+
+          {/* Role-specific nav items — Coach / Admin */}
+          {roleNavItems.length > 0 && (
+            <div className="mt-5">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3">
+                Officials
+              </p>
+              <div className="grid grid-cols-4 gap-3">
+                {roleNavItems.map((item) => {
+                  const isActive =
+                    currentPath === item.path ||
+                    (item.path !== "/" && currentPath.startsWith(item.path));
+                  return (
+                    <button
+                      type="button"
+                      key={item.path}
+                      className={`flex flex-col items-center gap-1.5 py-3 rounded-xl border transition-all ${
+                        isActive
+                          ? "bg-accent/10 border-accent/40 text-accent"
+                          : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-primary/40"
+                      }`}
+                      onClick={() => {
+                        navigate({ to: item.path });
+                        setShowMore(false);
+                      }}
+                      data-ocid={item.ocid}
+                    >
+                      <div className="w-8 h-8 flex items-center justify-center">
+                        {item.icon}
+                      </div>
+                      <span className="text-[10px] font-semibold">
+                        {item.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Officials Quick Actions — admin only */}
           {isAdmin && (

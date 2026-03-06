@@ -24,6 +24,7 @@ import {
 } from "@/utils/localStore";
 import { useNavigate } from "@tanstack/react-router";
 import {
+  AlertCircle,
   AlertTriangle,
   Award,
   BarChart2,
@@ -41,7 +42,7 @@ import {
   Zap,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface DashboardPageProps {
   favoriteTeamId?: string;
@@ -120,27 +121,36 @@ export function DashboardPage({
   // News state
   const [newsList, setNewsList] = useState<NewsItem[]>([]);
   const [newsLoading, setNewsLoading] = useState(false);
+  const [newsError, setNewsError] = useState<string | null>(null);
   const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
   const [newsConfirmations, _setNewsConfirmations] =
     useState<Record<string, NewsConfirmation>>(getNewsConfirmations);
 
+  // Keep a stable ref to actor for use inside interval callback
+  const actorRef = useRef(actor);
+  useEffect(() => {
+    actorRef.current = actor;
+  }, [actor]);
+
   const fetchNews = useCallback(() => {
-    if (!actor) return;
+    const currentActor = actorRef.current;
+    if (!currentActor) return;
     setNewsLoading(true);
-    actor
+    currentActor
       .getAllNews()
       .then((items) => {
         // Backend already filters published, just take latest 3
         setNewsList((items as NewsItem[]).slice(0, 3));
+        setNewsError(null);
       })
       .catch((err) => {
         console.error("Failed to load news:", err);
-        setNewsList([]);
+        setNewsError("Could not load news. Tap Refresh to try again.");
       })
       .finally(() => {
         setNewsLoading(false);
       });
-  }, [actor]);
+  }, []);
 
   // Watch actor directly — triggers as soon as actor becomes available
   useEffect(() => {
@@ -150,14 +160,34 @@ export function DashboardPage({
       .getAllNews()
       .then((items) => {
         setNewsList((items as NewsItem[]).slice(0, 3));
+        setNewsError(null);
       })
       .catch((err) => {
         console.error("Failed to load news on mount:", err);
-        setNewsList([]);
+        setNewsError("Could not load news. Tap Refresh to try again.");
       })
       .finally(() => {
         setNewsLoading(false);
       });
+  }, [actor]);
+
+  // Poll every 15 seconds so news posted by admin appears automatically
+  useEffect(() => {
+    if (!actor) return;
+    const intervalId = setInterval(() => {
+      const currentActor = actorRef.current;
+      if (!currentActor) return;
+      currentActor
+        .getAllNews()
+        .then((items) => {
+          setNewsList((items as NewsItem[]).slice(0, 3));
+          setNewsError(null);
+        })
+        .catch((err) => {
+          console.error("News polling error:", err);
+        });
+    }, 15000);
+    return () => clearInterval(intervalId);
   }, [actor]);
 
   return (
@@ -680,6 +710,23 @@ export function DashboardPage({
             </button>
           </div>
 
+          {newsError && !newsLoading && (
+            <div
+              className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 flex items-center gap-2 mb-2"
+              data-ocid="dashboard.news.error_state"
+            >
+              <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+              <p className="text-xs text-red-300 flex-1">{newsError}</p>
+              <button
+                type="button"
+                onClick={fetchNews}
+                className="text-xs text-red-300 hover:text-red-200 font-semibold underline flex-shrink-0"
+                data-ocid="dashboard.news.retry_button"
+              >
+                Retry
+              </button>
+            </div>
+          )}
           {newsLoading ? (
             <div className="space-y-2">
               {[1, 2, 3].map((i) => (
@@ -690,17 +737,17 @@ export function DashboardPage({
                 />
               ))}
             </div>
-          ) : newsList.length === 0 ? (
+          ) : newsList.length === 0 && !newsError ? (
             <div
               className="rounded-xl border border-border bg-card py-8 flex flex-col items-center gap-2 text-center"
               data-ocid="dashboard.news.empty_state"
             >
               <Newspaper className="w-8 h-8 text-muted-foreground/30" />
               <p className="text-xs text-muted-foreground">
-                No news yet. Check back soon.
+                No published news yet. Check back soon.
               </p>
             </div>
-          ) : (
+          ) : newsList.length > 0 ? (
             <div className="space-y-2" data-ocid="dashboard.news.list">
               {newsList.map((item, i) => (
                 <button
@@ -774,7 +821,7 @@ export function DashboardPage({
                 </button>
               ))}
             </div>
-          )}
+          ) : null}
         </motion.div>
 
         {/* Upcoming Matches */}

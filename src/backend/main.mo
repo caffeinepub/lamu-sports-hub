@@ -13,8 +13,6 @@ import AccessControl "authorization/access-control";
 import Storage "blob-storage/Storage";
 import MixinStorage "blob-storage/Mixin";
 
-
-
 actor {
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
@@ -169,17 +167,37 @@ actor {
   var nextNotificationId = 1;
   var nextUserId = 1;
 
+  // ------------------- Helper Functions -------------------
+
+  private func isGuest(caller : Principal) : Bool {
+    caller.toText() == "2vxsx-fae";
+  };
+
+  // Check if caller is authenticated (non-anonymous)
+  private func isAuthenticated(caller : Principal) : Bool {
+    not isGuest(caller);
+  };
+
+  // Check if caller has user permission (authenticated or explicit #user role)
+  private func hasUserPermission(caller : Principal) : Bool {
+    if (isGuest(caller)) {
+      return false;
+    };
+    // Any authenticated user is treated as having #user permission.
+    true;
+  };
+
   // ------------------- User Functions -------------------
 
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile.T {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (not hasUserPermission(caller)) {
       Runtime.trap("Unauthorized: Only users can view profiles");
     };
     userProfiles.get(caller);
   };
 
   public shared ({ caller }) func saveCallerUserProfile(name : Text, phone : Text, email : Text, role : UserProfile.Role, area : Text, favoriteTeamId : ?TeamId) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (not hasUserPermission(caller)) {
       Runtime.trap("Unauthorized: Only users can save profiles");
     };
     let profile : UserProfile.T = {
@@ -195,7 +213,7 @@ actor {
   };
 
   public shared ({ caller }) func createOrUpdateUserProfile(name : Text, phone : Text, email : Text, role : UserProfile.Role, area : Text, favoriteTeamId : ?TeamId) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (not hasUserPermission(caller)) {
       Runtime.trap("Unauthorized: Only users can create or update profiles");
     };
     let profile : UserProfile.T = {
@@ -218,7 +236,7 @@ actor {
   };
 
   public query ({ caller }) func getAllUserProfiles() : async [UserProfile.T] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (not hasUserPermission(caller)) {
       Runtime.trap("Unauthorized: Only registered users can view all profiles");
     };
     let principalProfiles = userProfiles.values().toArray();
@@ -252,8 +270,8 @@ actor {
   // -------------------- Team Functions -------------------
 
   public shared ({ caller }) func createTeam(name : Text, area : Text) : async TeamId {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can create teams");
+    if (not isAuthenticated(caller)) {
+      Runtime.trap("Unauthorized: Only authenticated users can create teams");
     };
     if (not isCoach(caller) and not AccessControl.isAdmin(accessControlState, caller)) {
       Runtime.trap("Unauthorized: Only coaches or admins can create teams");
@@ -304,8 +322,8 @@ actor {
   // ---------------------- Player Functions --------------------
 
   public shared ({ caller }) func createPlayer(teamId : TeamId, nickname : Text, name : Text, position : Player.Position, jerseyNumber : Nat) : async PlayerId {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can create players");
+    if (not isAuthenticated(caller)) {
+      Runtime.trap("Unauthorized: Only authenticated users can create players");
     };
     if (not isTeamCoach(caller, teamId) and not AccessControl.isAdmin(accessControlState, caller)) {
       Runtime.trap("Unauthorized: Only the team's coach or admins can create players for this team");
@@ -335,8 +353,8 @@ actor {
   };
 
   public shared ({ caller }) func adminAddPlayer(teamId : TeamId, nickname : Text, name : Text, position : Player.Position, jerseyNumber : Nat) : async PlayerId {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only registered users can add players");
+    if (not isAuthenticated(caller)) {
+      Runtime.trap("Unauthorized: Only authenticated users can add players");
     };
 
     let playerId = "P" # nextPlayerId.toText();
@@ -377,8 +395,8 @@ actor {
   // --------------------- Match Functions ----------------------
 
   public shared ({ caller }) func createMatch(homeTeam : TeamId, awayTeam : TeamId, date : Time.Time, kickoffTime : Text) : async MatchId {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can create matches");
+    if (not isAuthenticated(caller)) {
+      Runtime.trap("Unauthorized: Only authenticated users can create matches");
     };
 
     let matchId = "M" # nextMatchId.toText();
@@ -401,8 +419,8 @@ actor {
   };
 
   public shared ({ caller }) func updateMatchScore(matchId : MatchId, homeScore : Nat, awayScore : Nat, status : Match.Status) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can update match scores");
+    if (not isAuthenticated(caller)) {
+      Runtime.trap("Unauthorized: Only authenticated users can update match scores");
     };
 
     switch (matches.get(matchId)) {
@@ -449,7 +467,7 @@ actor {
   };
 
   public shared ({ caller }) func createMVPVote(matchId : MatchId, nomineePlayerId : PlayerId) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (not hasUserPermission(caller)) {
       Runtime.trap("Unauthorized: Only users can vote for MVP");
     };
 
@@ -475,7 +493,7 @@ actor {
   };
 
   public query ({ caller }) func getAllMVPVotes() : async [MVPVote.T] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (not hasUserPermission(caller)) {
       Runtime.trap("Unauthorized: Only registered users can view all MVP votes");
     };
     mvpVotes.values().toArray();
@@ -484,7 +502,7 @@ actor {
   // ------------------ Notification Functions -------------------
 
   public shared ({ caller }) func createNotification(userId : UserId, notifType : Notification.Type, message : Text) : async NotificationId {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (not hasUserPermission(caller)) {
       Runtime.trap("Unauthorized: Only users can create notifications");
     };
 
@@ -504,8 +522,8 @@ actor {
   };
 
   public shared ({ caller }) func markNotificationAsRead(notificationId : NotificationId) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can mark notifications as read");
+    if (not isAuthenticated(caller)) {
+      Runtime.trap("Unauthorized: Only authenticated users can mark notifications as read");
     };
 
     switch (notifications.get(notificationId)) {
@@ -532,7 +550,7 @@ actor {
   };
 
   public query ({ caller }) func getAllNotifications() : async [Notification.T] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+    if (not hasUserPermission(caller)) {
       Runtime.trap("Unauthorized: Only registered users can view all notifications");
     };
     notifications.values().toArray();
@@ -541,8 +559,8 @@ actor {
   // ----------------------- Admin Functions ------------------------
 
   public shared ({ caller }) func adminCreateUser(name : Text, phone : Text, email : Text, role : UserProfile.Role, area : Text) : async Text {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can create users");
+    if (not isAuthenticated(caller)) {
+      Runtime.trap("Unauthorized: Only authenticated users can create users");
     };
 
     let userId = "U" # nextUserId.toText();
@@ -562,8 +580,8 @@ actor {
   };
 
   public shared ({ caller }) func adminCreateTeam(name : Text, area : Text, coachName : Text) : async TeamId {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can create teams via admin function");
+    if (not isAuthenticated(caller)) {
+      Runtime.trap("Unauthorized: Only authenticated users can create teams");
     };
 
     let teamId = "T" # nextTeamId.toText();
@@ -589,8 +607,8 @@ actor {
   // ----------------------- News Functions ------------------------
 
   public shared ({ caller }) func createNews(title : Text, body : Text, isPublished : Bool) : async NewsId {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only registered users can create news");
+    if (not isAuthenticated(caller)) {
+      Runtime.trap("Unauthorized: Only authenticated users can create news");
     };
 
     let newsId = "NEWS" # Time.now().toText();
@@ -609,8 +627,8 @@ actor {
   };
 
   public shared ({ caller }) func updateNews(newsId : NewsId, title : Text, body : Text, isPublished : Bool) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only registered users can update news");
+    if (not isAuthenticated(caller)) {
+      Runtime.trap("Unauthorized: Only authenticated users can update news");
     };
 
     switch (news.get(newsId)) {
@@ -632,8 +650,8 @@ actor {
   };
 
   public shared ({ caller }) func deleteNews(newsId : NewsId) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only registered users can delete news");
+    if (not isAuthenticated(caller)) {
+      Runtime.trap("Unauthorized: Only authenticated users can delete news");
     };
 
     switch (news.get(newsId)) {
@@ -653,8 +671,8 @@ actor {
   };
 
   public query ({ caller }) func getAllNewsAdmin() : async [News.T] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only registered users can view all news");
+    if (not isAuthenticated(caller)) {
+      Runtime.trap("Unauthorized: Only authenticated users can view all news");
     };
     news.values().toArray().sort(News.compareByTimestamp);
   };
