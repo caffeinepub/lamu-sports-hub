@@ -27,8 +27,7 @@ export function LandingPage({
     useInternetIdentity();
   const customLogo = getAppLogo();
   const logoSrc =
-    customLogo ??
-    "/assets/generated/lamu-sports-hub-logo-transparent.dim_400x400.png";
+    customLogo ?? "/assets/uploads/file_00000000fbc87243ae7561e59571a7e1-1.png";
   const [showOfficialModal, setShowOfficialModal] = useState(false);
   const [pendingOfficialAfterLogin, setPendingOfficialAfterLogin] =
     useState(false);

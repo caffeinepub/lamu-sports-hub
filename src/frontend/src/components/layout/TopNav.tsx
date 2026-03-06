@@ -18,8 +18,7 @@ export function TopNav({ onNotificationsClick }: TopNavProps) {
   const officialSession = isOfficialSessionVerified();
   const customLogo = getAppLogo();
   const logoSrc =
-    customLogo ??
-    "/assets/generated/lamu-sports-hub-logo-transparent.dim_400x400.png";
+    customLogo ?? "/assets/uploads/file_00000000fbc87243ae7561e59571a7e1-1.png";
 
   // Start with mock unread count; replace with backend count when actor is ready
   const mockUnread = MOCK_NOTIFICATIONS.filter((n) => !n.isRead).length;
