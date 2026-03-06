@@ -101,6 +101,72 @@
     --lamu-navy: 0.14 0.04 255;
   }
 
+  /* ── Lamu Light Theme ── */
+  .light {
+    /* Background: warm sandy off-white */
+    --background: 0.97 0.01 85;
+    /* Foreground: deep navy text */
+    --foreground: 0.12 0.035 252;
+
+    /* Cards: slightly warmer cream */
+    --card: 0.94 0.015 85;
+    --card-foreground: 0.12 0.035 252;
+
+    /* Popover */
+    --popover: 0.94 0.015 85;
+    --popover-foreground: 0.12 0.035 252;
+
+    /* Primary: ocean blue (slightly deeper for contrast on light) */
+    --primary: 0.42 0.18 252;
+    --primary-foreground: 0.97 0 0;
+
+    /* Secondary: warm sand */
+    --secondary: 0.88 0.08 82;
+    --secondary-foreground: 0.12 0.035 252;
+
+    /* Muted: light grey-blue */
+    --muted: 0.9 0.02 252;
+    --muted-foreground: 0.42 0.05 252;
+
+    /* Accent: coral (adjusted for light bg) */
+    --accent: 0.5 0.22 24;
+    --accent-foreground: 0.97 0 0;
+
+    /* Destructive */
+    --destructive: 0.48 0.24 22;
+    --destructive-foreground: 0.97 0 0;
+
+    /* Borders: soft navy-tinted */
+    --border: 0.82 0.04 252;
+    --input: 0.86 0.03 252;
+    --ring: 0.42 0.18 252;
+
+    /* Charts */
+    --chart-1: 0.42 0.18 252;
+    --chart-2: 0.72 0.12 82;
+    --chart-3: 0.5 0.22 24;
+    --chart-4: 0.52 0.15 140;
+    --chart-5: 0.72 0.12 95;
+
+    /* Sidebar */
+    --sidebar: 0.91 0.02 85;
+    --sidebar-foreground: 0.12 0.035 252;
+    --sidebar-primary: 0.42 0.18 252;
+    --sidebar-primary-foreground: 0.97 0 0;
+    --sidebar-accent: 0.5 0.22 24;
+    --sidebar-accent-foreground: 0.97 0 0;
+    --sidebar-border: 0.82 0.04 252;
+    --sidebar-ring: 0.42 0.18 252;
+
+    /* Custom Lamu tokens (light variants) */
+    --lamu-ocean: 0.42 0.18 252;
+    --lamu-ocean-deep: 0.3 0.14 252;
+    --lamu-sand: 0.88 0.08 82;
+    --lamu-coral: 0.5 0.22 24;
+    --lamu-gold: 0.72 0.15 85;
+    --lamu-navy: 0.12 0.04 255;
+  }
+
   * {
     @apply border-border;
   }

@@ -41,6 +41,7 @@ import { TeamsPage } from "@/pages/TeamsPage";
 
 import { BottomNav } from "@/components/layout/BottomNav";
 import { TopNav } from "@/components/layout/TopNav";
+import { applyStoredTheme } from "@/utils/themeUtils";
 
 // --- App State ---
 type AppRole = "fan" | "player" | "coach" | "admin";
@@ -292,6 +293,12 @@ function buildRouter(
 export default function App() {
   const { identity } = useInternetIdentity();
   const { actor, isFetching: actorFetching } = useActor();
+
+  // Apply saved theme on first render
+  useEffect(() => {
+    applyStoredTheme();
+  }, []);
+
   const [appState, setAppState] = useState<AppState>({
     role: "fan",
     favoriteTeamId: "team-001",

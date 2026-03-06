@@ -183,7 +183,7 @@ const SEED_OFFICIALS: Official[] = [
     officialId: "off-001",
     name: "Said Joseph",
     title: "Chairman & Founder",
-    contact: "+254 700 000 001",
+    contact: "+254 705 434 375",
     email: "said@lamusportshub.ke",
     displayOrder: 1,
   },
@@ -348,22 +348,36 @@ export type UserSettings = {
   matchAlerts: boolean;
   newsAlerts: boolean;
   mvpReminders: boolean;
+  lineupAlerts: boolean;
+  goalAlerts: boolean;
   favoriteTeamId: string;
-  favoritePlayerId: string;
+  favoritePlayerId: string | undefined;
   displayName: string;
+  theme: "dark" | "light" | "system";
+  language: "en" | "sw";
+  interests: string[];
 };
 
 export const LSH_USER_SETTINGS_KEY = "lsh_user_settings";
 
 export function getUserSettings(): UserSettings {
-  return getLocalStore<UserSettings>(LSH_USER_SETTINGS_KEY, {
-    matchAlerts: true,
-    newsAlerts: true,
-    mvpReminders: false,
-    favoriteTeamId: "team-001",
-    favoritePlayerId: "",
-    displayName: "Hassan Mwende",
-  });
+  const stored = getLocalStore<Partial<UserSettings>>(
+    LSH_USER_SETTINGS_KEY,
+    {},
+  );
+  return {
+    matchAlerts: stored.matchAlerts ?? true,
+    newsAlerts: stored.newsAlerts ?? true,
+    mvpReminders: stored.mvpReminders ?? false,
+    lineupAlerts: stored.lineupAlerts ?? false,
+    goalAlerts: stored.goalAlerts ?? true,
+    favoriteTeamId: stored.favoriteTeamId ?? "team-001",
+    favoritePlayerId: stored.favoritePlayerId ?? undefined,
+    displayName: stored.displayName ?? "Hassan Mwende",
+    theme: stored.theme ?? "dark",
+    language: stored.language ?? "en",
+    interests: stored.interests ?? ["news", "leaderboard"],
+  };
 }
 
 // ── Match Pitches ─────────────────────────────────────────────────────────────

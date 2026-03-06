@@ -263,6 +263,10 @@ export function AdminPanelPage() {
 // ── INNER PANEL (only rendered for verified admins) ────────────────────────────
 function AdminPanelInner() {
   const { actor } = useActor();
+  // Controlled tab state so quick actions can switch tabs programmatically
+  const [activeTab, setActiveTab] = useState("players");
+  // Trigger to auto-open Players add dialog from Quick Actions
+  const [openPlayerDialog, setOpenPlayerDialog] = useState(false);
   const [showCreateMatch, setShowCreateMatch] = useState(false);
   const [inboxUnread, setInboxUnread] = useState<number>(() => {
     const suggestions = getLocalStore<Suggestion[]>(LSH_SUGGESTIONS_KEY, []);
@@ -688,10 +692,68 @@ function AdminPanelInner() {
         ))}
       </div>
 
+      {/* ── Quick Actions Strip ─────────────────────────────────────────────── */}
+      <div className="px-4 mt-3 mb-1">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
+          Quick Actions
+        </p>
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+          <button
+            type="button"
+            data-ocid="admin.add_player.primary_button"
+            onClick={() => {
+              setOpenPlayerDialog(true);
+              setActiveTab("players");
+            }}
+            className="flex items-center gap-1.5 shrink-0 rounded-full border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-[11px] font-bold px-3 py-1.5 transition-all active:scale-95"
+          >
+            <UserCheck className="w-3.5 h-3.5" />
+            Add Player
+          </button>
+          <button
+            type="button"
+            data-ocid="admin.add_match.secondary_button"
+            onClick={() => {
+              setActiveTab("matches");
+              setTimeout(() => setShowCreateMatch(true), 100);
+            }}
+            className="flex items-center gap-1.5 shrink-0 rounded-full border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary text-[11px] font-bold px-3 py-1.5 transition-all active:scale-95"
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            Add Match
+          </button>
+          <button
+            type="button"
+            data-ocid="admin.add_news.secondary_button"
+            onClick={() => {
+              setActiveTab("news");
+              setTimeout(() => setShowAddNews(true), 100);
+            }}
+            className="flex items-center gap-1.5 shrink-0 rounded-full border border-accent/40 bg-accent/10 hover:bg-accent/20 text-accent text-[11px] font-bold px-3 py-1.5 transition-all active:scale-95"
+          >
+            <Newspaper className="w-3.5 h-3.5" />
+            Add News
+          </button>
+          <button
+            type="button"
+            data-ocid="admin.add_user.secondary_button"
+            onClick={() => {
+              setActiveTab("users");
+              setTimeout(() => setShowAddUser(true), 100);
+            }}
+            className="flex items-center gap-1.5 shrink-0 rounded-full border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[11px] font-bold px-3 py-1.5 transition-all active:scale-95"
+          >
+            <Users className="w-3.5 h-3.5" />
+            Add User
+          </button>
+        </div>
+      </div>
+
       <Tabs
-        defaultValue="users"
-        className="px-4 pt-2"
+        value={activeTab}
         onValueChange={(v) => {
+          setActiveTab(v);
+          if (v !== "players") setOpenPlayerDialog(false);
           if (v === "news") fetchNews();
           if (v === "inbox") {
             const suggestions = getLocalStore<Suggestion[]>(
@@ -701,12 +763,21 @@ function AdminPanelInner() {
             setInboxUnread(suggestions.filter((s) => !s.isRead).length);
           }
         }}
+        className="px-4 pt-2"
       >
-        {/* Row 1 */}
+        {/* Row 1 — Players first for visibility */}
         <TabsList
           className="w-full grid grid-cols-5 mb-1"
           data-ocid="admin.tab"
         >
+          <TabsTrigger
+            value="players"
+            className="text-[9px] px-0.5 data-[state=active]:text-emerald-400"
+            data-ocid="admin.players.tab"
+          >
+            <UserCheck className="w-3 h-3 mr-0.5" />
+            Players
+          </TabsTrigger>
           <TabsTrigger
             value="users"
             className="text-[9px] px-0.5"
@@ -739,6 +810,9 @@ function AdminPanelInner() {
             <Newspaper className="w-3 h-3 mr-0.5" />
             News
           </TabsTrigger>
+        </TabsList>
+        {/* Row 2 */}
+        <TabsList className="w-full grid grid-cols-5 mb-4">
           <TabsTrigger
             value="notify"
             className="text-[9px] px-0.5"
@@ -746,17 +820,6 @@ function AdminPanelInner() {
           >
             <Bell className="w-3 h-3 mr-0.5" />
             Notify
-          </TabsTrigger>
-        </TabsList>
-        {/* Row 2 */}
-        <TabsList className="w-full grid grid-cols-5 mb-4">
-          <TabsTrigger
-            value="players"
-            className="text-[9px] px-0.5"
-            data-ocid="admin.players.tab"
-          >
-            <UserCheck className="w-3 h-3 mr-0.5" />
-            Players
           </TabsTrigger>
           <TabsTrigger
             value="referees"
@@ -1227,7 +1290,7 @@ function AdminPanelInner() {
         {/* Suggestions tab (read-only between notify and players for now) */}
         {/* Players Tab */}
         <TabsContent value="players">
-          <AdminPlayersTab />
+          <AdminPlayersTab autoOpenDialog={openPlayerDialog} />
         </TabsContent>
 
         {/* Referees Tab */}
@@ -1998,8 +2061,10 @@ function AdminPanelInner() {
                   <div>
                     <Label className="text-xs mb-1 block">Referee</Label>
                     <Select
-                      value={editMatchRefereeId}
-                      onValueChange={setEditMatchRefereeId}
+                      value={editMatchRefereeId || "__none__"}
+                      onValueChange={(v) =>
+                        setEditMatchRefereeId(v === "__none__" ? "" : v)
+                      }
                     >
                       <SelectTrigger
                         className="h-9 text-sm"
@@ -2009,7 +2074,7 @@ function AdminPanelInner() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem
-                          value=""
+                          value="__none__"
                           className="text-sm text-muted-foreground"
                         >
                           — No referee assigned —
@@ -2031,8 +2096,10 @@ function AdminPanelInner() {
                   <div>
                     <Label className="text-xs mb-1 block">Pitch</Label>
                     <Select
-                      value={editMatchPitchId}
-                      onValueChange={setEditMatchPitchId}
+                      value={editMatchPitchId || "__none__"}
+                      onValueChange={(v) =>
+                        setEditMatchPitchId(v === "__none__" ? "" : v)
+                      }
                     >
                       <SelectTrigger
                         className="h-9 text-sm"
@@ -2042,7 +2109,7 @@ function AdminPanelInner() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem
-                          value=""
+                          value="__none__"
                           className="text-sm text-muted-foreground"
                         >
                           — No pitch assigned —
@@ -2168,7 +2235,12 @@ function AdminPanelInner() {
             </div>
             <div>
               <Label className="text-xs mb-1 block">Referee (optional)</Label>
-              <Select value={matchRefereeId} onValueChange={setMatchRefereeId}>
+              <Select
+                value={matchRefereeId || "__none__"}
+                onValueChange={(v) =>
+                  setMatchRefereeId(v === "__none__" ? "" : v)
+                }
+              >
                 <SelectTrigger
                   className="h-9 text-sm"
                   data-ocid="admin.match.referee.select"
@@ -2177,7 +2249,7 @@ function AdminPanelInner() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem
-                    value=""
+                    value="__none__"
                     className="text-sm text-muted-foreground"
                   >
                     — No referee assigned —
@@ -2198,7 +2270,12 @@ function AdminPanelInner() {
             </div>
             <div>
               <Label className="text-xs mb-1 block">Pitch (optional)</Label>
-              <Select value={matchPitchId} onValueChange={setMatchPitchId}>
+              <Select
+                value={matchPitchId || "__none__"}
+                onValueChange={(v) =>
+                  setMatchPitchId(v === "__none__" ? "" : v)
+                }
+              >
                 <SelectTrigger
                   className="h-9 text-sm"
                   data-ocid="admin.match.pitch.select"
@@ -2207,7 +2284,7 @@ function AdminPanelInner() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem
-                    value=""
+                    value="__none__"
                     className="text-sm text-muted-foreground"
                   >
                     — No pitch assigned —
@@ -2265,7 +2342,7 @@ const adminPositionMap: Record<string, Position> = {
 };
 
 // ─── ADMIN PLAYERS TAB ────────────────────────────────────────────────────────
-function AdminPlayersTab() {
+function AdminPlayersTab({ autoOpenDialog }: { autoOpenDialog?: boolean }) {
   const { actor } = useActor();
   const [confirmations, setConfirmations] = useState<Record<string, boolean>>(
     getPlayerConfirmations,
@@ -2277,8 +2354,10 @@ function AdminPlayersTab() {
   const [backendPlayers, setBackendPlayers] = useState<PlayerT[]>([]);
   const [backendPlayersLoading, setBackendPlayersLoading] = useState(false);
 
-  // Add player dialog state
-  const [showAddPlayer, setShowAddPlayer] = useState(false);
+  // Add player dialog state — auto-open when triggered from Quick Actions
+  const [showAddPlayer, setShowAddPlayer] = useState(
+    () => autoOpenDialog ?? false,
+  );
   const [addPlayerLoading, setAddPlayerLoading] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState("");
   const [newPlayerNickname, setNewPlayerNickname] = useState("");

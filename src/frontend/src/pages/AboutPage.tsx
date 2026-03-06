@@ -182,8 +182,8 @@ export function AboutPage() {
               {
                 icon: <SiWhatsapp className="w-5 h-5" />,
                 label: "WhatsApp",
-                value: "+254 700 000 000",
-                href: "https://wa.me/254700000000",
+                value: "+254 705 434 375",
+                href: "https://wa.me/254705434375",
                 color: "oklch(0.6 0.18 145)",
                 ocid: "about.whatsapp.link",
               },
@@ -263,12 +263,12 @@ export function AboutPage() {
               <span>lamusportshub@gmail.com</span>
             </a>
             <a
-              href="tel:+254700000000"
+              href="tel:+254705434375"
               className="flex items-center gap-3 text-sm hover:text-primary transition-colors"
               data-ocid="about.phone.link"
             >
               <Phone className="w-5 h-5 text-muted-foreground" />
-              <span>+254 700 000 000</span>
+              <span>+254 705 434 375</span>
             </a>
           </div>
         </motion.section>
