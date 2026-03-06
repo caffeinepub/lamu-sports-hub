@@ -135,6 +135,10 @@ export function DashboardPage({
   const standings = computeStandings();
   const isAdmin = role === "admin";
 
+  useEffect(() => {
+    document.title = "Lamu Sports Hub | Football League Tables & Teams";
+  }, []);
+
   const favoriteTeam = favoriteTeamId
     ? MOCK_TEAMS.find((t) => t.teamId === favoriteTeamId)
     : MOCK_TEAMS[0];
@@ -987,6 +991,52 @@ export function DashboardPage({
             </div>
           </motion.div>
         )}
+
+        {/* Local SEO Paragraph */}
+        <motion.div
+          initial={{ y: 10, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.5 }}
+          data-ocid="dashboard.seo.panel"
+        >
+          <div
+            className="rounded-xl border border-border/40 p-4"
+            style={{
+              background:
+                "linear-gradient(135deg, oklch(0.13 0.03 252 / 0.6) 0%, oklch(0.1 0.02 255 / 0.4) 100%)",
+            }}
+          >
+            <p
+              className="text-[11px] leading-relaxed"
+              style={{ color: "oklch(0.58 0.06 255)" }}
+            >
+              <span className="font-bold text-foreground/80">
+                Lamu Sports Hub
+              </span>{" "}
+              is the official digital platform for football leagues in Lamu
+              County, Kenya. Follow standings, teams, fixtures and match results
+              from local clubs across Lamu.
+            </p>
+            <div className="flex flex-wrap gap-1.5 mt-2.5">
+              {[
+                "Lamu football",
+                "Lamu football teams",
+                "Lamu league",
+                "Lamu standings",
+                "Lamu County",
+                "football in Lamu",
+                "Island Pride",
+              ].map((tag) => (
+                <span
+                  key={tag}
+                  className="text-[9px] px-2 py-0.5 rounded-full border border-border/40 text-muted-foreground/60"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+        </motion.div>
       </div>
 
       {/* News detail Sheet */}

@@ -10,11 +10,15 @@ import { MOCK_TEAMS } from "@/data/mockData";
 import { useNavigate } from "@tanstack/react-router";
 import { Users } from "lucide-react";
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export function TeamsPage() {
   const navigate = useNavigate();
   const [areaFilter, setAreaFilter] = useState<string>("all");
+
+  useEffect(() => {
+    document.title = "Teams – Lamu Sports Hub | Lamu Football Clubs";
+  }, []);
 
   const areas = ["all", ...Array.from(new Set(MOCK_TEAMS.map((t) => t.area)))];
   const filtered =

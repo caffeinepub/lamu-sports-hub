@@ -10,6 +10,7 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { AlertTriangle, Target, Trophy, Zap } from "lucide-react";
 import { motion } from "motion/react";
+import { useEffect } from "react";
 
 function MedalBadge({ rank }: { rank: number }) {
   if (rank === 1) return <span className="text-base">🥇</span>;
@@ -27,6 +28,11 @@ export function LeaderboardPage() {
   const topScorers = getTopScorers();
   const topAssists = getTopAssists();
   const standings = computeStandings();
+
+  useEffect(() => {
+    document.title =
+      "Top Scorers & Leaderboard – Lamu Sports Hub | Lamu Football Stats";
+  }, []);
 
   const cardPlayers = [...MOCK_PLAYERS]
     .sort(

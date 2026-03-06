@@ -3,7 +3,7 @@ import { computeStandings } from "@/data/mockData";
 import { getSeasonSettings } from "@/utils/localStore";
 import { useNavigate } from "@tanstack/react-router";
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type FormBadge = "W" | "D" | "L";
 
@@ -27,6 +27,11 @@ export function StandingsPage() {
   const standings = computeStandings();
   const [division, setDivision] = useState<"senior" | "u18">("senior");
   const { seasonName, tournamentName } = getSeasonSettings();
+
+  useEffect(() => {
+    document.title =
+      "League Standings – Lamu Sports Hub | Lamu Football Tables";
+  }, []);
 
   return (
     <div data-ocid="standings.page" className="min-h-screen pb-24 pt-14">

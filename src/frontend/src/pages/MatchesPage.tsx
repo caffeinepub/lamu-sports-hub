@@ -11,11 +11,16 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { Calendar } from "lucide-react";
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export function MatchesPage() {
   const navigate = useNavigate();
   const [division, setDivision] = useState<"senior" | "u18">("senior");
+
+  useEffect(() => {
+    document.title =
+      "Fixtures & Results – Lamu Sports Hub | Lamu Football Matches";
+  }, []);
 
   const { seasonName, tournamentName } = getSeasonSettings();
 

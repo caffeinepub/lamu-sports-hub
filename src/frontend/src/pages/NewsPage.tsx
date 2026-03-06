@@ -215,6 +215,10 @@ function NewsDetailSheet({
 export function NewsPage() {
   const { actor, isFetching: actorFetching } = useActor();
 
+  useEffect(() => {
+    document.title = "Latest News – Lamu Sports Hub | Lamu Football Updates";
+  }, []);
+
   const [newsList, setNewsList] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

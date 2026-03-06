@@ -215,6 +215,10 @@ export function PlayersPage() {
   const navigate = useNavigate();
   const { actor, isFetching: actorFetching } = useActor();
 
+  useEffect(() => {
+    document.title = "Players – Lamu Sports Hub | Lamu County Football Players";
+  }, []);
+
   const [search, setSearch] = useState("");
   const [posFilter, setPosFilter] = useState("all");
   const [teamFilter, setTeamFilter] = useState("all");
