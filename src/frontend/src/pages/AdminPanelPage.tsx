@@ -1,4 +1,5 @@
 import {
+  type T__1 as BackendTeam,
   type ExternalBlob,
   type T__2 as PlayerT,
   Position,
@@ -974,85 +975,14 @@ function AdminPanelInner() {
 
         {/* Teams Tab */}
         <TabsContent value="teams">
-          <div className="flex justify-end mb-3">
-            <Button
-              size="sm"
-              className="text-xs gap-1"
-              onClick={() => setShowAddTeam(true)}
-              data-ocid="admin.add_team.open_modal_button"
-              style={{
-                background:
-                  "linear-gradient(135deg, oklch(0.6 0.22 24) 0%, oklch(0.55 0.25 20) 100%)",
-              }}
-            >
-              <Plus className="w-3 h-3" />
-              Add Team
-            </Button>
-          </div>
-          <div
-            className="rounded-xl border border-border overflow-hidden bg-card"
-            data-ocid="admin.teams.table"
-          >
-            <div className="px-3 py-2 border-b border-border bg-muted/20">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                All Teams ({MOCK_TEAMS.length})
-              </span>
-            </div>
-            {MOCK_TEAMS.map((team, i) => (
-              <div
-                key={team.teamId}
-                className="flex items-center gap-3 px-3 py-3 border-b border-border/50 last:border-0"
-                data-ocid={`admin.team.row.${i + 1}`}
-              >
-                <TeamBadge team={team} size="sm" />
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-xs text-foreground">
-                    {team.name}
-                  </div>
-                  <AreaBadge area={team.area} className="mt-0.5" />
-                </div>
-                <div className="flex items-center gap-1">
-                  {team.isApproved ? (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-400 font-bold">
-                      Approved
-                    </span>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 text-[10px] px-2 text-primary border-primary/40"
-                      data-ocid={`admin.team.approve_button.${i + 1}`}
-                    >
-                      Approve
-                    </Button>
-                  )}
-                </div>
-                {/* Logo upload button */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`w-6 h-6 transition-colors ${teamLogos[team.teamId] ? "text-green-400 hover:text-green-300" : "text-muted-foreground hover:text-foreground"}`}
-                  data-ocid={`admin.team.upload_button.${i + 1}`}
-                  onClick={() => {
-                    setLogoUploadTeamId(team.teamId);
-                    teamLogoInputRef.current?.click();
-                  }}
-                  title="Upload team logo"
-                >
-                  <ImageIcon className="w-3 h-3" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="w-6 h-6 text-muted-foreground hover:text-foreground"
-                  data-ocid={`admin.team.edit_button.${i + 1}`}
-                  onClick={() => openEditTeam(team)}
-                >
-                  <Edit className="w-3 h-3" />
-                </Button>
-              </div>
-            ))}
-          </div>
+          <TeamsTabContent
+            setShowAddTeam={setShowAddTeam}
+            teamLogos={teamLogos}
+            teamLogoInputRef={teamLogoInputRef}
+            setLogoUploadTeamId={setLogoUploadTeamId}
+            openEditTeam={openEditTeam}
+            activeTab={activeTab}
+          />
         </TabsContent>
 
         {/* Matches Tab */}
@@ -2341,6 +2271,203 @@ const adminPositionMap: Record<string, Position> = {
   forward: Position.forward,
 };
 
+// ─── TEAMS TAB CONTENT (with real backend teams section) ─────────────────────
+function TeamsTabContent({
+  setShowAddTeam,
+  teamLogos,
+  teamLogoInputRef,
+  setLogoUploadTeamId,
+  openEditTeam,
+  activeTab,
+}: {
+  setShowAddTeam: (v: boolean) => void;
+  teamLogos: Record<string, string>;
+  teamLogoInputRef: React.RefObject<HTMLInputElement | null>;
+  setLogoUploadTeamId: (id: string) => void;
+  openEditTeam: (team: (typeof MOCK_TEAMS)[0]) => void;
+  activeTab: string;
+}) {
+  const { actor } = useActor();
+  const [backendTeams, setBackendTeams] = useState<BackendTeam[]>([]);
+  const [backendTeamsLoading, setBackendTeamsLoading] = useState(false);
+
+  useEffect(() => {
+    if (activeTab !== "teams" || !actor) return;
+    setBackendTeamsLoading(true);
+    actor
+      .getAllTeams()
+      .then((teams) => setBackendTeams(teams))
+      .catch((err) => console.error("Failed to load backend teams:", err))
+      .finally(() => setBackendTeamsLoading(false));
+  }, [activeTab, actor]);
+
+  return (
+    <div>
+      <div className="flex justify-end mb-3">
+        <Button
+          size="sm"
+          className="text-xs gap-1"
+          onClick={() => setShowAddTeam(true)}
+          data-ocid="admin.add_team.open_modal_button"
+          style={{
+            background:
+              "linear-gradient(135deg, oklch(0.6 0.22 24) 0%, oklch(0.55 0.25 20) 100%)",
+          }}
+        >
+          <Plus className="w-3 h-3" />
+          Add Team
+        </Button>
+      </div>
+
+      {/* Sample / mock teams */}
+      <div
+        className="rounded-xl border border-border overflow-hidden bg-card"
+        data-ocid="admin.teams.table"
+      >
+        <div className="px-3 py-2 border-b border-border bg-muted/20">
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+            All Teams ({MOCK_TEAMS.length})
+          </span>
+        </div>
+        {MOCK_TEAMS.map((team, i) => (
+          <div
+            key={team.teamId}
+            className="flex items-center gap-3 px-3 py-3 border-b border-border/50 last:border-0"
+            data-ocid={`admin.team.row.${i + 1}`}
+          >
+            <TeamBadge team={team} size="sm" />
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-xs text-foreground">
+                {team.name}
+              </div>
+              <AreaBadge area={team.area} className="mt-0.5" />
+            </div>
+            <div className="flex items-center gap-1">
+              {team.isApproved ? (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-400 font-bold">
+                  Approved
+                </span>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-6 text-[10px] px-2 text-primary border-primary/40"
+                  data-ocid={`admin.team.approve_button.${i + 1}`}
+                >
+                  Approve
+                </Button>
+              )}
+            </div>
+            {/* Logo upload button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`w-6 h-6 transition-colors ${teamLogos[team.teamId] ? "text-green-400 hover:text-green-300" : "text-muted-foreground hover:text-foreground"}`}
+              data-ocid={`admin.team.upload_button.${i + 1}`}
+              onClick={() => {
+                setLogoUploadTeamId(team.teamId);
+                teamLogoInputRef.current?.click();
+              }}
+              title="Upload team logo"
+            >
+              <ImageIcon className="w-3 h-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="w-6 h-6 text-muted-foreground hover:text-foreground"
+              data-ocid={`admin.team.edit_button.${i + 1}`}
+              onClick={() => openEditTeam(team)}
+            >
+              <Edit className="w-3 h-3" />
+            </Button>
+          </div>
+        ))}
+      </div>
+
+      {/* Backend Teams (Real) */}
+      <div className="mt-5">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="font-display font-bold text-xs text-foreground uppercase tracking-wide">
+            Backend Teams (Real)
+          </h3>
+          <button
+            type="button"
+            className="text-[10px] text-primary hover:underline"
+            onClick={() => {
+              if (!actor) return;
+              setBackendTeamsLoading(true);
+              actor
+                .getAllTeams()
+                .then((teams) => setBackendTeams(teams))
+                .catch((err) =>
+                  console.error("Failed to load backend teams:", err),
+                )
+                .finally(() => setBackendTeamsLoading(false));
+            }}
+          >
+            Refresh
+          </button>
+        </div>
+        {backendTeamsLoading ? (
+          <div
+            className="flex items-center justify-center py-6 text-muted-foreground"
+            data-ocid="admin.backend_teams.loading_state"
+          >
+            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            <span className="text-xs">Loading...</span>
+          </div>
+        ) : backendTeams.length === 0 ? (
+          <div
+            className="rounded-xl border border-border bg-card py-6 text-center text-xs text-muted-foreground"
+            data-ocid="admin.backend_teams.empty_state"
+          >
+            No teams registered on-chain yet. Use "Add Team" above.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {backendTeams.map((team, i) => (
+              <div
+                key={team.teamId}
+                className="rounded-xl border border-border bg-card px-3 py-2.5 flex items-center gap-3"
+                data-ocid={`admin.backend_team.row.${i + 1}`}
+              >
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
+                  style={{
+                    background: "oklch(0.22 0.06 252)",
+                    color: "oklch(0.82 0.08 82)",
+                  }}
+                >
+                  {team.name.charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-xs text-foreground">
+                    {team.name}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {team.area}
+                    {team.coachId ? ` · Coach: ${team.coachId}` : ""}
+                  </p>
+                </div>
+                <Badge
+                  className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold flex-shrink-0 ${
+                    team.isApproved
+                      ? "bg-green-500/20 text-green-400 border-green-500/30"
+                      : "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                  }`}
+                >
+                  {team.isApproved ? "Approved" : "Pending"}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── ADMIN PLAYERS TAB ────────────────────────────────────────────────────────
 function AdminPlayersTab({ autoOpenDialog }: { autoOpenDialog?: boolean }) {
   const { actor } = useActor();
@@ -2353,6 +2480,10 @@ function AdminPlayersTab({ autoOpenDialog }: { autoOpenDialog?: boolean }) {
   // Backend players state
   const [backendPlayers, setBackendPlayers] = useState<PlayerT[]>([]);
   const [backendPlayersLoading, setBackendPlayersLoading] = useState(false);
+
+  // Backend teams state (for the team selector in Add Player dialog)
+  const [backendTeams, setBackendTeams] = useState<BackendTeam[]>([]);
+  const [backendTeamsLoading, setBackendTeamsLoading] = useState(false);
 
   // Add player dialog state — auto-open when triggered from Quick Actions
   const [showAddPlayer, setShowAddPlayer] = useState(
@@ -2386,6 +2517,17 @@ function AdminPlayersTab({ autoOpenDialog }: { autoOpenDialog?: boolean }) {
       .then((players) => setBackendPlayers(players))
       .catch(() => toast.error("Failed to load backend players"))
       .finally(() => setBackendPlayersLoading(false));
+  }, [actor]);
+
+  // Load backend teams for the Add Player team selector
+  useEffect(() => {
+    if (!actor) return;
+    setBackendTeamsLoading(true);
+    actor
+      .getAllTeams()
+      .then((teams) => setBackendTeams(teams))
+      .catch((err) => console.error("Failed to load teams:", err))
+      .finally(() => setBackendTeamsLoading(false));
   }, [actor]);
 
   const toggle = (playerId: string, checked: boolean) => {
@@ -2655,28 +2797,40 @@ function AdminPlayersTab({ autoOpenDialog }: { autoOpenDialog?: boolean }) {
             </div>
             <div>
               <Label className="text-xs mb-1 block">Team *</Label>
-              <Select
-                value={newPlayerTeamId}
-                onValueChange={setNewPlayerTeamId}
-              >
-                <SelectTrigger
-                  className="h-9 text-sm"
-                  data-ocid="admin.add_player.select"
+              {backendTeamsLoading ? (
+                <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-border bg-muted/20 text-xs text-muted-foreground">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Loading teams...
+                </div>
+              ) : backendTeams.length === 0 ? (
+                <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-amber-500/40 bg-amber-500/10 text-xs text-amber-400">
+                  <Info className="w-3 h-3 flex-shrink-0" />
+                  No teams registered yet. Add a team first in the Teams tab.
+                </div>
+              ) : (
+                <Select
+                  value={newPlayerTeamId}
+                  onValueChange={setNewPlayerTeamId}
                 >
-                  <SelectValue placeholder="Select team..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {MOCK_TEAMS.map((t) => (
-                    <SelectItem
-                      key={t.teamId}
-                      value={t.teamId}
-                      className="text-sm"
-                    >
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                  <SelectTrigger
+                    className="h-9 text-sm"
+                    data-ocid="admin.add_player.select"
+                  >
+                    <SelectValue placeholder="Select team..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {backendTeams.map((t) => (
+                      <SelectItem
+                        key={t.teamId}
+                        value={t.teamId}
+                        className="text-sm"
+                      >
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div>
               <Label className="text-xs mb-1 block">Position *</Label>

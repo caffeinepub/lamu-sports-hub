@@ -135,15 +135,30 @@ export function DashboardPage({
       })
       .catch((err) => {
         console.error("Failed to load news:", err);
+        setNewsList([]);
       })
       .finally(() => {
         setNewsLoading(false);
       });
   }, [actor]);
 
+  // Watch actor directly — triggers as soon as actor becomes available
   useEffect(() => {
-    fetchNews();
-  }, [fetchNews]);
+    if (!actor) return;
+    setNewsLoading(true);
+    actor
+      .getAllNews()
+      .then((items) => {
+        setNewsList((items as NewsItem[]).slice(0, 3));
+      })
+      .catch((err) => {
+        console.error("Failed to load news on mount:", err);
+        setNewsList([]);
+      })
+      .finally(() => {
+        setNewsLoading(false);
+      });
+  }, [actor]);
 
   return (
     <div data-ocid="dashboard.page" className="min-h-screen pb-24 pt-14">
