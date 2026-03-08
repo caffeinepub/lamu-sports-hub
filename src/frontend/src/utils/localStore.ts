@@ -22,37 +22,8 @@ export type Referee = {
 
 export const LSH_REFEREES_KEY = "lsh_referees";
 
-const SEED_REFEREES: Referee[] = [
-  {
-    refereeId: "ref-001",
-    name: "Mohamed Shariff",
-    contact: "+254 712 345 678",
-    licenseNumber: "KFF-2023-001",
-    isActive: true,
-  },
-  {
-    refereeId: "ref-002",
-    name: "Abdalla Kombo",
-    contact: "+254 723 456 789",
-    licenseNumber: "KFF-2023-002",
-    isActive: true,
-  },
-  {
-    refereeId: "ref-003",
-    name: "Ibrahim Salim",
-    contact: "+254 734 567 890",
-    licenseNumber: "KFF-2022-015",
-    isActive: false,
-  },
-];
-
 export function getReferees(): Referee[] {
-  const stored = getLocalStore<Referee[] | null>(LSH_REFEREES_KEY, null);
-  if (!stored) {
-    setLocalStore(LSH_REFEREES_KEY, SEED_REFEREES);
-    return SEED_REFEREES;
-  }
-  return stored;
+  return getLocalStore<Referee[]>(LSH_REFEREES_KEY, []);
 }
 
 // ── Awards ────────────────────────────────────────────────────────────────────
@@ -69,48 +40,8 @@ export type Award = {
 
 export const LSH_AWARDS_KEY = "lsh_awards";
 
-const SEED_AWARDS: Award[] = [
-  {
-    awardId: "award-001",
-    title: "Golden Boot",
-    recipientName: "Hassan Mwende",
-    recipientType: "player",
-    season: "2025/26",
-    description: "Top scorer of the season with 11 goals in 12 appearances.",
-    isConfirmed: true,
-    awardDate: "2026-03-01",
-  },
-  {
-    awardId: "award-002",
-    title: "Best Team of the Season",
-    recipientName: "Shela United FC",
-    recipientType: "team",
-    season: "2025/26",
-    description:
-      "Dominant season performance with 8 wins, 26 points and the best attack.",
-    isConfirmed: true,
-    awardDate: "2026-03-01",
-  },
-  {
-    awardId: "award-003",
-    title: "Fair Play Award",
-    recipientName: "Mkunguni FC",
-    recipientType: "team",
-    season: "2025/26",
-    description:
-      "Fewest disciplinary incidents across the season. True island spirit.",
-    isConfirmed: false,
-    awardDate: "2026-03-01",
-  },
-];
-
 export function getAwards(): Award[] {
-  const stored = getLocalStore<Award[] | null>(LSH_AWARDS_KEY, null);
-  if (!stored) {
-    setLocalStore(LSH_AWARDS_KEY, SEED_AWARDS);
-    return SEED_AWARDS;
-  }
-  return stored;
+  return getLocalStore<Award[]>(LSH_AWARDS_KEY, []);
 }
 
 // ── Videos ────────────────────────────────────────────────────────────────────
@@ -178,48 +109,8 @@ export type Official = {
 
 export const LSH_OFFICIALS_KEY = "lsh_officials";
 
-const SEED_OFFICIALS: Official[] = [
-  {
-    officialId: "off-001",
-    name: "Said Joseph",
-    title: "Chairman & Founder",
-    contact: "+254 705 434 375",
-    email: "said@lamusportshub.ke",
-    displayOrder: 1,
-  },
-  {
-    officialId: "off-002",
-    name: "Fatuma Hassan",
-    title: "Secretary General",
-    contact: "+254 700 000 002",
-    email: "fatuma@lamusportshub.ke",
-    displayOrder: 2,
-  },
-  {
-    officialId: "off-003",
-    name: "Omar Abdallah",
-    title: "Head of Competitions",
-    contact: "+254 700 000 003",
-    email: "omar@lamusportshub.ke",
-    displayOrder: 3,
-  },
-  {
-    officialId: "off-004",
-    name: "Amina Juma",
-    title: "Treasurer",
-    contact: "+254 700 000 004",
-    email: "amina@lamusportshub.ke",
-    displayOrder: 4,
-  },
-];
-
 export function getOfficials(): Official[] {
-  const stored = getLocalStore<Official[] | null>(LSH_OFFICIALS_KEY, null);
-  if (!stored) {
-    setLocalStore(LSH_OFFICIALS_KEY, SEED_OFFICIALS);
-    return SEED_OFFICIALS;
-  }
-  return stored;
+  return getLocalStore<Official[]>(LSH_OFFICIALS_KEY, []);
 }
 
 // ── Pitches ───────────────────────────────────────────────────────────────────
@@ -527,4 +418,52 @@ export function setAppLogo(base64: string): void {
 
 export function clearAppLogo(): void {
   localStorage.removeItem(LSH_APP_LOGO_KEY);
+}
+
+// ── Team Name/Area Overrides ───────────────────────────────────────────────────
+export const LSH_TEAM_OVERRIDES_KEY = "lsh_team_overrides";
+
+export type TeamOverride = { name: string; area: string };
+
+export function getTeamOverrides(): Record<string, TeamOverride> {
+  return getLocalStore<Record<string, TeamOverride>>(
+    LSH_TEAM_OVERRIDES_KEY,
+    {},
+  );
+}
+
+export function setTeamOverride(teamId: string, override: TeamOverride): void {
+  const current = getTeamOverrides();
+  current[teamId] = override;
+  setLocalStore(LSH_TEAM_OVERRIDES_KEY, current);
+}
+
+// ── Soft-deleted Teams ─────────────────────────────────────────────────────────
+export const LSH_DELETED_TEAMS_KEY = "lsh_deleted_teams";
+
+export function getDeletedTeamIds(): string[] {
+  return getLocalStore<string[]>(LSH_DELETED_TEAMS_KEY, []);
+}
+
+export function softDeleteTeam(teamId: string): void {
+  const current = getDeletedTeamIds();
+  if (!current.includes(teamId)) {
+    current.push(teamId);
+    setLocalStore(LSH_DELETED_TEAMS_KEY, current);
+  }
+}
+
+// ── Soft-deleted Players ───────────────────────────────────────────────────────
+export const LSH_DELETED_PLAYERS_KEY = "lsh_deleted_players";
+
+export function getDeletedPlayerIds(): string[] {
+  return getLocalStore<string[]>(LSH_DELETED_PLAYERS_KEY, []);
+}
+
+export function softDeletePlayer(playerId: string): void {
+  const current = getDeletedPlayerIds();
+  if (!current.includes(playerId)) {
+    current.push(playerId);
+    setLocalStore(LSH_DELETED_PLAYERS_KEY, current);
+  }
 }

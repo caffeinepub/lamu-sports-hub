@@ -27,6 +27,11 @@ import {
   setLocalStore,
 } from "@/utils/localStore";
 import {
+  type SimpleUserProfile,
+  setActiveSimpleSession,
+  updateSimpleProfile,
+} from "@/utils/simpleAuth";
+import {
   Calendar,
   Camera,
   Edit3,
@@ -48,6 +53,8 @@ interface ProfilePageProps {
   role?: string;
   favoriteTeamId?: string;
   userName?: string;
+  simpleProfile?: SimpleUserProfile | null;
+  onSimpleSignOut?: () => void;
 }
 
 const AREAS = [
@@ -89,14 +96,27 @@ export function ProfilePage({
   role: propRole = "fan",
   favoriteTeamId,
   userName,
+  simpleProfile,
+  onSimpleSignOut,
 }: ProfilePageProps) {
   const { identity, clear } = useInternetIdentity();
   const { actor, isFetching: actorFetching } = useActor();
 
   const [editing, setEditing] = useState(false);
-  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(!simpleProfile);
 
-  // Fields from backend
+  // Simple user editable fields (localStorage only)
+  const [simpleName, setSimpleName] = useState(simpleProfile?.name ?? "");
+  const [simplePhone, setSimplePhone] = useState(simpleProfile?.phone ?? "");
+  const [simpleEmail, setSimpleEmail] = useState(simpleProfile?.email ?? "");
+  const [simpleArea, setSimpleArea] = useState(
+    simpleProfile?.area ?? "Lamu Town",
+  );
+  const [simpleRole, setSimpleRole] = useState<"fan" | "player" | "coach">(
+    simpleProfile?.role ?? "fan",
+  );
+
+  // Fields from backend (II users)
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -214,8 +234,359 @@ export function ProfilePage({
     reader.readAsDataURL(file);
   };
 
+  // ── Simple profile save handler ───────────────────────────────────────────
+  const handleSimpleSave = () => {
+    if (!simpleProfile) return;
+    const updated = updateSimpleProfile(simpleProfile.id, {
+      name: simpleName.trim() || simpleProfile.name,
+      phone: simplePhone.trim(),
+      email: simpleEmail.trim(),
+      area: simpleArea,
+      role: simpleRole,
+    });
+    if (updated) {
+      setActiveSimpleSession(updated);
+      toast.success("Profile updated successfully");
+      setEditing(false);
+    }
+  };
+
   // Favorite team from real backend teams
   const favoriteTeam = teams.find((t) => t.teamId === favTeam) ?? null;
+
+  // ── Simple user profile view ──────────────────────────────────────────────
+  if (simpleProfile) {
+    const displaySimpleName = simpleName || simpleProfile.name || "Member";
+    return (
+      <div data-ocid="profile.page" className="min-h-screen pb-24 pt-14">
+        {/* Header */}
+        <div
+          className="px-4 pt-6 pb-8 relative overflow-hidden"
+          style={{
+            background:
+              "linear-gradient(135deg, oklch(0.1 0.04 255) 0%, oklch(0.14 0.06 252) 100%)",
+          }}
+        >
+          <motion.div
+            initial={{ y: 10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="flex items-start gap-4"
+          >
+            {/* Avatar */}
+            <div className="relative flex-shrink-0">
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoChange}
+              />
+              {profilePhoto ? (
+                <img
+                  src={profilePhoto}
+                  alt="Profile"
+                  className="w-16 h-16 rounded-full object-cover"
+                  style={{ border: "3px solid oklch(0.6 0.22 24 / 0.5)" }}
+                />
+              ) : (
+                <div
+                  className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-black font-stats"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, oklch(0.6 0.22 24), oklch(0.5 0.2 38))",
+                    border: "3px solid oklch(0.6 0.22 24 / 0.4)",
+                  }}
+                >
+                  {displaySimpleName.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <button
+                type="button"
+                className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center"
+                style={{
+                  background: "oklch(0.55 0.18 252)",
+                  border: "2px solid oklch(0.12 0.04 252)",
+                }}
+                onClick={() => photoInputRef.current?.click()}
+                data-ocid="profile.upload_button"
+              >
+                <Camera className="w-3 h-3 text-white" />
+              </button>
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="font-display font-black text-xl text-foreground">
+                  {displaySimpleName}
+                </h1>
+                <IslandPrideBadge />
+              </div>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <Badge
+                  variant="outline"
+                  className="text-xs capitalize"
+                  style={{
+                    borderColor: "oklch(0.6 0.22 24)",
+                    color: "oklch(0.6 0.22 24)",
+                  }}
+                >
+                  {simpleRole}
+                </Badge>
+                {simpleArea && <AreaBadge area={simpleArea} />}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Local account · No passkey required
+              </p>
+            </div>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => setEditing(!editing)}
+              data-ocid="profile.edit_button"
+            >
+              <Edit3 className="w-4 h-4" />
+            </Button>
+          </motion.div>
+        </div>
+
+        <div className="px-4 mt-4 space-y-4">
+          {/* Personal Details */}
+          <motion.div
+            initial={{ y: 10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.05 }}
+            data-ocid="profile.details.card"
+          >
+            <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide mb-3">
+              Personal Details
+            </h2>
+            <div className="rounded-xl border border-border bg-card divide-y divide-border/60">
+              {[
+                {
+                  icon: (
+                    <User
+                      className="w-4 h-4"
+                      style={{ color: "oklch(0.6 0.18 252)" }}
+                    />
+                  ),
+                  label: "Full Name",
+                  value: simpleName || "Not set",
+                  empty: !simpleName,
+                },
+                {
+                  icon: (
+                    <Mail
+                      className="w-4 h-4"
+                      style={{ color: "oklch(0.6 0.22 24)" }}
+                    />
+                  ),
+                  label: "Email",
+                  value: simpleEmail || "Not set",
+                  empty: !simpleEmail,
+                },
+                {
+                  icon: (
+                    <Phone
+                      className="w-4 h-4"
+                      style={{ color: "oklch(0.65 0.18 155)" }}
+                    />
+                  ),
+                  label: "Phone",
+                  value: simplePhone || "Not set",
+                  empty: !simplePhone,
+                },
+                {
+                  icon: (
+                    <MapPin
+                      className="w-4 h-4"
+                      style={{ color: "oklch(0.75 0.15 82)" }}
+                    />
+                  ),
+                  label: "Home Area",
+                  value: simpleArea || "Not set",
+                  empty: !simpleArea,
+                },
+                {
+                  icon: (
+                    <Shield
+                      className="w-4 h-4"
+                      style={{ color: "oklch(0.6 0.22 24)" }}
+                    />
+                  ),
+                  label: "Role",
+                  value:
+                    simpleRole.charAt(0).toUpperCase() + simpleRole.slice(1),
+                  empty: false,
+                },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="flex items-center gap-3 px-4 py-3"
+                >
+                  <div
+                    className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{ background: "oklch(0.16 0.04 255)" }}
+                  >
+                    {item.icon}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">
+                      {item.label}
+                    </div>
+                    <div
+                      className={`text-sm font-semibold mt-0.5 ${item.empty ? "text-muted-foreground/50 italic" : "text-foreground"}`}
+                    >
+                      {item.value}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-2 text-center">
+              Tap the edit icon above to update your details
+            </p>
+          </motion.div>
+
+          {/* Edit form for simple users */}
+          {editing && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+            >
+              <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide mb-3">
+                Edit Profile
+              </h2>
+              <div className="rounded-xl p-4 border border-border bg-card space-y-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">
+                    Full Name
+                  </Label>
+                  <Input
+                    value={simpleName}
+                    onChange={(e) => setSimpleName(e.target.value)}
+                    placeholder="Your full name"
+                    className="h-9 text-sm"
+                    data-ocid="profile.input"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">
+                    Email
+                  </Label>
+                  <Input
+                    type="email"
+                    value={simpleEmail}
+                    onChange={(e) => setSimpleEmail(e.target.value)}
+                    placeholder="your@email.com"
+                    className="h-9 text-sm"
+                    data-ocid="profile.email.input"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">
+                    Phone
+                  </Label>
+                  <Input
+                    type="tel"
+                    value={simplePhone}
+                    onChange={(e) => setSimplePhone(e.target.value)}
+                    placeholder="+254 7xx xxx xxx"
+                    className="h-9 text-sm"
+                    data-ocid="profile.phone.input"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">
+                    Home Area
+                  </Label>
+                  <Select
+                    value={simpleArea || "Lamu Town"}
+                    onValueChange={setSimpleArea}
+                  >
+                    <SelectTrigger
+                      className="h-9 text-sm"
+                      data-ocid="profile.area.select"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AREAS.map((a) => (
+                        <SelectItem key={a} value={a} className="text-sm">
+                          {a}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">
+                    I am a...
+                  </Label>
+                  <Select
+                    value={simpleRole}
+                    onValueChange={(v) =>
+                      setSimpleRole(v as "fan" | "player" | "coach")
+                    }
+                  >
+                    <SelectTrigger
+                      className="h-9 text-sm"
+                      data-ocid="profile.role.select"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ROLE_OPTIONS.map((r) => (
+                        <SelectItem
+                          key={r.value}
+                          value={r.value}
+                          className="text-sm"
+                        >
+                          {r.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  size="sm"
+                  className="w-full"
+                  onClick={handleSimpleSave}
+                  data-ocid="profile.save_button"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, oklch(0.6 0.22 24) 0%, oklch(0.55 0.25 20) 100%)",
+                  }}
+                >
+                  <Save className="w-3 h-3 mr-2" />
+                  Save Changes
+                </Button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Sign out */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+          >
+            <Button
+              variant="outline"
+              className="w-full border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+              onClick={onSimpleSignOut}
+              data-ocid="profile.delete_button"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
+            </Button>
+          </motion.div>
+        </div>
+      </div>
+    );
+  }
 
   const handleSave = async () => {
     try {

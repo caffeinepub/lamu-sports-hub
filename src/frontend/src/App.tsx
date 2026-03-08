@@ -48,6 +48,11 @@ import {
   clearOfficialSession,
   isOfficialSessionVerified,
 } from "@/utils/localStore";
+import {
+  type SimpleUserProfile,
+  clearSimpleSession,
+  getActiveSimpleSession,
+} from "@/utils/simpleAuth";
 import { applyStoredTheme } from "@/utils/themeUtils";
 
 // --- App State ---
@@ -68,6 +73,8 @@ interface AppCallbacks {
   onLockOfficialSession: () => void;
   getAppState: () => AppState;
   getIsOfficialSession: () => boolean;
+  getSimpleProfile: () => SimpleUserProfile | null;
+  onSimpleSignOut: () => void;
 }
 
 // --- Root Layout (with nav) ---
@@ -209,11 +216,14 @@ function buildRouter(callbacksRef: React.RefObject<AppCallbacks>) {
     path: "/profile",
     component: () => {
       const appState = callbacksRef.current!.getAppState();
+      const simpleProfile = callbacksRef.current!.getSimpleProfile();
       return (
         <ProfilePage
           role={appState.role}
           favoriteTeamId={appState.favoriteTeamId}
           userName={appState.userName}
+          simpleProfile={simpleProfile}
+          onSimpleSignOut={() => callbacksRef.current!.onSimpleSignOut()}
         />
       );
     },
@@ -339,17 +349,25 @@ export default function App() {
     applyStoredTheme();
   }, []);
 
+  // Check for existing simple (PIN-based) session on mount
+  const initialSimpleSession = getActiveSimpleSession();
+
   const [appState, setAppState] = useState<AppState>({
-    role: "fan",
+    role: (initialSimpleSession?.role as AppRole) ?? "fan",
     favoriteTeamId: "",
-    userName: "",
-    hasOnboarded: false,
+    userName: initialSimpleSession?.name ?? "",
+    hasOnboarded: !!initialSimpleSession,
   });
   const [roleLoading, setRoleLoading] = useState(false);
   const [profileChecked, setProfileChecked] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [loginTriggered, setLoginTriggered] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  // Simple PIN session (fans, players, coaches)
+  const [isSimpleUser, setIsSimpleUser] = useState(!!initialSimpleSession);
+  const [simpleProfile, setSimpleProfile] = useState<SimpleUserProfile | null>(
+    initialSimpleSession,
+  );
   // Track official session so re-renders pick up session changes
   const [officialSession, setOfficialSession] = useState(
     isOfficialSessionVerified,
@@ -374,17 +392,23 @@ export default function App() {
   officialSessionRef.current = officialSession;
   const showNotificationsSetterRef = useRef(setShowNotifications);
   showNotificationsSetterRef.current = setShowNotifications;
+  const simpleProfileRef = useRef<SimpleUserProfile | null>(simpleProfile);
+  simpleProfileRef.current = simpleProfile;
 
+  // Placeholder — will be replaced with real fn after handleSimpleSignOut is defined
   const callbacksRef = useRef<AppCallbacks>({
     onNotificationsClick: () => showNotificationsSetterRef.current(true),
     onOfficialSessionVerified: refreshOfficialSession,
     onLockOfficialSession: lockOfficialSession,
     getAppState: () => appStateRef.current,
     getIsOfficialSession: () => officialSessionRef.current,
+    getSimpleProfile: () => simpleProfileRef.current,
+    onSimpleSignOut: () => {},
   });
   // Keep callbacks in sync without recreating the ref object
   callbacksRef.current.onOfficialSessionVerified = refreshOfficialSession;
   callbacksRef.current.onLockOfficialSession = lockOfficialSession;
+  // Simple sign out is defined later — we assign it after declaration below
 
   // Build the router ONCE and never rebuild it (avoids navigation resets)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -450,6 +474,35 @@ export default function App() {
     setLoginTriggered(true);
   };
 
+  // Handle simple (PIN-based) login
+  const handleSimpleLogin = (profile: SimpleUserProfile) => {
+    setSimpleProfile(profile);
+    setIsSimpleUser(true);
+    setAppState((prev) => ({
+      ...prev,
+      role: profile.role as AppRole,
+      userName: profile.name,
+      hasOnboarded: true,
+    }));
+    setLoginTriggered(true);
+  };
+
+  // Sign out from simple session
+  const handleSimpleSignOut = () => {
+    clearSimpleSession();
+    setIsSimpleUser(false);
+    setSimpleProfile(null);
+    setLoginTriggered(false);
+    setAppState({
+      role: "fan",
+      favoriteTeamId: "",
+      userName: "",
+      hasOnboarded: false,
+    });
+  };
+  // Wire simple sign-out into callbacksRef so ProfilePage can trigger it
+  callbacksRef.current.onSimpleSignOut = handleSimpleSignOut;
+
   const handleOnboardingComplete = async (
     teamId: string,
     name?: string,
@@ -506,13 +559,14 @@ export default function App() {
     );
   }
 
-  // If not logged in, show landing page
-  if (!identity && !loginTriggered) {
+  // If not logged in (no II identity, no simple session, and login not triggered), show landing page
+  if (!identity && !loginTriggered && !isSimpleUser) {
     return (
       <>
         <LandingPage
           onLogin={handleLoginClick}
           onOfficialSessionVerified={refreshOfficialSession}
+          onSimpleLogin={handleSimpleLogin}
         />
         <Toaster position="top-center" />
       </>
@@ -532,8 +586,8 @@ export default function App() {
     );
   }
 
-  // Show onboarding if needed
-  if (showOnboarding && !appState.hasOnboarded) {
+  // Show onboarding if needed (simple users skip — they already have their profile)
+  if (showOnboarding && !appState.hasOnboarded && !isSimpleUser) {
     return (
       <>
         <OnboardingPage

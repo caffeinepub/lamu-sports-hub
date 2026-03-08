@@ -1,7 +1,12 @@
 import { OfficialAccessModal } from "@/components/shared/OfficialAccessModal";
+import { SimpleLoginModal } from "@/components/shared/SimpleLoginModal";
 import { Button } from "@/components/ui/button";
 import { useInternetIdentity } from "@/hooks/useInternetIdentity";
 import { getAppLogo, isOfficialSessionVerified } from "@/utils/localStore";
+import {
+  type SimpleUserProfile,
+  setActiveSimpleSession,
+} from "@/utils/simpleAuth";
 import {
   Loader2,
   Shield,
@@ -10,6 +15,7 @@ import {
   Trophy,
   Users,
   Waves,
+  Zap,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
@@ -17,11 +23,13 @@ import { useState } from "react";
 interface LandingPageProps {
   onLogin: () => void;
   onOfficialSessionVerified?: () => void;
+  onSimpleLogin?: (profile: SimpleUserProfile) => void;
 }
 
 export function LandingPage({
   onLogin,
   onOfficialSessionVerified,
+  onSimpleLogin,
 }: LandingPageProps) {
   const { login, isLoggingIn, isInitializing, identity } =
     useInternetIdentity();
@@ -29,6 +37,7 @@ export function LandingPage({
   const logoSrc =
     customLogo ?? "/assets/uploads/file_00000000fbc87243ae7561e59571a7e1-1.png";
   const [showOfficialModal, setShowOfficialModal] = useState(false);
+  const [showSimpleModal, setShowSimpleModal] = useState(false);
   const [pendingOfficialAfterLogin, setPendingOfficialAfterLogin] =
     useState(false);
   const [officialActive, setOfficialActive] = useState(
@@ -55,6 +64,11 @@ export function LandingPage({
   const handleOfficialVerified = () => {
     setOfficialActive(true);
     onOfficialSessionVerified?.();
+  };
+
+  const handleSimpleLoginSuccess = (profile: SimpleUserProfile) => {
+    setActiveSimpleSession(profile);
+    onSimpleLogin?.(profile);
   };
 
   // After identity appears from the pending login, open the modal
@@ -217,12 +231,50 @@ export function LandingPage({
               community.
             </p>
 
+            {/* PRIMARY: Simple login — for fans, players, coaches */}
             <Button
-              className="w-full font-bold text-sm h-11 rounded-xl"
+              className="w-full font-bold text-sm h-12 rounded-xl relative overflow-hidden"
               style={{
                 background:
-                  "linear-gradient(135deg, oklch(0.6 0.22 24) 0%, oklch(0.55 0.25 20) 100%)",
+                  "linear-gradient(135deg, oklch(0.6 0.22 24) 0%, oklch(0.52 0.2 38) 60%, oklch(0.58 0.22 24) 100%)",
                 color: "oklch(0.97 0 0)",
+                boxShadow: "0 4px 20px oklch(0.6 0.22 24 / 0.35)",
+              }}
+              onClick={() => setShowSimpleModal(true)}
+              data-ocid="landing.simple_login.button"
+            >
+              <Zap className="w-4 h-4 mr-2" />
+              Join the Hub — No Passkey Needed
+            </Button>
+
+            {/* Divider with helper text */}
+            <div className="flex items-center gap-3 my-3">
+              <div
+                className="flex-1 h-px"
+                style={{ background: "oklch(0.25 0.04 252)" }}
+              />
+              <p
+                className="text-[10px] text-center leading-tight font-medium px-1"
+                style={{ color: "oklch(0.5 0.06 252)" }}
+              >
+                Fans & players use the button above.
+                <br />
+                Officials use Internet Identity below.
+              </p>
+              <div
+                className="flex-1 h-px"
+                style={{ background: "oklch(0.25 0.04 252)" }}
+              />
+            </div>
+
+            {/* SECONDARY: Internet Identity — for officials */}
+            <Button
+              variant="outline"
+              className="w-full font-semibold text-sm h-10 rounded-xl"
+              style={{
+                borderColor: "oklch(0.32 0.06 252)",
+                color: "oklch(0.65 0.07 252)",
+                background: "oklch(0.16 0.04 252 / 0.6)",
               }}
               onClick={handleLogin}
               disabled={isLoggingIn || isInitializing}
@@ -234,7 +286,10 @@ export function LandingPage({
                   Connecting...
                 </>
               ) : (
-                "Sign In with Internet Identity"
+                <>
+                  <Shield className="w-4 h-4 mr-2" />
+                  Sign In with Internet Identity
+                </>
               )}
             </Button>
 
@@ -253,25 +308,20 @@ export function LandingPage({
               </div>
             ) : (
               <Button
-                variant="outline"
-                className="w-full mt-2 h-10 text-sm font-semibold rounded-xl"
+                variant="ghost"
+                className="w-full mt-1 h-9 text-xs font-medium rounded-xl"
                 style={{
-                  borderColor: "oklch(0.35 0.08 252)",
-                  color: "oklch(0.7 0.06 252)",
-                  background: "oklch(0.18 0.04 252 / 0.5)",
+                  color: "oklch(0.55 0.08 252)",
                 }}
                 onClick={handleOfficialClick}
                 disabled={isLoggingIn || isInitializing}
                 data-ocid="landing.official_access.button"
               >
-                <Shield className="w-4 h-4 mr-2" />
-                I&apos;m an Official
+                <Shield className="w-3.5 h-3.5 mr-1.5" />
+                I&apos;m an Official (LSH Access Code)
               </Button>
             )}
 
-            <p className="text-xs text-center text-muted-foreground mt-4">
-              Secure, password-free login powered by Internet Computer
-            </p>
             <p className="text-xs text-center mt-2">
               <a
                 href="/recovery"
@@ -329,6 +379,13 @@ export function LandingPage({
         open={showOfficialModal}
         onOpenChange={setShowOfficialModal}
         onVerified={handleOfficialVerified}
+      />
+
+      {/* Simple Login Modal */}
+      <SimpleLoginModal
+        open={showSimpleModal}
+        onOpenChange={setShowSimpleModal}
+        onSuccess={handleSimpleLoginSuccess}
       />
     </div>
   );

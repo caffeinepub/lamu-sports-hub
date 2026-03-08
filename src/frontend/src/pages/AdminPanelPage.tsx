@@ -51,10 +51,13 @@ import {
   type SeasonSettings,
   type Suggestion,
   type SystemStatus,
+  type TeamOverride,
   clearAppLogo,
   confirmNews,
   getAppLogo,
   getAwards,
+  getDeletedPlayerIds,
+  getDeletedTeamIds,
   getLocalStore,
   getMatchPitches,
   getMatchReferees,
@@ -68,12 +71,16 @@ import {
   getReferees,
   getSeasonSettings,
   getTeamLogos,
+  getTeamOverrides,
   setAppLogo,
   setLocalStore,
   setMatchPitch,
   setMatchReferee,
   setOfficialCode,
   setTeamLogo,
+  setTeamOverride,
+  softDeletePlayer,
+  softDeleteTeam,
   unconfirmNews,
   updateRecoveryRequest,
 } from "@/utils/localStore";
@@ -320,6 +327,41 @@ function AdminPanelInner() {
   const teamLogoInputRef = useRef<HTMLInputElement>(null);
   const [logoUploadTeamId, setLogoUploadTeamId] = useState<string | null>(null);
 
+  // Logo for edit dialog (separate from row logo upload)
+  const editLogoInputRef = useRef<HTMLInputElement>(null);
+  const [editLogoPreview, setEditLogoPreview] = useState<string | null>(null);
+
+  const handleEditLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingTeam) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string;
+      setTeamLogo(editingTeam.teamId, dataUrl);
+      setTeamLogosState(getTeamLogos());
+      setEditLogoPreview(dataUrl);
+      toast.success("Team logo uploaded!");
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  // Delete team state
+  const [deletingTeamId, setDeletingTeamId] = useState<string | null>(null);
+  const [deletingTeamName, setDeletingTeamName] = useState<string>("");
+  const [deleteTeamLoading, setDeleteTeamLoading] = useState(false);
+
+  const handleDeleteTeam = () => {
+    if (!deletingTeamId) return;
+    setDeleteTeamLoading(true);
+    softDeleteTeam(deletingTeamId);
+    setDeletingTeamId(null);
+    setDeletingTeamName("");
+    setDeleteTeamLoading(false);
+    setTeamRefreshTrigger((n) => n + 1);
+    toast.success("Team removed.");
+  };
+
   // Add User state
   const [showAddUser, setShowAddUser] = useState(false);
   const [newUserName, setNewUserName] = useState("");
@@ -473,14 +515,28 @@ function AdminPanelInner() {
     setEditingTeam(team);
     setEditTeamName(team.name);
     setEditTeamArea(team.area);
+    setEditLogoPreview(teamLogos[team.teamId] ?? null);
   };
 
   const handleSaveTeam = async () => {
+    if (!editingTeam) return;
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 600));
-    setLoading(false);
-    setEditingTeam(null);
-    toast.success(`${editTeamName} updated successfully!`);
+    try {
+      // Save the edit override to localStorage so the updated name/area persists
+      setTeamOverride(editingTeam.teamId, {
+        name: editTeamName.trim(),
+        area: editTeamArea,
+      });
+      // If there's a pending logo upload in the edit dialog, it was already saved via setTeamLogo
+      toast.success(`${editTeamName} updated successfully!`);
+      setEditingTeam(null);
+      // Trigger a teams refresh
+      setTeamRefreshTrigger((n) => n + 1);
+    } catch {
+      toast.error("Failed to update team.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const openEditMatch = (match: BackendMatch) => {
@@ -1114,6 +1170,10 @@ function AdminPanelInner() {
             openEditTeam={openEditTeam}
             activeTab={activeTab}
             refreshTrigger={teamRefreshTrigger}
+            onDeleteTeam={(id, name) => {
+              setDeletingTeamId(id);
+              setDeletingTeamName(name);
+            }}
           />
         </TabsContent>
 
@@ -2019,7 +2079,10 @@ function AdminPanelInner() {
       <Dialog
         open={!!editingTeam}
         onOpenChange={(open) => {
-          if (!open) setEditingTeam(null);
+          if (!open) {
+            setEditingTeam(null);
+            setEditLogoPreview(null);
+          }
         }}
       >
         <DialogContent data-ocid="admin.team.dialog">
@@ -2054,12 +2117,58 @@ function AdminPanelInner() {
                 </SelectContent>
               </Select>
             </div>
+            {/* Logo Upload */}
+            <div>
+              <Label className="text-xs mb-1 block">Team Logo</Label>
+              <input
+                type="file"
+                accept="image/*"
+                ref={editLogoInputRef}
+                className="hidden"
+                onChange={handleEditLogoChange}
+              />
+              {editLogoPreview ? (
+                <div className="relative rounded-lg overflow-hidden w-20 h-20">
+                  <img
+                    src={editLogoPreview}
+                    alt="Team logo"
+                    className="w-full h-full object-cover rounded-lg"
+                  />
+                  <button
+                    type="button"
+                    className="absolute top-1 right-1 bg-black/60 rounded-full p-1 text-white hover:bg-black/80"
+                    onClick={() => {
+                      if (editingTeam) {
+                        setTeamLogo(editingTeam.teamId, "");
+                        setTeamLogosState(getTeamLogos());
+                      }
+                      setEditLogoPreview(null);
+                    }}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="w-full h-16 rounded-lg border-2 border-dashed border-border hover:border-primary/50 transition-colors flex flex-col items-center justify-center gap-1.5 text-muted-foreground"
+                  onClick={() => editLogoInputRef.current?.click()}
+                  data-ocid="admin.edit_team.upload_button"
+                >
+                  <ImageIcon className="w-4 h-4" />
+                  <span className="text-xs">Upload logo</span>
+                </button>
+              )}
+            </div>
           </div>
           <DialogFooter className="gap-2">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setEditingTeam(null)}
+              onClick={() => {
+                setEditingTeam(null);
+                setEditLogoPreview(null);
+              }}
               data-ocid="admin.team.cancel_button"
             >
               Cancel
@@ -2078,6 +2187,50 @@ function AdminPanelInner() {
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 "Save Changes"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Team Confirm */}
+      <Dialog
+        open={!!deletingTeamId}
+        onOpenChange={(o) => {
+          if (!o) {
+            setDeletingTeamId(null);
+            setDeletingTeamName("");
+          }
+        }}
+      >
+        <DialogContent data-ocid="admin.delete_team.dialog">
+          <DialogHeader>
+            <DialogTitle className="font-display">Remove Team?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Remove <strong>{deletingTeamName}</strong> from the list? This
+            cannot be undone.
+          </p>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDeletingTeamId(null)}
+              data-ocid="admin.delete_team.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={handleDeleteTeam}
+              disabled={deleteTeamLoading}
+              data-ocid="admin.delete_team.confirm_button"
+            >
+              {deleteTeamLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                "Remove"
               )}
             </Button>
           </DialogFooter>
@@ -2481,6 +2634,7 @@ function TeamsTabContent({
   openEditTeam,
   activeTab,
   refreshTrigger,
+  onDeleteTeam,
 }: {
   setShowAddTeam: (v: boolean) => void;
   teamLogos: Record<string, string>;
@@ -2489,10 +2643,13 @@ function TeamsTabContent({
   openEditTeam: (team: BackendTeam) => void;
   activeTab: string;
   refreshTrigger?: number;
+  onDeleteTeam: (teamId: string, teamName: string) => void;
 }) {
   const { actor } = useActor();
   const [backendTeams, setBackendTeams] = useState<BackendTeam[]>([]);
   const [backendTeamsLoading, setBackendTeamsLoading] = useState(false);
+  const [deletedTeamIds, setDeletedTeamIds] =
+    useState<string[]>(getDeletedTeamIds);
 
   const fetchTeams = () => {
     if (!actor) return;
@@ -2507,9 +2664,16 @@ function TeamsTabContent({
   // biome-ignore lint/correctness/useExhaustiveDependencies: refreshTrigger is intentional — it signals the parent created a new team
   useEffect(() => {
     if (activeTab !== "teams" || !actor) return;
+    // Re-read soft-deleted ids on each refresh so deletions are immediately reflected
+    setDeletedTeamIds(getDeletedTeamIds());
     fetchTeams();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, actor, refreshTrigger]);
+
+  const teamOverrides = getTeamOverrides();
+  const visibleTeams = backendTeams.filter(
+    (t) => !deletedTeamIds.includes(t.teamId),
+  );
 
   return (
     <div>
@@ -2545,7 +2709,7 @@ function TeamsTabContent({
           <Loader2 className="w-5 h-5 animate-spin mr-2" />
           <span className="text-sm">Loading teams...</span>
         </div>
-      ) : backendTeams.length === 0 ? (
+      ) : visibleTeams.length === 0 ? (
         <div
           className="rounded-xl border border-border bg-card py-10 flex flex-col items-center gap-3 text-center"
           data-ocid="admin.teams.empty_state"
@@ -2565,61 +2729,79 @@ function TeamsTabContent({
         >
           <div className="px-3 py-2 border-b border-border bg-muted/20">
             <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-              All Teams ({backendTeams.length})
+              All Teams ({visibleTeams.length})
             </span>
           </div>
-          {backendTeams.map((team, i) => (
-            <div
-              key={team.teamId}
-              className="flex items-center gap-3 px-3 py-3 border-b border-border/50 last:border-0"
-              data-ocid={`admin.team.row.${i + 1}`}
-            >
-              <TeamBadge
-                team={{ teamId: team.teamId, name: team.name, area: team.area }}
-                size="sm"
-              />
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-xs text-foreground">
-                  {team.name}
+          {visibleTeams.map((team, i) => {
+            const overrideName = teamOverrides[team.teamId]?.name ?? team.name;
+            const overrideArea = teamOverrides[team.teamId]?.area ?? team.area;
+            return (
+              <div
+                key={team.teamId}
+                className="flex items-center gap-3 px-3 py-3 border-b border-border/50 last:border-0"
+                data-ocid={`admin.team.row.${i + 1}`}
+              >
+                <TeamBadge
+                  team={{
+                    teamId: team.teamId,
+                    name: overrideName,
+                    area: overrideArea,
+                  }}
+                  size="sm"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-xs text-foreground">
+                    {overrideName}
+                  </div>
+                  <AreaBadge area={overrideArea} className="mt-0.5" />
                 </div>
-                <AreaBadge area={team.area} className="mt-0.5" />
+                <div className="flex items-center gap-1">
+                  {team.isApproved ? (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-400 font-bold">
+                      Approved
+                    </span>
+                  ) : (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-bold">
+                      Pending
+                    </span>
+                  )}
+                </div>
+                {/* Logo upload button */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`w-6 h-6 transition-colors ${teamLogos[team.teamId] ? "text-green-400 hover:text-green-300" : "text-muted-foreground hover:text-foreground"}`}
+                  data-ocid={`admin.team.upload_button.${i + 1}`}
+                  onClick={() => {
+                    setLogoUploadTeamId(team.teamId);
+                    teamLogoInputRef.current?.click();
+                  }}
+                  title="Upload team logo"
+                >
+                  <ImageIcon className="w-3 h-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="w-6 h-6 text-muted-foreground hover:text-foreground"
+                  data-ocid={`admin.team.edit_button.${i + 1}`}
+                  onClick={() => openEditTeam(team)}
+                >
+                  <Edit className="w-3 h-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="w-6 h-6 text-red-400 hover:text-red-300"
+                  data-ocid={`admin.team.delete_button.${i + 1}`}
+                  onClick={() => onDeleteTeam(team.teamId, overrideName)}
+                  title="Remove team"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </Button>
               </div>
-              <div className="flex items-center gap-1">
-                {team.isApproved ? (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-400 font-bold">
-                    Approved
-                  </span>
-                ) : (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-bold">
-                    Pending
-                  </span>
-                )}
-              </div>
-              {/* Logo upload button */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className={`w-6 h-6 transition-colors ${teamLogos[team.teamId] ? "text-green-400 hover:text-green-300" : "text-muted-foreground hover:text-foreground"}`}
-                data-ocid={`admin.team.upload_button.${i + 1}`}
-                onClick={() => {
-                  setLogoUploadTeamId(team.teamId);
-                  teamLogoInputRef.current?.click();
-                }}
-                title="Upload team logo"
-              >
-                <ImageIcon className="w-3 h-3" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="w-6 h-6 text-muted-foreground hover:text-foreground"
-                data-ocid={`admin.team.edit_button.${i + 1}`}
-                onClick={() => openEditTeam(team)}
-              >
-                <Edit className="w-3 h-3" />
-              </Button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -2638,6 +2820,24 @@ function AdminPlayersTab({ autoOpenDialog }: { autoOpenDialog?: boolean }) {
   // Backend players state
   const [backendPlayers, setBackendPlayers] = useState<PlayerT[]>([]);
   const [backendPlayersLoading, setBackendPlayersLoading] = useState(false);
+
+  // Delete player state
+  const [deletingPlayerId, setDeletingPlayerId] = useState<string | null>(null);
+  const [deletingPlayerName, setDeletingPlayerName] = useState<string>("");
+  const [deletePlayerLoading, setDeletePlayerLoading] = useState(false);
+  const [deletedPlayerIds, setDeletedPlayerIds] =
+    useState<string[]>(getDeletedPlayerIds);
+
+  const handleDeletePlayer = () => {
+    if (!deletingPlayerId) return;
+    setDeletePlayerLoading(true);
+    softDeletePlayer(deletingPlayerId);
+    setDeletedPlayerIds(getDeletedPlayerIds());
+    setDeletingPlayerId(null);
+    setDeletingPlayerName("");
+    setDeletePlayerLoading(false);
+    toast.success("Player removed.");
+  };
 
   // Backend teams state (for the team selector in Add Player dialog)
   const [backendTeams, setBackendTeams] = useState<BackendTeam[]>([]);
@@ -2803,89 +3003,148 @@ function AdminPlayersTab({ autoOpenDialog }: { autoOpenDialog?: boolean }) {
         </div>
       ) : (
         <div className="space-y-2">
-          {backendPlayers.map((player, i) => {
-            const isConfirmed = confirmations[player.playerId] ?? false;
-            const photo = photos[player.playerId];
-            return (
-              <div
-                key={player.playerId}
-                className="rounded-xl border bg-card px-3 py-2.5 flex items-center gap-3"
-                style={{
-                  borderColor: isConfirmed
-                    ? "oklch(0.55 0.18 145 / 0.4)"
-                    : "oklch(0.3 0.02 252)",
-                }}
-                data-ocid={`admin.player.row.${i + 1}`}
-              >
-                {photo ? (
-                  <img
-                    src={photo}
-                    alt={player.name}
-                    className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-                  />
-                ) : (
-                  <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
-                    style={{
-                      background: "oklch(0.22 0.06 252)",
-                      color: "oklch(0.82 0.08 82)",
-                    }}
-                  >
-                    {String(player.jerseyNumber)}
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-xs text-foreground">
-                    {player.name}
-                    {player.nickname ? (
-                      <span className="text-muted-foreground font-normal">
-                        {" "}
-                        "{player.nickname}"
-                      </span>
-                    ) : null}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground capitalize">
-                    {String(player.position)} · #{String(player.jerseyNumber)}
-                  </p>
-                </div>
-                {isConfirmed && (
-                  <span className="text-[9px] font-bold text-green-400 px-1.5 py-0.5 rounded-full bg-green-500/10 flex-shrink-0">
-                    ✓ Card
-                  </span>
-                )}
-                {/* Photo upload */}
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  ref={(el) => {
-                    photoInputRefs.current[player.playerId] = el;
+          {backendPlayers
+            .filter((p) => !deletedPlayerIds.includes(p.playerId))
+            .map((player, i) => {
+              const isConfirmed = confirmations[player.playerId] ?? false;
+              const photo = photos[player.playerId];
+              return (
+                <div
+                  key={player.playerId}
+                  className="rounded-xl border bg-card px-3 py-2.5 flex items-center gap-3"
+                  style={{
+                    borderColor: isConfirmed
+                      ? "oklch(0.55 0.18 145 / 0.4)"
+                      : "oklch(0.3 0.02 252)",
                   }}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handlePhoto(player.playerId, file);
-                  }}
-                />
-                <button
-                  type="button"
-                  className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-                  onClick={() =>
-                    photoInputRefs.current[player.playerId]?.click()
-                  }
-                  data-ocid={`admin.player.upload_button.${i + 1}`}
+                  data-ocid={`admin.player.row.${i + 1}`}
                 >
-                  <ImageIcon className="w-3.5 h-3.5" />
-                </button>
-                <Checkbox
-                  checked={isConfirmed}
-                  onCheckedChange={(v) => toggle(player.playerId, !!v)}
-                  data-ocid={`admin.player.checkbox.${i + 1}`}
-                />
-              </div>
-            );
-          })}
+                  {photo ? (
+                    <img
+                      src={photo}
+                      alt={player.name}
+                      className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                    />
+                  ) : (
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
+                      style={{
+                        background: "oklch(0.22 0.06 252)",
+                        color: "oklch(0.82 0.08 82)",
+                      }}
+                    >
+                      {String(player.jerseyNumber)}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-xs text-foreground">
+                      {player.name}
+                      {player.nickname ? (
+                        <span className="text-muted-foreground font-normal">
+                          {" "}
+                          "{player.nickname}"
+                        </span>
+                      ) : null}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground capitalize">
+                      {String(player.position)} · #{String(player.jerseyNumber)}
+                    </p>
+                  </div>
+                  {isConfirmed && (
+                    <span className="text-[9px] font-bold text-green-400 px-1.5 py-0.5 rounded-full bg-green-500/10 flex-shrink-0">
+                      ✓ Card
+                    </span>
+                  )}
+                  {/* Photo upload */}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    ref={(el) => {
+                      photoInputRefs.current[player.playerId] = el;
+                    }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handlePhoto(player.playerId, file);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+                    onClick={() =>
+                      photoInputRefs.current[player.playerId]?.click()
+                    }
+                    data-ocid={`admin.player.upload_button.${i + 1}`}
+                  >
+                    <ImageIcon className="w-3.5 h-3.5" />
+                  </button>
+                  <Checkbox
+                    checked={isConfirmed}
+                    onCheckedChange={(v) => toggle(player.playerId, !!v)}
+                    data-ocid={`admin.player.checkbox.${i + 1}`}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="w-6 h-6 text-red-400 hover:text-red-300 flex-shrink-0"
+                    data-ocid={`admin.player.delete_button.${i + 1}`}
+                    onClick={() => {
+                      setDeletingPlayerId(player.playerId);
+                      setDeletingPlayerName(player.name);
+                    }}
+                    title="Remove player"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              );
+            })}
         </div>
       )}
+
+      {/* Delete Player Confirm */}
+      <Dialog
+        open={!!deletingPlayerId}
+        onOpenChange={(o) => {
+          if (!o) {
+            setDeletingPlayerId(null);
+            setDeletingPlayerName("");
+          }
+        }}
+      >
+        <DialogContent data-ocid="admin.delete_player.dialog">
+          <DialogHeader>
+            <DialogTitle className="font-display">Remove Player?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Remove <strong>{deletingPlayerName}</strong> from the registered
+            list?
+          </p>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDeletingPlayerId(null)}
+              data-ocid="admin.delete_player.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={handleDeletePlayer}
+              disabled={deletePlayerLoading}
+              data-ocid="admin.delete_player.confirm_button"
+            >
+              {deletePlayerLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                "Remove"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Player Dialog */}
       <Dialog
