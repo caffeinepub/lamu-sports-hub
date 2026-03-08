@@ -25,7 +25,7 @@ import {
   Zap,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 // Deterministic team color palette for backend teams
 const TEAM_COLORS = [
@@ -224,17 +224,25 @@ export function PlayersPage() {
   const [teamFilter, setTeamFilter] = useState("all");
   const [players, setPlayers] = useState<MockPlayer[]>([]);
   const [backendTeams, setBackendTeams] = useState<BackendTeam[]>([]);
-  const [loadingData, setLoadingData] = useState(false);
+  // Start as true so we show skeletons immediately instead of blank content
+  const [loadingData, setLoadingData] = useState(true);
+  const loadedRef = useRef(false);
 
   // Load players and teams from backend together
   useEffect(() => {
-    // If actor is still initialising, wait
-    if (actorFetching) return;
-    // If actor finished but is null (anonymous / unavailable), stop loading immediately
+    // If actor is still initialising, wait — but cap the wait at 8s
+    if (actorFetching) {
+      const timeout = setTimeout(() => setLoadingData(false), 8000);
+      return () => clearTimeout(timeout);
+    }
+    // If actor finished but is null (anonymous / unavailable), stop loading
     if (!actor) {
       setLoadingData(false);
       return;
     }
+    // Avoid double-fetching if already loaded with this actor
+    if (loadedRef.current) return;
+    loadedRef.current = true;
     setLoadingData(true);
     Promise.all([actor.getAllPlayers(), actor.getAllTeams()])
       .then(([rawPlayers, rawTeams]) => {

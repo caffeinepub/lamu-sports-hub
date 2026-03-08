@@ -1,4 +1,5 @@
-import type { T__1, T__2 } from "@/backend";
+import type { Role as BackendRole, T, T__1, T__2 } from "@/backend";
+import { Role } from "@/backend";
 import {
   AreaBadge,
   IslandPrideBadge,
@@ -30,7 +31,11 @@ import {
   Camera,
   Edit3,
   LogOut,
+  Mail,
+  MapPin,
+  Phone,
   Save,
+  Shield,
   Target,
   User,
   Zap,
@@ -56,22 +61,49 @@ const AREAS = [
   "Kipungani",
 ];
 
+const ROLE_OPTIONS = [
+  { value: "fan", label: "Fan" },
+  { value: "player", label: "Player" },
+  { value: "coach", label: "Coach" },
+];
+
+function roleToBackend(r: string): BackendRole {
+  const map: Record<string, BackendRole> = {
+    fan: Role.fan,
+    player: Role.player,
+    coach: Role.coach,
+    admin: Role.admin,
+  };
+  return map[r] ?? Role.fan;
+}
+
+function roleFromBackend(r: BackendRole): string {
+  const s = String(r);
+  if (s === "admin" || s.includes("admin")) return "admin";
+  if (s === "coach" || s.includes("coach")) return "coach";
+  if (s === "player" || s.includes("player")) return "player";
+  return "fan";
+}
+
 export function ProfilePage({
-  role = "fan",
+  role: propRole = "fan",
   favoriteTeamId,
   userName,
 }: ProfilePageProps) {
   const { identity, clear } = useInternetIdentity();
   const { actor, isFetching: actorFetching } = useActor();
 
-  const userSettings = getUserSettings();
-
   const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(userSettings.displayName || userName || "");
-  const [area, setArea] = useState("Shela");
-  const [favTeam, setFavTeam] = useState(
-    favoriteTeamId || userSettings.favoriteTeamId || "",
-  );
+  const [profileLoading, setProfileLoading] = useState(true);
+
+  // Fields from backend
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [area, setArea] = useState("Lamu Town");
+  const [userRole, setUserRole] = useState(propRole);
+  const [favTeam, setFavTeam] = useState(favoriteTeamId || "");
+
   const [profilePhoto, setProfilePhoto] = useState<string | null>(
     getProfilePhoto,
   );
@@ -83,21 +115,60 @@ export function ProfilePage({
   const [myPlayer, setMyPlayer] = useState<T__2 | null>(null);
   const [playerTeam, setPlayerTeam] = useState<T__1 | null>(null);
 
+  // Load user profile + teams + players from backend
+  // biome-ignore lint/correctness/useExhaustiveDependencies: favoriteTeamId and userName are stable props used as fallback only
   useEffect(() => {
-    if (!actor || actorFetching) return;
+    // Safety timeout: if actor never becomes ready after 8s, show empty state
+    const timeoutId = setTimeout(() => {
+      const local = getUserSettings();
+      setName((prev) => prev || local.displayName || userName || "");
+      setFavTeam(
+        (prev) => prev || favoriteTeamId || local.favoriteTeamId || "",
+      );
+      setProfileLoading(false);
+      setTeamsLoading(false);
+    }, 8000);
+
+    if (!actor || actorFetching) return () => clearTimeout(timeoutId);
+    clearTimeout(timeoutId);
+
     let cancelled = false;
 
     async function loadData() {
       try {
-        const [allTeams, allPlayers] = await Promise.all([
-          actor!.getAllTeams(),
-          actor!.getAllPlayers(),
+        const [backendProfile, allTeams, allPlayers] = await Promise.all([
+          actor!.getCallerUserProfile().catch(() => null),
+          actor!.getAllTeams().catch(() => [] as T__1[]),
+          actor!.getAllPlayers().catch(() => [] as T__2[]),
         ]);
         if (cancelled) return;
 
+        // Populate profile fields from backend
+        if (backendProfile) {
+          const profile = backendProfile as T;
+          setName(profile.name || "");
+          setEmail(profile.email || "");
+          setPhone(profile.phone || "");
+          setArea(profile.area || "Lamu Town");
+          setUserRole(roleFromBackend(profile.role));
+          const teamId = profile.favoriteTeamId ?? "";
+          setFavTeam(teamId);
+          // Also persist to local settings so other pages pick it up
+          setLocalStore(LSH_USER_SETTINGS_KEY, {
+            ...getUserSettings(),
+            displayName: profile.name || "",
+            favoriteTeamId: teamId,
+          });
+        } else {
+          // Fall back to local settings if backend returns nothing
+          const local = getUserSettings();
+          setName(local.displayName || userName || "");
+          setFavTeam(favoriteTeamId || local.favoriteTeamId || "");
+        }
+
         setTeams(allTeams);
 
-        // Find this user's player record by matching userId to principal
+        // Find this user's player record
         const principal = identity?.getPrincipal().toString();
         if (principal) {
           const found = allPlayers.find((p) => p.userId === principal) ?? null;
@@ -109,15 +180,24 @@ export function ProfilePage({
           }
         }
       } catch {
-        // silently fail — empty state will show
+        // silently fail — empty state shows
+        const local = getUserSettings();
+        setName((prev) => prev || local.displayName || userName || "");
+        setFavTeam(
+          (prev) => prev || favoriteTeamId || local.favoriteTeamId || "",
+        );
       } finally {
-        if (!cancelled) setTeamsLoading(false);
+        if (!cancelled) {
+          setTeamsLoading(false);
+          setProfileLoading(false);
+        }
       }
     }
 
     loadData();
     return () => {
       cancelled = true;
+      clearTimeout(timeoutId);
     };
   }, [actor, actorFetching, identity]);
 
@@ -137,7 +217,21 @@ export function ProfilePage({
   // Favorite team from real backend teams
   const favoriteTeam = teams.find((t) => t.teamId === favTeam) ?? null;
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    try {
+      if (actor) {
+        await actor.createOrUpdateUserProfile(
+          name.trim(),
+          phone.trim(),
+          email.trim(),
+          roleToBackend(userRole),
+          area,
+          favTeam || null,
+        );
+      }
+    } catch {
+      // Save backend failure silently — local will still update
+    }
     setLocalStore(LSH_USER_SETTINGS_KEY, {
       ...getUserSettings(),
       displayName: name,
@@ -230,26 +324,35 @@ export function ProfilePage({
             </button>
           </div>
 
-          <div className="flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="font-display font-black text-xl text-foreground">
-                {displayName}
-              </h1>
-              <IslandPrideBadge />
-            </div>
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <Badge
-                variant="outline"
-                className="text-xs capitalize"
-                style={{
-                  borderColor: "oklch(0.6 0.22 24)",
-                  color: "oklch(0.6 0.22 24)",
-                }}
-              >
-                {role}
-              </Badge>
-              <AreaBadge area={area} />
-            </div>
+          <div className="flex-1 min-w-0">
+            {profileLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-5 w-36" />
+                <Skeleton className="h-4 w-24" />
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="font-display font-black text-xl text-foreground">
+                    {displayName}
+                  </h1>
+                  <IslandPrideBadge />
+                </div>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <Badge
+                    variant="outline"
+                    className="text-xs capitalize"
+                    style={{
+                      borderColor: "oklch(0.6 0.22 24)",
+                      color: "oklch(0.6 0.22 24)",
+                    }}
+                  >
+                    {userRole}
+                  </Badge>
+                  {area && <AreaBadge area={area} />}
+                </div>
+              </>
+            )}
             {identity && (
               <p className="text-[10px] text-muted-foreground mt-1 font-mono truncate max-w-[200px]">
                 {identity.getPrincipal().toString().slice(0, 16)}...
@@ -270,6 +373,123 @@ export function ProfilePage({
       </div>
 
       <div className="px-4 mt-4 space-y-4">
+        {/* Personal Details Card */}
+        <motion.div
+          initial={{ y: 10, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.05 }}
+          data-ocid="profile.details.card"
+        >
+          <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide mb-3">
+            Personal Details
+          </h2>
+          {profileLoading ? (
+            <div
+              className="rounded-xl border border-border bg-card p-4 space-y-3"
+              data-ocid="profile.loading_state"
+            >
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <Skeleton className="w-7 h-7 rounded-lg flex-shrink-0" />
+                  <div className="space-y-1 flex-1">
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-4 w-32" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-border bg-card divide-y divide-border/60">
+              {[
+                {
+                  icon: (
+                    <User
+                      className="w-4 h-4"
+                      style={{ color: "oklch(0.6 0.18 252)" }}
+                    />
+                  ),
+                  label: "Full Name",
+                  value: name || "Not set",
+                  empty: !name,
+                },
+                {
+                  icon: (
+                    <Mail
+                      className="w-4 h-4"
+                      style={{ color: "oklch(0.6 0.22 24)" }}
+                    />
+                  ),
+                  label: "Email",
+                  value: email || "Not set",
+                  empty: !email,
+                },
+                {
+                  icon: (
+                    <Phone
+                      className="w-4 h-4"
+                      style={{ color: "oklch(0.65 0.18 155)" }}
+                    />
+                  ),
+                  label: "Phone",
+                  value: phone || "Not set",
+                  empty: !phone,
+                },
+                {
+                  icon: (
+                    <MapPin
+                      className="w-4 h-4"
+                      style={{ color: "oklch(0.75 0.15 82)" }}
+                    />
+                  ),
+                  label: "Home Area",
+                  value: area || "Not set",
+                  empty: !area,
+                },
+                {
+                  icon: (
+                    <Shield
+                      className="w-4 h-4"
+                      style={{ color: "oklch(0.6 0.22 24)" }}
+                    />
+                  ),
+                  label: "Role",
+                  value: userRole
+                    ? userRole.charAt(0).toUpperCase() + userRole.slice(1)
+                    : "Fan",
+                  empty: false,
+                },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="flex items-center gap-3 px-4 py-3"
+                >
+                  <div
+                    className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{ background: "oklch(0.16 0.04 255)" }}
+                  >
+                    {item.icon}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">
+                      {item.label}
+                    </div>
+                    <div
+                      className={`text-sm font-semibold mt-0.5 ${item.empty ? "text-muted-foreground/50 italic" : "text-foreground"}`}
+                    >
+                      {item.value}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {!profileLoading && (
+            <p className="text-[10px] text-muted-foreground mt-2 text-center">
+              Tap the edit icon above to update your details
+            </p>
+          )}
+        </motion.div>
+
         {/* Player Stats (only if this user is a registered player) */}
         {myPlayer && playerTeam && (
           <motion.div
@@ -300,8 +520,8 @@ export function ProfilePage({
                   <div className="font-bold text-sm text-foreground">
                     {playerTeam.name}
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {myPlayer.position}
+                  <div className="text-xs text-muted-foreground capitalize">
+                    {String(myPlayer.position)}
                   </div>
                 </div>
               </div>
@@ -415,19 +635,45 @@ export function ProfilePage({
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Enter your name"
+                  placeholder="Enter your full name"
                   className="h-9 text-sm"
                   data-ocid="profile.input"
                 />
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground mb-1 block">
-                  Area
+                  Email
                 </Label>
-                <Select value={area} onValueChange={setArea}>
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="your@email.com"
+                  className="h-9 text-sm"
+                  data-ocid="profile.email.input"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1 block">
+                  Phone
+                </Label>
+                <Input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+254 7xx xxx xxx"
+                  className="h-9 text-sm"
+                  data-ocid="profile.phone.input"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1 block">
+                  Home Area
+                </Label>
+                <Select value={area || "Lamu Town"} onValueChange={setArea}>
                   <SelectTrigger
                     className="h-9 text-sm"
-                    data-ocid="profile.select"
+                    data-ocid="profile.area.select"
                   >
                     <SelectValue />
                   </SelectTrigger>
@@ -435,6 +681,30 @@ export function ProfilePage({
                     {AREAS.map((a) => (
                       <SelectItem key={a} value={a} className="text-sm">
                         {a}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1 block">
+                  I am a...
+                </Label>
+                <Select value={userRole || "fan"} onValueChange={setUserRole}>
+                  <SelectTrigger
+                    className="h-9 text-sm"
+                    data-ocid="profile.role.select"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ROLE_OPTIONS.map((r) => (
+                      <SelectItem
+                        key={r.value}
+                        value={r.value}
+                        className="text-sm"
+                      >
+                        {r.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -451,30 +721,26 @@ export function ProfilePage({
                 >
                   <SelectTrigger
                     className="h-9 text-sm"
-                    data-ocid="profile.select"
+                    data-ocid="profile.team.select"
                   >
                     <SelectValue placeholder="Select a team" />
                   </SelectTrigger>
                   <SelectContent>
-                    {teams.length === 0 ? (
+                    <SelectItem
+                      value="none"
+                      className="text-sm text-muted-foreground"
+                    >
+                      None
+                    </SelectItem>
+                    {teams.map((t) => (
                       <SelectItem
-                        value="none"
-                        disabled
-                        className="text-sm text-muted-foreground"
+                        key={t.teamId}
+                        value={t.teamId}
+                        className="text-sm"
                       >
-                        No teams registered yet
+                        {t.name}
                       </SelectItem>
-                    ) : (
-                      teams.map((t) => (
-                        <SelectItem
-                          key={t.teamId}
-                          value={t.teamId}
-                          className="text-sm"
-                        >
-                          {t.name}
-                        </SelectItem>
-                      ))
-                    )}
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

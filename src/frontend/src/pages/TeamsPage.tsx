@@ -1,4 +1,5 @@
-import { AreaBadge, TeamBadge } from "@/components/shared/TeamBadge";
+import type { T__1 as BackendTeam } from "@/backend";
+import { AreaBadge } from "@/components/shared/TeamBadge";
 import {
   Select,
   SelectContent,
@@ -6,25 +7,92 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MOCK_TEAMS } from "@/data/mockData";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useActor } from "@/hooks/useActor";
 import { useNavigate } from "@tanstack/react-router";
 import { Users } from "lucide-react";
 import { motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+// Deterministic color palette for teams
+const TEAM_COLORS = [
+  "#0B2E6F",
+  "#8B1A1A",
+  "#1A6B3A",
+  "#6B1A6B",
+  "#2E6B6B",
+  "#6B4A1A",
+  "#1A3A6B",
+  "#3A1A1A",
+];
+
+function getTeamColor(index: number) {
+  return TEAM_COLORS[index % TEAM_COLORS.length];
+}
+
+function TeamSkeleton() {
+  return (
+    <div className="rounded-xl border border-border bg-card overflow-hidden">
+      <div className="h-1 w-full bg-muted/40" />
+      <div className="p-3 flex flex-col items-center gap-2">
+        <Skeleton className="w-14 h-14 rounded-full" />
+        <Skeleton className="h-4 w-24 rounded" />
+        <Skeleton className="h-3 w-16 rounded-full" />
+        <div className="flex gap-1 w-full">
+          <Skeleton className="flex-1 h-6 rounded" />
+          <Skeleton className="flex-1 h-6 rounded" />
+          <Skeleton className="flex-1 h-6 rounded" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function TeamsPage() {
   const navigate = useNavigate();
+  const { actor, isFetching: actorFetching } = useActor();
   const [areaFilter, setAreaFilter] = useState<string>("all");
+  const [teams, setTeams] = useState<BackendTeam[]>([]);
+  const [loadingData, setLoadingData] = useState(false);
 
   useEffect(() => {
     document.title = "Teams – Lamu Sports Hub | Lamu Football Clubs";
   }, []);
 
-  const areas = ["all", ...Array.from(new Set(MOCK_TEAMS.map((t) => t.area)))];
-  const filtered =
-    areaFilter === "all"
-      ? MOCK_TEAMS
-      : MOCK_TEAMS.filter((t) => t.area === areaFilter);
+  // Load real teams from backend
+  useEffect(() => {
+    if (actorFetching) return;
+    if (!actor) {
+      setLoadingData(false);
+      return;
+    }
+    setLoadingData(true);
+    actor
+      .getAllTeams()
+      .then((rawTeams) => {
+        setTeams(rawTeams);
+      })
+      .catch(() => {
+        setTeams([]);
+      })
+      .finally(() => setLoadingData(false));
+  }, [actor, actorFetching]);
+
+  const isLoading = actorFetching || loadingData;
+
+  const areas = useMemo(
+    () => [
+      "all",
+      ...Array.from(new Set(teams.map((t) => t.area).filter(Boolean))),
+    ],
+    [teams],
+  );
+
+  const filtered = useMemo(
+    () =>
+      areaFilter === "all" ? teams : teams.filter((t) => t.area === areaFilter),
+    [teams, areaFilter],
+  );
 
   return (
     <div data-ocid="teams.page" className="min-h-screen pb-24 pt-14">
@@ -45,7 +113,9 @@ export function TeamsPage() {
             Teams
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {MOCK_TEAMS.length} clubs competing this season
+            {isLoading
+              ? "Loading teams…"
+              : `${teams.length} club${teams.length !== 1 ? "s" : ""} competing this season`}
           </p>
         </motion.div>
       </div>
@@ -67,9 +137,11 @@ export function TeamsPage() {
             ))}
           </SelectContent>
         </Select>
-        <span className="text-xs text-muted-foreground">
-          {filtered.length} teams
-        </span>
+        {!isLoading && (
+          <span className="text-xs text-muted-foreground">
+            {filtered.length} team{filtered.length !== 1 ? "s" : ""}
+          </span>
+        )}
       </div>
 
       {/* Grid */}
@@ -77,49 +149,94 @@ export function TeamsPage() {
         className="px-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3"
         data-ocid="teams.list"
       >
-        {filtered.map((team, i) => (
-          <motion.div
-            key={team.teamId}
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: i * 0.05 }}
-            data-ocid={`teams.item.${i + 1}`}
+        {isLoading ? (
+          Array.from({ length: 6 }).map((_, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: skeleton placeholders
+            <TeamSkeleton key={`team-skeleton-${i}`} />
+          ))
+        ) : filtered.length === 0 ? (
+          <div
+            className="col-span-2 sm:col-span-3 md:col-span-4 flex flex-col items-center justify-center py-16 text-center"
+            data-ocid="teams.empty_state"
           >
-            <button
-              type="button"
-              className="w-full rounded-xl border border-border bg-card hover:border-primary/50 hover:shadow-card transition-all text-left overflow-hidden"
-              onClick={() => navigate({ to: `/teams/${team.teamId}` })}
+            <div
+              className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
+              style={{ background: "oklch(0.18 0.04 255)" }}
             >
-              {/* Color top bar */}
-              <div className="h-1" style={{ backgroundColor: team.color }} />
+              <Users className="w-7 h-7 text-muted-foreground" />
+            </div>
+            <h3 className="font-display font-bold text-base text-foreground mb-1">
+              No teams registered yet
+            </h3>
+            <p className="text-xs text-muted-foreground max-w-52">
+              Officials can add teams via the Admin Panel.
+            </p>
+          </div>
+        ) : (
+          filtered.map((team, i) => {
+            const color = getTeamColor(i);
+            const wins = Number(team.wins ?? 0);
+            const draws = Number(team.draws ?? 0);
+            const losses = Number(team.losses ?? 0);
+            const pts = wins * 3 + draws;
 
-              <div className="p-3 flex flex-col items-center gap-2">
-                <TeamBadge team={team} size="lg" />
-                <div className="text-center">
-                  <div className="font-bold text-xs text-foreground leading-tight">
-                    {team.name}
+            return (
+              <motion.div
+                key={team.teamId}
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: Math.min(i * 0.05, 0.4) }}
+                data-ocid={`teams.item.${i + 1}`}
+              >
+                <button
+                  type="button"
+                  className="w-full rounded-xl border border-border bg-card hover:border-primary/50 hover:shadow-card transition-all text-left overflow-hidden"
+                  onClick={() => navigate({ to: `/teams/${team.teamId}` })}
+                >
+                  {/* Color top bar */}
+                  <div className="h-1" style={{ backgroundColor: color }} />
+
+                  <div className="p-3 flex flex-col items-center gap-2">
+                    {/* Team initial badge */}
+                    <div
+                      className="w-14 h-14 rounded-full flex items-center justify-center text-2xl font-black text-white border-2"
+                      style={{
+                        backgroundColor: `${color}33`,
+                        borderColor: `${color}66`,
+                        color,
+                      }}
+                    >
+                      {team.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="text-center">
+                      <div className="font-bold text-xs text-foreground leading-tight">
+                        {team.name}
+                      </div>
+                      {team.area && (
+                        <AreaBadge area={team.area} className="mt-1.5" />
+                      )}
+                    </div>
+                    {/* Record */}
+                    <div className="flex gap-1 text-xs w-full justify-center">
+                      <span className="flex-1 text-center py-1 rounded bg-green-500/10 text-green-400 font-bold">
+                        {wins}W
+                      </span>
+                      <span className="flex-1 text-center py-1 rounded bg-yellow-500/10 text-yellow-400 font-bold">
+                        {draws}D
+                      </span>
+                      <span className="flex-1 text-center py-1 rounded bg-red-500/10 text-red-400 font-bold">
+                        {losses}L
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {pts} pts
+                    </div>
                   </div>
-                  <AreaBadge area={team.area} className="mt-1.5" />
-                </div>
-                {/* Record */}
-                <div className="flex gap-1 text-xs w-full justify-center">
-                  <span className="flex-1 text-center py-1 rounded bg-green-500/10 text-green-400 font-bold">
-                    {team.wins}W
-                  </span>
-                  <span className="flex-1 text-center py-1 rounded bg-yellow-500/10 text-yellow-400 font-bold">
-                    {team.draws}D
-                  </span>
-                  <span className="flex-1 text-center py-1 rounded bg-red-500/10 text-red-400 font-bold">
-                    {team.losses}L
-                  </span>
-                </div>
-                <div className="text-[10px] text-muted-foreground">
-                  {team.wins * 3 + team.draws} pts
-                </div>
-              </div>
-            </button>
-          </motion.div>
-        ))}
+                </button>
+              </motion.div>
+            );
+          })
+        )}
       </div>
     </div>
   );

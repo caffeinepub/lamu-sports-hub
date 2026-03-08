@@ -220,7 +220,8 @@ export function NewsPage() {
   }, []);
 
   const [newsList, setNewsList] = useState<NewsItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  // Start true so skeletons show immediately on mount
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
   const [newsConfirmations, setNewsConfirmations] = useState(() =>
@@ -253,14 +254,21 @@ export function NewsPage() {
   }, []);
 
   // Load on actor ready — set loading immediately so skeleton shows
+  const newsLoadedRef = useRef(false);
   useEffect(() => {
-    // Wait while actor is initialising
-    if (actorFetching) return;
+    // Wait while actor is initialising — but cap the wait at 8s to avoid infinite spinner
+    if (actorFetching) {
+      const timeout = setTimeout(() => setLoading(false), 8000);
+      return () => clearTimeout(timeout);
+    }
     // Actor finished initialising but is null → no data, stop loading
     if (!actor) {
       setLoading(false);
       return;
     }
+    // Avoid double-fetching
+    if (newsLoadedRef.current) return;
+    newsLoadedRef.current = true;
     // Sync the ref immediately so loadNews can use the latest actor
     actorRef.current = actor;
     setLoading(true);

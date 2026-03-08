@@ -1,8 +1,16 @@
 import type { ExternalBlob } from "@/backend";
-import { type T__1 as BackendTeam, Position, Role } from "@/backend";
+import {
+  type T__5 as BackendMatch,
+  type T__2 as BackendPlayer,
+  type T__1 as BackendTeam,
+  Position,
+} from "@/backend";
 import { MatchCard } from "@/components/shared/MatchCard";
-import { OfficialAccessModal } from "@/components/shared/OfficialAccessModal";
-import { AreaBadge, TeamBadge } from "@/components/shared/TeamBadge";
+import {
+  AreaBadge,
+  TeamBadge,
+  getTeamColor,
+} from "@/components/shared/TeamBadge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,12 +36,6 @@ import {
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  MOCK_MATCHES,
-  MOCK_PLAYERS,
-  MOCK_TEAMS,
-  computeStandings,
-} from "@/data/mockData";
 import { useActor } from "@/hooks/useActor";
 import {
   LSH_SYSTEM_STATUS_KEY,
@@ -43,6 +45,8 @@ import {
   getNewsConfirmations,
   getUserSettings,
 } from "@/utils/localStore";
+import { computeBackendStandings } from "@/utils/standingsUtils";
+
 import { useNavigate } from "@tanstack/react-router";
 import {
   AlertCircle,
@@ -125,6 +129,17 @@ const AREAS = [
   "Lamu Town",
 ] as const;
 
+// Convert backend team to a TeamLike object for TeamBadge
+function toTeamLike(t: BackendTeam) {
+  return {
+    teamId: t.teamId,
+    name: t.name,
+    area: t.area,
+    color: getTeamColor(t.teamId),
+    secondaryColor: "oklch(0.95 0.02 82)",
+  };
+}
+
 export function DashboardPage({
   favoriteTeamId,
   userName,
@@ -132,30 +147,75 @@ export function DashboardPage({
 }: DashboardPageProps) {
   const navigate = useNavigate();
   const { actor } = useActor();
-  const standings = computeStandings();
   const isAdmin = role === "admin";
 
   useEffect(() => {
     document.title = "Lamu Sports Hub | Football League Tables & Teams";
   }, []);
 
-  const favoriteTeam = favoriteTeamId
-    ? MOCK_TEAMS.find((t) => t.teamId === favoriteTeamId)
-    : MOCK_TEAMS[0];
-  const liveMatches = MOCK_MATCHES.filter((m) => m.status === "live");
-  const upcomingMatches = MOCK_MATCHES.filter(
-    (m) => m.status === "scheduled",
-  ).slice(0, 3);
-  const topScorer = [...MOCK_PLAYERS].sort((a, b) => b.goals - a.goals)[0];
-  const topScorerTeam = MOCK_TEAMS.find((t) => t.teamId === topScorer.teamId)!;
+  // Backend data state
+  const [teams, setTeams] = useState<BackendTeam[]>([]);
+  const [matches, setMatches] = useState<BackendMatch[]>([]);
+  const [players, setPlayers] = useState<BackendPlayer[]>([]);
+  const [backendLoading, setBackendLoading] = useState(true);
 
-  const matchOfWeek = MOCK_MATCHES.find((m) => m.matchId === "m-001")!;
-  const motmHome = MOCK_TEAMS.find((t) => t.teamId === matchOfWeek.homeTeamId)!;
-  const motmAway = MOCK_TEAMS.find((t) => t.teamId === matchOfWeek.awayTeamId)!;
+  // Load backend data (teams, matches, players) in parallel
+  useEffect(() => {
+    if (!actor) return;
+    setBackendLoading(true);
+    Promise.all([
+      actor.getAllTeams(),
+      actor.getAllMatches(),
+      actor.getAllPlayers(),
+    ])
+      .then(([t, m, p]) => {
+        setTeams(t);
+        setMatches(m);
+        setPlayers(p);
+      })
+      .catch((err) => console.error("Failed to load dashboard data:", err))
+      .finally(() => setBackendLoading(false));
+  }, [actor]);
 
-  const favStanding = standings.find(
-    (s) => s.team.teamId === favoriteTeam?.teamId,
+  // Derive standings, live/upcoming matches, top scorer from real data
+  const standings = computeBackendStandings(teams, matches);
+  const liveMatches = matches.filter(
+    (m) => m.status?.toString().includes("live") || String(m.status) === "live",
   );
+  const upcomingMatches = matches
+    .filter(
+      (m) =>
+        m.status?.toString().includes("scheduled") ||
+        String(m.status) === "scheduled",
+    )
+    .slice(0, 3);
+  const topScorer = [...players].sort(
+    (a, b) => Number(b.goals) - Number(a.goals),
+  )[0];
+  const topScorerTeam = topScorer
+    ? teams.find((t) => t.teamId === topScorer.teamId)
+    : null;
+  const favoriteTeam = favoriteTeamId
+    ? teams.find((t) => t.teamId === favoriteTeamId)
+    : teams[0];
+  const favStanding = favoriteTeam
+    ? standings.find((s) => s.team.teamId === favoriteTeam.teamId)
+    : null;
+
+  // Most recent played match as "Match of the Week"
+  const matchOfWeek = [...matches]
+    .filter(
+      (m) =>
+        m.status?.toString().includes("played") ||
+        String(m.status) === "played",
+    )
+    .sort((a, b) => Number(b.date) - Number(a.date))[0];
+  const motmHome = matchOfWeek
+    ? teams.find((t) => t.teamId === matchOfWeek.homeTeam)
+    : null;
+  const motmAway = matchOfWeek
+    ? teams.find((t) => t.teamId === matchOfWeek.awayTeam)
+    : null;
 
   // System status banner
   const systemStatus = getLocalStore<SystemStatus>(LSH_SYSTEM_STATUS_KEY, {
@@ -437,12 +497,9 @@ export function DashboardPage({
             transition={{ delay: 0.1 }}
           >
             {liveMatches.map((match) => {
-              const home = MOCK_TEAMS.find(
-                (t) => t.teamId === match.homeTeamId,
-              )!;
-              const away = MOCK_TEAMS.find(
-                (t) => t.teamId === match.awayTeamId,
-              )!;
+              const home = teams.find((t) => t.teamId === match.homeTeam);
+              const away = teams.find((t) => t.teamId === match.awayTeam);
+              if (!home || !away) return null;
               return (
                 <button
                   type="button"
@@ -467,21 +524,21 @@ export function DashboardPage({
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 flex-1">
-                      <TeamBadge team={home} size="sm" />
+                      <TeamBadge team={toTeamLike(home)} size="sm" />
                       <span className="font-bold text-sm text-foreground">
                         {home.name}
                       </span>
                     </div>
                     <div className="px-4">
                       <span className="font-black font-stats text-2xl text-foreground">
-                        {match.homeScore} — {match.awayScore}
+                        {Number(match.homeScore)} — {Number(match.awayScore)}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 flex-1 justify-end">
                       <span className="font-bold text-sm text-foreground">
                         {away.name}
                       </span>
-                      <TeamBadge team={away} size="sm" />
+                      <TeamBadge team={toTeamLike(away)} size="sm" />
                     </div>
                   </div>
                 </button>
@@ -491,7 +548,7 @@ export function DashboardPage({
         )}
 
         {/* Favorite team card */}
-        {favoriteTeam && favStanding && (
+        {favoriteTeam && (
           <motion.div
             initial={{ y: 10, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -515,43 +572,49 @@ export function DashboardPage({
             <div
               className="rounded-xl p-4 border border-border overflow-hidden relative"
               style={{
-                background: `linear-gradient(135deg, ${favoriteTeam.color}33 0%, oklch(0.16 0.04 255) 70%)`,
+                background: `linear-gradient(135deg, ${getTeamColor(favoriteTeam.teamId)}33 0%, oklch(0.16 0.04 255) 70%)`,
               }}
             >
               <div className="flex items-center gap-4">
-                <TeamBadge team={favoriteTeam} size="xl" />
+                <TeamBadge team={toTeamLike(favoriteTeam)} size="xl" />
                 <div className="flex-1">
                   <div className="font-display font-black text-lg text-foreground">
                     {favoriteTeam.name}
                   </div>
                   <AreaBadge area={favoriteTeam.area} className="mt-1" />
                   <div className="flex items-center gap-3 mt-2">
+                    {favStanding && (
+                      <>
+                        <div className="text-center">
+                          <div className="font-black font-stats text-lg text-foreground">
+                            {favStanding.position}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            Position
+                          </div>
+                        </div>
+                        <div className="text-center">
+                          <div className="font-black font-stats text-lg text-foreground">
+                            {favStanding.points}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            Points
+                          </div>
+                        </div>
+                        <div className="text-center">
+                          <div className="font-black font-stats text-lg text-foreground">
+                            {favStanding.goalDiff > 0 ? "+" : ""}
+                            {favStanding.goalDiff}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            GD
+                          </div>
+                        </div>
+                      </>
+                    )}
                     <div className="text-center">
                       <div className="font-black font-stats text-lg text-foreground">
-                        {favStanding.position}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Position
-                      </div>
-                    </div>
-                    <div className="text-center">
-                      <div className="font-black font-stats text-lg text-foreground">
-                        {favStanding.points}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Points
-                      </div>
-                    </div>
-                    <div className="text-center">
-                      <div className="font-black font-stats text-lg text-foreground">
-                        {favStanding.goalDiff > 0 ? "+" : ""}
-                        {favStanding.goalDiff}
-                      </div>
-                      <div className="text-xs text-muted-foreground">GD</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="font-black font-stats text-lg text-foreground">
-                        {favoriteTeam.wins}
+                        {Number(favoriteTeam.wins)}
                       </div>
                       <div className="text-xs text-muted-foreground">Wins</div>
                     </div>
@@ -562,16 +625,17 @@ export function DashboardPage({
           </motion.div>
         )}
 
-        {/* Favourite Player */}
+        {/* Favourite Player — from backend players */}
         {(() => {
           const settings = getUserSettings();
           const favPlayer = settings.favoritePlayerId
-            ? MOCK_PLAYERS.find((p) => p.playerId === settings.favoritePlayerId)
+            ? players.find((p) => p.playerId === settings.favoritePlayerId)
             : null;
           const favPlayerTeam = favPlayer
-            ? MOCK_TEAMS.find((t) => t.teamId === favPlayer.teamId)
+            ? teams.find((t) => t.teamId === favPlayer.teamId)
             : null;
           if (!favPlayer || !favPlayerTeam) return null;
+          const teamColor = getTeamColor(favPlayerTeam.teamId);
           return (
             <motion.div
               initial={{ y: 10, opacity: 0 }}
@@ -599,7 +663,7 @@ export function DashboardPage({
                 type="button"
                 className="w-full rounded-xl p-4 border border-border bg-card hover:border-primary/40 transition-all text-left"
                 style={{
-                  background: `linear-gradient(135deg, ${favPlayerTeam.color}22 0%, oklch(0.16 0.04 255) 70%)`,
+                  background: `linear-gradient(135deg, ${teamColor}22 0%, oklch(0.16 0.04 255) 70%)`,
                 }}
                 onClick={() =>
                   navigate({ to: `/players/${favPlayer.playerId}` })
@@ -610,23 +674,25 @@ export function DashboardPage({
                   <div
                     className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-black font-stats flex-shrink-0"
                     style={{
-                      backgroundColor: favPlayerTeam.color,
-                      color: favPlayerTeam.secondaryColor,
+                      backgroundColor: teamColor,
+                      color: "oklch(0.95 0.02 82)",
                     }}
                   >
-                    {favPlayer.jerseyNumber}
+                    {Number(favPlayer.jerseyNumber)}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-bold text-sm text-foreground">
                       {favPlayer.name}
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      "{favPlayer.nickname}"
-                    </div>
+                    {favPlayer.nickname && (
+                      <div className="text-xs text-muted-foreground">
+                        "{favPlayer.nickname}"
+                      </div>
+                    )}
                     <div className="flex items-center gap-1.5 mt-1">
-                      <TeamBadge team={favPlayerTeam} size="xs" />
+                      <TeamBadge team={toTeamLike(favPlayerTeam)} size="xs" />
                       <span className="text-xs text-muted-foreground capitalize">
-                        {favPlayer.position}
+                        {String(favPlayer.position)}
                       </span>
                     </div>
                   </div>
@@ -636,7 +702,7 @@ export function DashboardPage({
                         className="font-black font-stats text-xl"
                         style={{ color: "oklch(0.6 0.22 24)" }}
                       >
-                        {favPlayer.goals}
+                        {Number(favPlayer.goals)}
                       </div>
                       <div className="text-[10px] text-muted-foreground">
                         Goals
@@ -644,7 +710,7 @@ export function DashboardPage({
                     </div>
                     <div>
                       <div className="font-black font-stats text-xl text-primary">
-                        {favPlayer.assists}
+                        {Number(favPlayer.assists)}
                       </div>
                       <div className="text-[10px] text-muted-foreground">
                         Assists
@@ -686,125 +752,163 @@ export function DashboardPage({
               <span className="text-center">GD</span>
               <span className="text-center">Pts</span>
             </div>
-            {standings.slice(0, 5).map((entry, i) => (
-              <button
-                type="button"
-                key={entry.team.teamId}
-                className={`w-full grid grid-cols-[24px_1fr_24px_24px_24px_32px] gap-x-2 px-3 py-2.5 items-center border-b border-border/50 last:border-0 hover:bg-muted/20 cursor-pointer transition-colors text-left ${
-                  i < 2 ? "zone-champions" : ""
-                }`}
-                onClick={() => navigate({ to: `/teams/${entry.team.teamId}` })}
-              >
-                <span className="text-xs font-bold text-muted-foreground">
-                  {entry.position}
-                </span>
-                <div className="flex items-center gap-2 min-w-0">
-                  <TeamBadge team={entry.team} size="xs" />
-                  <span className="text-xs font-semibold text-foreground truncate">
-                    {entry.team.name}
-                  </span>
-                </div>
-                <span className="text-xs text-center text-muted-foreground">
-                  {entry.played}
-                </span>
-                <span className="text-xs text-center font-semibold text-green-400">
-                  {entry.wins}
-                </span>
-                <span
-                  className={`text-xs text-center font-semibold ${entry.goalDiff >= 0 ? "text-foreground" : "text-red-400"}`}
+            {backendLoading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <div
+                  // biome-ignore lint/suspicious/noArrayIndexKey: skeleton rows
+                  key={i}
+                  className="px-3 py-2.5 border-b border-border/50 last:border-0 animate-pulse"
                 >
-                  {entry.goalDiff > 0 ? "+" : ""}
-                  {entry.goalDiff}
-                </span>
-                <span className="text-xs font-black text-center text-foreground">
-                  {entry.points}
-                </span>
-              </button>
-            ))}
+                  <div className="h-4 bg-muted/40 rounded w-full" />
+                </div>
+              ))
+            ) : standings.length === 0 ? (
+              <div
+                className="px-3 py-6 text-center text-xs text-muted-foreground"
+                data-ocid="dashboard.standings.empty_state"
+              >
+                No teams in the league yet.
+              </div>
+            ) : (
+              standings.slice(0, 5).map((entry, i) => (
+                <button
+                  type="button"
+                  key={entry.team.teamId}
+                  className={`w-full grid grid-cols-[24px_1fr_24px_24px_24px_32px] gap-x-2 px-3 py-2.5 items-center border-b border-border/50 last:border-0 hover:bg-muted/20 cursor-pointer transition-colors text-left ${
+                    i < 2 ? "zone-champions" : ""
+                  }`}
+                  onClick={() =>
+                    navigate({ to: `/teams/${entry.team.teamId}` })
+                  }
+                >
+                  <span className="text-xs font-bold text-muted-foreground">
+                    {entry.position}
+                  </span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <TeamBadge team={entry.team} size="xs" />
+                    <span className="text-xs font-semibold text-foreground truncate">
+                      {entry.team.name}
+                    </span>
+                  </div>
+                  <span className="text-xs text-center text-muted-foreground">
+                    {entry.played}
+                  </span>
+                  <span className="text-xs text-center font-semibold text-green-400">
+                    {entry.wins}
+                  </span>
+                  <span
+                    className={`text-xs text-center font-semibold ${entry.goalDiff >= 0 ? "text-foreground" : "text-red-400"}`}
+                  >
+                    {entry.goalDiff > 0 ? "+" : ""}
+                    {entry.goalDiff}
+                  </span>
+                  <span className="text-xs font-black text-center text-foreground">
+                    {entry.points}
+                  </span>
+                </button>
+              ))
+            )}
           </div>
         </motion.div>
 
-        {/* Player of the Week */}
-        <motion.div
-          initial={{ y: 10, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.25 }}
-        >
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide flex items-center gap-1.5">
-              <Star className="w-4 h-4 text-yellow-400" />
-              Top Scorer
-            </h2>
-          </div>
-          <div
-            className="rounded-xl p-4 border border-border relative overflow-hidden"
-            style={{
-              background: `linear-gradient(135deg, ${topScorerTeam.color}25 0%, oklch(0.16 0.04 255) 70%)`,
-            }}
+        {/* Top Scorer */}
+        {topScorer && topScorerTeam && (
+          <motion.div
+            initial={{ y: 10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.25 }}
           >
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide flex items-center gap-1.5">
+                <Star className="w-4 h-4 text-yellow-400" />
+                Top Scorer
+              </h2>
+            </div>
             <div
-              className="absolute top-2 right-2 text-5xl font-black font-stats opacity-10"
-              style={{ color: topScorerTeam.secondaryColor }}
+              className="rounded-xl p-4 border border-border relative overflow-hidden"
+              style={{
+                background: `linear-gradient(135deg, ${getTeamColor(topScorerTeam.teamId)}25 0%, oklch(0.16 0.04 255) 70%)`,
+              }}
             >
-              {topScorer.jerseyNumber}
-            </div>
-            <div className="flex items-center gap-4">
-              <div
-                className="w-14 h-14 rounded-full flex items-center justify-center text-xl font-black font-stats border-2"
-                style={{
-                  backgroundColor: topScorerTeam.color,
-                  color: topScorerTeam.secondaryColor,
-                  borderColor: `${topScorerTeam.secondaryColor}66`,
-                }}
-              >
-                {topScorer.jerseyNumber}
+              <div className="absolute top-2 right-2 text-5xl font-black font-stats opacity-10 text-foreground">
+                {Number(topScorer.jerseyNumber)}
               </div>
-              <div className="flex-1">
-                <div className="font-bold text-foreground">
-                  {topScorer.name}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  "{topScorer.nickname}"
-                </div>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <TeamBadge team={topScorerTeam} size="xs" />
-                  <span className="text-xs text-muted-foreground">
-                    {topScorerTeam.name}
-                  </span>
-                </div>
-              </div>
-              <div className="text-right">
+              <div className="flex items-center gap-4">
                 <div
-                  className="font-black font-stats text-4xl"
-                  style={{ color: "oklch(0.6 0.22 24)" }}
+                  className="w-14 h-14 rounded-full flex items-center justify-center text-xl font-black font-stats border-2"
+                  style={{
+                    backgroundColor: getTeamColor(topScorerTeam.teamId),
+                    color: "oklch(0.95 0.02 82)",
+                    borderColor: "oklch(0.95 0.02 82 / 0.4)",
+                  }}
                 >
-                  {topScorer.goals}
+                  {Number(topScorer.jerseyNumber)}
                 </div>
-                <div className="text-xs text-muted-foreground">goals</div>
+                <div className="flex-1">
+                  <div className="font-bold text-foreground">
+                    {topScorer.name}
+                  </div>
+                  {topScorer.nickname && (
+                    <div className="text-xs text-muted-foreground">
+                      "{topScorer.nickname}"
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <TeamBadge team={toTeamLike(topScorerTeam)} size="xs" />
+                    <span className="text-xs text-muted-foreground">
+                      {topScorerTeam.name}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div
+                    className="font-black font-stats text-4xl"
+                    style={{ color: "oklch(0.6 0.22 24)" }}
+                  >
+                    {Number(topScorer.goals)}
+                  </div>
+                  <div className="text-xs text-muted-foreground">goals</div>
+                </div>
               </div>
             </div>
-          </div>
-        </motion.div>
+          </motion.div>
+        )}
 
         {/* Match of the Week */}
-        <motion.div
-          initial={{ y: 10, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.3 }}
-        >
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide flex items-center gap-1.5">
-              <Zap className="w-4 h-4 text-accent" />
-              Match of the Week
-            </h2>
-          </div>
-          <MatchCard
-            match={matchOfWeek}
-            homeTeam={motmHome}
-            awayTeam={motmAway}
-            onClick={() => navigate({ to: `/matchday/${matchOfWeek.matchId}` })}
-          />
-        </motion.div>
+        {matchOfWeek && motmHome && motmAway && (
+          <motion.div
+            initial={{ y: 10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.3 }}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide flex items-center gap-1.5">
+                <Zap className="w-4 h-4 text-accent" />
+                Recent Match
+              </h2>
+            </div>
+            <MatchCard
+              match={{
+                matchId: matchOfWeek.matchId,
+                homeTeamId: matchOfWeek.homeTeam,
+                awayTeamId: matchOfWeek.awayTeam,
+                homeScore: Number(matchOfWeek.homeScore),
+                awayScore: Number(matchOfWeek.awayScore),
+                date: String(matchOfWeek.kickoffTime || ""),
+                status: String(matchOfWeek.status) as
+                  | "scheduled"
+                  | "live"
+                  | "played",
+                commentary: [],
+              }}
+              homeTeam={toTeamLike(motmHome) as any}
+              awayTeam={toTeamLike(motmAway) as any}
+              onClick={() =>
+                navigate({ to: `/matchday/${matchOfWeek.matchId}` })
+              }
+            />
+          </motion.div>
+        )}
 
         {/* Latest News */}
         <motion.div
@@ -971,18 +1075,27 @@ export function DashboardPage({
             </div>
             <div className="space-y-2">
               {upcomingMatches.map((match) => {
-                const home = MOCK_TEAMS.find(
-                  (t) => t.teamId === match.homeTeamId,
-                )!;
-                const away = MOCK_TEAMS.find(
-                  (t) => t.teamId === match.awayTeamId,
-                )!;
+                const home = teams.find((t) => t.teamId === match.homeTeam);
+                const away = teams.find((t) => t.teamId === match.awayTeam);
+                if (!home || !away) return null;
                 return (
                   <MatchCard
                     key={match.matchId}
-                    match={match}
-                    homeTeam={home}
-                    awayTeam={away}
+                    match={{
+                      matchId: match.matchId,
+                      homeTeamId: match.homeTeam,
+                      awayTeamId: match.awayTeam,
+                      homeScore: Number(match.homeScore),
+                      awayScore: Number(match.awayScore),
+                      date: String(match.kickoffTime || ""),
+                      status: String(match.status) as
+                        | "scheduled"
+                        | "live"
+                        | "played",
+                      commentary: [],
+                    }}
+                    homeTeam={toTeamLike(home) as any}
+                    awayTeam={toTeamLike(away) as any}
                     compact
                     onClick={() => navigate({ to: "/matches" })}
                   />
@@ -1160,7 +1273,7 @@ function DashboardAddTeamDialog({
     }
     setLoading(true);
     try {
-      await actor?.createTeam(name.trim(), area);
+      await actor?.adminCreateTeam(name.trim(), area, "");
       toast.success(`${name} registered!`);
       reset();
       onOpenChange(false);

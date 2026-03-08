@@ -1,16 +1,16 @@
-import { TeamBadge } from "@/components/shared/TeamBadge";
+import type {
+  T__5 as BackendMatch,
+  T__2 as BackendPlayer,
+  T__1 as BackendTeam,
+} from "@/backend";
+import { TeamBadge, getTeamColor } from "@/components/shared/TeamBadge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  MOCK_PLAYERS,
-  MOCK_TEAMS,
-  computeStandings,
-  getTopAssists,
-  getTopScorers,
-} from "@/data/mockData";
+import { useActor } from "@/hooks/useActor";
+import { computeBackendStandings } from "@/utils/standingsUtils";
 import { useNavigate } from "@tanstack/react-router";
-import { AlertTriangle, Target, Trophy, Zap } from "lucide-react";
+import { AlertTriangle, Loader2, Target, Trophy, Zap } from "lucide-react";
 import { motion } from "motion/react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 function MedalBadge({ rank }: { rank: number }) {
   if (rank === 1) return <span className="text-base">🥇</span>;
@@ -23,27 +23,85 @@ function MedalBadge({ rank }: { rank: number }) {
   );
 }
 
+function EmptyLeaderboard() {
+  return (
+    <div
+      className="rounded-xl border border-border bg-card py-12 flex flex-col items-center gap-3 text-center"
+      data-ocid="leaderboard.empty_state"
+    >
+      <Trophy className="w-10 h-10 text-muted-foreground/30" />
+      <p className="text-sm text-muted-foreground">
+        No data yet. Stats will appear once players are registered and matches
+        are played.
+      </p>
+    </div>
+  );
+}
+
 export function LeaderboardPage() {
   const navigate = useNavigate();
-  const topScorers = getTopScorers();
-  const topAssists = getTopAssists();
-  const standings = computeStandings();
+  const { actor } = useActor();
+
+  const [teams, setTeams] = useState<BackendTeam[]>([]);
+  const [players, setPlayers] = useState<BackendPlayer[]>([]);
+  const [matches, setMatches] = useState<BackendMatch[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     document.title =
       "Top Scorers & Leaderboard – Lamu Sports Hub | Lamu Football Stats";
   }, []);
 
-  const cardPlayers = [...MOCK_PLAYERS]
-    .sort(
-      (a, b) =>
-        b.yellowCards + b.redCards * 3 - (a.yellowCards + a.redCards * 3),
-    )
-    .slice(0, 10)
+  useEffect(() => {
+    if (!actor) return;
+    setLoading(true);
+    Promise.all([
+      actor.getAllPlayers(),
+      actor.getAllTeams(),
+      actor.getAllMatches(),
+    ])
+      .then(([p, t, m]) => {
+        setPlayers(p);
+        setTeams(t);
+        setMatches(m);
+      })
+      .catch((err) => console.error("Failed to load leaderboard data:", err))
+      .finally(() => setLoading(false));
+  }, [actor]);
+
+  const standings = computeBackendStandings(teams, matches);
+
+  // Sort helpers
+  const topScorers = [...players]
+    .sort((a, b) => Number(b.goals) - Number(a.goals))
+    .slice(0, 15)
     .map((p, i) => ({
       rank: i + 1,
       player: p,
-      team: MOCK_TEAMS.find((t) => t.teamId === p.teamId)!,
+      team: teams.find((t) => t.teamId === p.teamId),
+    }));
+
+  const topAssists = [...players]
+    .sort((a, b) => Number(b.assists) - Number(a.assists))
+    .slice(0, 15)
+    .map((p, i) => ({
+      rank: i + 1,
+      player: p,
+      team: teams.find((t) => t.teamId === p.teamId),
+    }));
+
+  const cardPlayers = [...players]
+    .sort(
+      (a, b) =>
+        Number(b.redCards) * 2 +
+        Number(b.yellowCards) -
+        (Number(a.redCards) * 2 + Number(a.yellowCards)),
+    )
+    .slice(0, 15)
+    .map((p, i) => ({
+      rank: i + 1,
+      player: p,
+      team: teams.find((t) => t.teamId === p.teamId),
     }));
 
   return (
@@ -65,7 +123,7 @@ export function LeaderboardPage() {
             Leaderboards
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Season 2025/26 Rankings
+            Season Rankings
           </p>
         </motion.div>
       </div>
@@ -95,237 +153,340 @@ export function LeaderboardPage() {
 
         {/* Top Scorers */}
         <TabsContent value="scorers">
-          <div className="space-y-2" data-ocid="leaderboard.list">
-            {topScorers.map((entry, i) => (
-              <motion.div
-                key={entry.player.playerId}
-                initial={{ x: -20, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                transition={{ delay: i * 0.04 }}
-                data-ocid={`leaderboard.item.${i + 1}`}
-              >
-                <button
-                  type="button"
-                  className="w-full rounded-xl border border-border bg-card hover:border-primary/40 transition-all p-3 flex items-center gap-3 text-left"
-                  onClick={() =>
-                    navigate({ to: `/players/${entry.player.playerId}` })
-                  }
-                  style={
-                    i < 3
-                      ? {
-                          background:
-                            i === 0
-                              ? "linear-gradient(135deg, oklch(0.82 0.15 85 / 0.12) 0%, oklch(0.16 0.04 255) 100%)"
-                              : i === 1
-                                ? "linear-gradient(135deg, oklch(0.75 0 0 / 0.12) 0%, oklch(0.16 0.04 255) 100%)"
-                                : "linear-gradient(135deg, oklch(0.65 0.12 45 / 0.12) 0%, oklch(0.16 0.04 255) 100%)",
-                        }
-                      : undefined
-                  }
-                >
-                  <MedalBadge rank={entry.rank} />
-                  <div
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-black font-stats border-2 flex-shrink-0"
-                    style={{
-                      backgroundColor: entry.team.color,
-                      color: entry.team.secondaryColor,
-                      borderColor: `${entry.team.secondaryColor}66`,
-                    }}
+          {loading ? (
+            <div
+              className="flex items-center justify-center py-12 gap-2 text-muted-foreground"
+              data-ocid="leaderboard.loading_state"
+            >
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-sm">Loading...</span>
+            </div>
+          ) : topScorers.length === 0 ||
+            Number(topScorers[0]?.player.goals) === 0 ? (
+            <EmptyLeaderboard />
+          ) : (
+            <div className="space-y-2" data-ocid="leaderboard.list">
+              {topScorers.map((entry, i) => {
+                const teamColor = entry.team
+                  ? getTeamColor(entry.team.teamId)
+                  : "oklch(0.4 0.06 255)";
+                return (
+                  <motion.div
+                    key={entry.player.playerId}
+                    initial={{ x: -20, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ delay: i * 0.04 }}
+                    data-ocid={`leaderboard.item.${i + 1}`}
                   >
-                    {entry.player.jerseyNumber}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-bold text-sm text-foreground truncate">
-                        {entry.player.name}
-                      </span>
-                      {entry.player.isVerified && (
-                        <span className="text-yellow-400 flex-shrink-0">
-                          ⭐
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <TeamBadge team={entry.team} size="xs" />
-                      <span className="text-xs text-muted-foreground">
-                        {entry.team.name}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <div className="font-black font-stats text-2xl text-green-400">
-                      {entry.player.goals}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground">
-                      goals
-                    </div>
-                  </div>
-                </button>
-              </motion.div>
-            ))}
-          </div>
+                    <button
+                      type="button"
+                      className="w-full rounded-xl border border-border bg-card hover:border-primary/40 transition-all p-3 flex items-center gap-3 text-left"
+                      onClick={() =>
+                        navigate({ to: `/players/${entry.player.playerId}` })
+                      }
+                      style={
+                        i < 3
+                          ? {
+                              background:
+                                i === 0
+                                  ? "linear-gradient(135deg, oklch(0.82 0.15 85 / 0.12) 0%, oklch(0.16 0.04 255) 100%)"
+                                  : i === 1
+                                    ? "linear-gradient(135deg, oklch(0.75 0 0 / 0.12) 0%, oklch(0.16 0.04 255) 100%)"
+                                    : "linear-gradient(135deg, oklch(0.65 0.12 45 / 0.12) 0%, oklch(0.16 0.04 255) 100%)",
+                            }
+                          : undefined
+                      }
+                    >
+                      <MedalBadge rank={entry.rank} />
+                      <div
+                        className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-black font-stats border-2 flex-shrink-0"
+                        style={{
+                          backgroundColor: teamColor,
+                          color: "oklch(0.95 0.02 82)",
+                          borderColor: "oklch(0.95 0.02 82 / 0.4)",
+                        }}
+                      >
+                        {Number(entry.player.jerseyNumber)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-sm text-foreground truncate">
+                            {entry.player.name}
+                          </span>
+                          {entry.player.isVerified && (
+                            <span className="text-yellow-400 flex-shrink-0">
+                              ⭐
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {entry.team && (
+                            <>
+                              <TeamBadge
+                                team={{
+                                  teamId: entry.team.teamId,
+                                  name: entry.team.name,
+                                  area: entry.team.area,
+                                  color: teamColor,
+                                }}
+                                size="xs"
+                              />
+                              <span className="text-xs text-muted-foreground">
+                                {entry.team.name}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <div className="font-black font-stats text-2xl text-green-400">
+                          {Number(entry.player.goals)}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          goals
+                        </div>
+                      </div>
+                    </button>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
         </TabsContent>
 
         {/* Assists */}
         <TabsContent value="assists">
-          <div className="space-y-2" data-ocid="leaderboard.list">
-            {topAssists.map((entry, i) => (
-              <motion.div
-                key={entry.player.playerId}
-                initial={{ x: -20, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                transition={{ delay: i * 0.04 }}
-                data-ocid={`leaderboard.item.${i + 1}`}
-              >
-                <button
-                  type="button"
-                  className="w-full rounded-xl border border-border bg-card hover:border-primary/40 transition-all p-3 flex items-center gap-3 text-left"
-                  onClick={() =>
-                    navigate({ to: `/players/${entry.player.playerId}` })
-                  }
-                >
-                  <MedalBadge rank={entry.rank} />
-                  <div
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-black font-stats border-2 flex-shrink-0"
-                    style={{
-                      backgroundColor: entry.team.color,
-                      color: entry.team.secondaryColor,
-                      borderColor: `${entry.team.secondaryColor}66`,
-                    }}
+          {loading ? (
+            <div
+              className="flex items-center justify-center py-12 gap-2 text-muted-foreground"
+              data-ocid="leaderboard.loading_state"
+            >
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-sm">Loading...</span>
+            </div>
+          ) : topAssists.length === 0 ||
+            Number(topAssists[0]?.player.assists) === 0 ? (
+            <EmptyLeaderboard />
+          ) : (
+            <div className="space-y-2" data-ocid="leaderboard.list">
+              {topAssists.map((entry, i) => {
+                const teamColor = entry.team
+                  ? getTeamColor(entry.team.teamId)
+                  : "oklch(0.4 0.06 255)";
+                return (
+                  <motion.div
+                    key={entry.player.playerId}
+                    initial={{ x: -20, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ delay: i * 0.04 }}
+                    data-ocid={`leaderboard.item.${i + 1}`}
                   >
-                    {entry.player.jerseyNumber}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-bold text-sm text-foreground truncate">
-                      {entry.player.name}
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <TeamBadge team={entry.team} size="xs" />
-                      <span className="text-xs text-muted-foreground">
-                        {entry.team.name}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <div className="font-black font-stats text-2xl text-blue-400">
-                      {entry.player.assists}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground">
-                      assists
-                    </div>
-                  </div>
-                </button>
-              </motion.div>
-            ))}
-          </div>
+                    <button
+                      type="button"
+                      className="w-full rounded-xl border border-border bg-card hover:border-primary/40 transition-all p-3 flex items-center gap-3 text-left"
+                      onClick={() =>
+                        navigate({ to: `/players/${entry.player.playerId}` })
+                      }
+                    >
+                      <MedalBadge rank={entry.rank} />
+                      <div
+                        className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-black font-stats border-2 flex-shrink-0"
+                        style={{
+                          backgroundColor: teamColor,
+                          color: "oklch(0.95 0.02 82)",
+                          borderColor: "oklch(0.95 0.02 82 / 0.4)",
+                        }}
+                      >
+                        {Number(entry.player.jerseyNumber)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-bold text-sm text-foreground truncate">
+                          {entry.player.name}
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {entry.team && (
+                            <>
+                              <TeamBadge
+                                team={{
+                                  teamId: entry.team.teamId,
+                                  name: entry.team.name,
+                                  area: entry.team.area,
+                                  color: teamColor,
+                                }}
+                                size="xs"
+                              />
+                              <span className="text-xs text-muted-foreground">
+                                {entry.team.name}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <div className="font-black font-stats text-2xl text-blue-400">
+                          {Number(entry.player.assists)}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          assists
+                        </div>
+                      </div>
+                    </button>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
         </TabsContent>
 
         {/* Cards */}
         <TabsContent value="cards">
-          <div className="space-y-2" data-ocid="leaderboard.list">
-            {cardPlayers.map((entry, i) => (
-              <motion.div
-                key={entry.player.playerId}
-                initial={{ x: -20, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                transition={{ delay: i * 0.04 }}
-                data-ocid={`leaderboard.item.${i + 1}`}
-              >
-                <button
-                  type="button"
-                  className="w-full rounded-xl border border-border bg-card p-3 flex items-center gap-3 text-left"
-                  onClick={() =>
-                    navigate({ to: `/players/${entry.player.playerId}` })
-                  }
-                >
-                  <span className="text-sm font-bold text-muted-foreground w-6 text-center">
-                    {entry.rank}
-                  </span>
-                  <div
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-black font-stats border-2 flex-shrink-0"
-                    style={{
-                      backgroundColor: entry.team.color,
-                      color: entry.team.secondaryColor,
-                      borderColor: `${entry.team.secondaryColor}66`,
-                    }}
+          {loading ? (
+            <div
+              className="flex items-center justify-center py-12 gap-2 text-muted-foreground"
+              data-ocid="leaderboard.loading_state"
+            >
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-sm">Loading...</span>
+            </div>
+          ) : cardPlayers.length === 0 ? (
+            <EmptyLeaderboard />
+          ) : (
+            <div className="space-y-2" data-ocid="leaderboard.list">
+              {cardPlayers.map((entry, i) => {
+                const teamColor = entry.team
+                  ? getTeamColor(entry.team.teamId)
+                  : "oklch(0.4 0.06 255)";
+                return (
+                  <motion.div
+                    key={entry.player.playerId}
+                    initial={{ x: -20, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ delay: i * 0.04 }}
+                    data-ocid={`leaderboard.item.${i + 1}`}
                   >
-                    {entry.player.jerseyNumber}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-bold text-sm text-foreground truncate">
-                      {entry.player.name}
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <TeamBadge team={entry.team} size="xs" />
-                      <span className="text-xs text-muted-foreground">
-                        {entry.team.name}
+                    <button
+                      type="button"
+                      className="w-full rounded-xl border border-border bg-card p-3 flex items-center gap-3 text-left"
+                      onClick={() =>
+                        navigate({ to: `/players/${entry.player.playerId}` })
+                      }
+                    >
+                      <span className="text-sm font-bold text-muted-foreground w-6 text-center">
+                        {entry.rank}
                       </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <div className="flex flex-col items-center">
-                      <div className="font-black font-stats text-lg text-yellow-400">
-                        {entry.player.yellowCards}
+                      <div
+                        className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-black font-stats border-2 flex-shrink-0"
+                        style={{
+                          backgroundColor: teamColor,
+                          color: "oklch(0.95 0.02 82)",
+                          borderColor: "oklch(0.95 0.02 82 / 0.4)",
+                        }}
+                      >
+                        {Number(entry.player.jerseyNumber)}
                       </div>
-                      <div className="text-[9px] text-muted-foreground">YC</div>
-                    </div>
-                    {entry.player.redCards > 0 && (
-                      <div className="flex flex-col items-center">
-                        <div className="font-black font-stats text-lg text-red-500">
-                          {entry.player.redCards}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-bold text-sm text-foreground truncate">
+                          {entry.player.name}
                         </div>
-                        <div className="text-[9px] text-muted-foreground">
-                          RC
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {entry.team && (
+                            <>
+                              <TeamBadge
+                                team={{
+                                  teamId: entry.team.teamId,
+                                  name: entry.team.name,
+                                  area: entry.team.area,
+                                  color: teamColor,
+                                }}
+                                size="xs"
+                              />
+                              <span className="text-xs text-muted-foreground">
+                                {entry.team.name}
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
-                    )}
-                  </div>
-                </button>
-              </motion.div>
-            ))}
-          </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex flex-col items-center">
+                          <div className="font-black font-stats text-lg text-yellow-400">
+                            {Number(entry.player.yellowCards)}
+                          </div>
+                          <div className="text-[9px] text-muted-foreground">
+                            YC
+                          </div>
+                        </div>
+                        {Number(entry.player.redCards) > 0 && (
+                          <div className="flex flex-col items-center">
+                            <div className="font-black font-stats text-lg text-red-500">
+                              {Number(entry.player.redCards)}
+                            </div>
+                            <div className="text-[9px] text-muted-foreground">
+                              RC
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
         </TabsContent>
 
         {/* Team Rankings */}
         <TabsContent value="teams">
-          <div className="space-y-2" data-ocid="leaderboard.list">
-            {standings.map((entry, i) => (
-              <motion.div
-                key={entry.team.teamId}
-                initial={{ x: -20, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                transition={{ delay: i * 0.04 }}
-                data-ocid={`leaderboard.item.${i + 1}`}
-              >
-                <button
-                  type="button"
-                  className="w-full rounded-xl border border-border bg-card hover:border-primary/40 transition-all p-3 flex items-center gap-3 text-left"
-                  onClick={() =>
-                    navigate({ to: `/teams/${entry.team.teamId}` })
-                  }
+          {loading ? (
+            <div
+              className="flex items-center justify-center py-12 gap-2 text-muted-foreground"
+              data-ocid="leaderboard.loading_state"
+            >
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-sm">Loading...</span>
+            </div>
+          ) : standings.length === 0 ? (
+            <EmptyLeaderboard />
+          ) : (
+            <div className="space-y-2" data-ocid="leaderboard.list">
+              {standings.map((entry, i) => (
+                <motion.div
+                  key={entry.team.teamId}
+                  initial={{ x: -20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: i * 0.04 }}
+                  data-ocid={`leaderboard.item.${i + 1}`}
                 >
-                  <MedalBadge rank={entry.position} />
-                  <TeamBadge team={entry.team} size="sm" />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-bold text-sm text-foreground">
-                      {entry.team.name}
+                  <button
+                    type="button"
+                    className="w-full rounded-xl border border-border bg-card hover:border-primary/40 transition-all p-3 flex items-center gap-3 text-left"
+                    onClick={() =>
+                      navigate({ to: `/teams/${entry.team.teamId}` })
+                    }
+                  >
+                    <MedalBadge rank={entry.position} />
+                    <TeamBadge team={entry.team} size="sm" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold text-sm text-foreground">
+                        {entry.team.name}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {entry.wins}W · {entry.draws}D · {entry.losses}L
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {entry.wins}W · {entry.draws}D · {entry.losses}L
+                    <div className="text-right flex-shrink-0">
+                      <div className="font-black font-stats text-2xl text-foreground">
+                        {entry.points}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">
+                        points
+                      </div>
                     </div>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <div className="font-black font-stats text-2xl text-foreground">
-                      {entry.points}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground">
-                      points
-                    </div>
-                  </div>
-                </button>
-              </motion.div>
-            ))}
-          </div>
+                  </button>
+                </motion.div>
+              ))}
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>

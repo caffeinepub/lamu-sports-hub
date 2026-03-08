@@ -28,13 +28,8 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  MOCK_MATCHES,
-  MOCK_PLAYERS,
-  MOCK_TEAMS,
-  type MockMatch,
-  type MockTeam,
-} from "@/data/mockData";
+
+import { type T__5 as BackendMatch, Status } from "@/backend";
 import { useActor } from "@/hooks/useActor";
 import { isOfficialSessionVerified } from "@/utils/localStore";
 import {
@@ -119,44 +114,6 @@ type MockUser = {
   area: string;
   email: string;
 };
-
-const MOCK_USERS = [
-  {
-    userId: "u-001",
-    name: "Hassan Mwende",
-    role: "player",
-    area: "Shela",
-    email: "hassan@lamu.ke",
-  },
-  {
-    userId: "u-002",
-    name: "Omar Kiprotich",
-    role: "coach",
-    area: "Hindi",
-    email: "omar@lamu.ke",
-  },
-  {
-    userId: "u-003",
-    name: "Amani Juma",
-    role: "fan",
-    area: "Mkunguni",
-    email: "amani@lamu.ke",
-  },
-  {
-    userId: "u-004",
-    name: "Fatuma Hassan",
-    role: "fan",
-    area: "Langoni",
-    email: "fatuma@lamu.ke",
-  },
-  {
-    userId: "u-005",
-    name: "Ali Hassan",
-    role: "admin",
-    area: "Lamu Town",
-    email: "ali@lamu.ke",
-  },
-];
 
 const AREAS = ["Shela", "Hindi", "Mkunguni", "Langoni", "Mkomani", "Lamu Town"];
 
@@ -318,17 +275,24 @@ function AdminPanelInner() {
   const [editUserRole, setEditUserRole] = useState("");
   const [editUserArea, setEditUserArea] = useState("");
 
-  const [editingTeam, setEditingTeam] = useState<MockTeam | null>(null);
+  const [editingTeam, setEditingTeam] = useState<BackendTeam | null>(null);
   const [editTeamName, setEditTeamName] = useState("");
   const [editTeamArea, setEditTeamArea] = useState("");
 
-  const [editingMatch, setEditingMatch] = useState<MockMatch | null>(null);
+  const [editingMatch, setEditingMatch] = useState<BackendMatch | null>(null);
   const [editHomeScore, setEditHomeScore] = useState("");
   const [editAwayScore, setEditAwayScore] = useState("");
   const [editMatchStatus, setEditMatchStatus] = useState<
     "scheduled" | "live" | "played"
   >("scheduled");
   const [editMatchRefereeId, setEditMatchRefereeId] = useState<string>("");
+  // Real backend matches for the matches tab
+  const [backendMatches, setBackendMatches] = useState<BackendMatch[]>([]);
+  const [backendMatchesLoading, setBackendMatchesLoading] = useState(false);
+
+  // Real backend users for the users tab
+  const [backendUsers, setBackendUsers] = useState<MockUser[]>([]);
+  const [backendUsersLoading, setBackendUsersLoading] = useState(false);
 
   // Match referee assignments from localStorage
   const [matchReferees, setMatchRefereesState] =
@@ -379,7 +343,6 @@ function AdminPanelInner() {
     useState<Record<string, NewsConfirmation>>(getNewsConfirmations);
 
   // Load real backend teams whenever the matches tab is active or create-match dialog opens
-  // biome-ignore lint/correctness/useExhaustiveDependencies: showCreateMatch is intentional
   useEffect(() => {
     if (!actor) return;
     if (activeTab !== "matches" && !showCreateMatch) return;
@@ -390,6 +353,59 @@ function AdminPanelInner() {
       .catch((err) => console.error("Failed to load teams for match:", err))
       .finally(() => setBackendTeamsForMatchLoading(false));
   }, [actor, activeTab, showCreateMatch]);
+
+  // Load real backend matches when matches tab is active
+  const fetchMatches = async () => {
+    if (!actor) return;
+    setBackendMatchesLoading(true);
+    try {
+      const m = await actor.getAllMatches();
+      setBackendMatches(m);
+    } catch (err) {
+      console.error("Failed to load matches:", err);
+    } finally {
+      setBackendMatchesLoading(false);
+    }
+  };
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: activeTab is intentional
+  useEffect(() => {
+    if (activeTab === "matches" && actor) {
+      fetchMatches();
+      // Also load teams for the matches list display
+      if (backendTeamsForMatch.length === 0) {
+        setBackendTeamsForMatchLoading(true);
+        actor
+          .getAllTeams()
+          .then((teams) => setBackendTeamsForMatch(teams))
+          .catch((err) => console.error("Failed to load teams:", err))
+          .finally(() => setBackendTeamsForMatchLoading(false));
+      }
+    }
+  }, [activeTab, actor]);
+
+  // Load real users from backend when users tab is active
+  // biome-ignore lint/correctness/useExhaustiveDependencies: activeTab is intentional
+  useEffect(() => {
+    if (activeTab === "users" && actor) {
+      setBackendUsersLoading(true);
+      actor
+        .getAllUserProfiles()
+        .then((profiles) => {
+          setBackendUsers(
+            profiles.map((p) => ({
+              userId: p.userId,
+              name: p.name || "(no name)",
+              role: p.role as string,
+              area: p.area || "",
+              email: p.email || "",
+            })),
+          );
+        })
+        .catch((err) => console.error("Failed to load users:", err))
+        .finally(() => setBackendUsersLoading(false));
+    }
+  }, [activeTab, actor]);
 
   const handleConfirmNews = (newsId: string) => {
     confirmNews(newsId, "Admin");
@@ -453,7 +469,7 @@ function AdminPanelInner() {
     toast.success(`${editUserName}'s profile updated!`);
   };
 
-  const openEditTeam = (team: MockTeam) => {
+  const openEditTeam = (team: BackendTeam) => {
     setEditingTeam(team);
     setEditTeamName(team.name);
     setEditTeamArea(team.area);
@@ -467,27 +483,50 @@ function AdminPanelInner() {
     toast.success(`${editTeamName} updated successfully!`);
   };
 
-  const openEditMatch = (match: MockMatch) => {
+  const openEditMatch = (match: BackendMatch) => {
     setEditingMatch(match);
-    setEditHomeScore(String(match.homeScore));
-    setEditAwayScore(String(match.awayScore));
-    setEditMatchStatus(match.status);
+    setEditHomeScore(String(Number(match.homeScore)));
+    setEditAwayScore(String(Number(match.awayScore)));
+    // Convert backend status to string key
+    const statusStr = String(match.status);
+    const s = statusStr.includes("live")
+      ? "live"
+      : statusStr.includes("played")
+        ? "played"
+        : "scheduled";
+    setEditMatchStatus(s);
     setEditMatchRefereeId(matchReferees[match.matchId] ?? "");
     setEditMatchPitchId(matchPitches[match.matchId] ?? "");
   };
 
   const handleSaveMatch = async () => {
+    if (!editingMatch) return;
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 600));
-    if (editingMatch) {
+    try {
+      const statusMap: Record<string, Status> = {
+        scheduled: Status.scheduled,
+        live: Status.live,
+        played: Status.played,
+      };
+      await actor?.updateMatchScore(
+        editingMatch.matchId,
+        BigInt(Number.parseInt(editHomeScore) || 0),
+        BigInt(Number.parseInt(editAwayScore) || 0),
+        statusMap[editMatchStatus] ?? Status.scheduled,
+      );
+      // Save referee/pitch locally
       setMatchReferee(editingMatch.matchId, editMatchRefereeId || null);
       setMatchRefereesState(getMatchReferees());
       setMatchPitch(editingMatch.matchId, editMatchPitchId || null);
       setMatchPitchesState(getMatchPitches());
+      toast.success("Match updated successfully!");
+      setEditingMatch(null);
+      await fetchMatches();
+    } catch {
+      toast.error("Failed to update match. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-    setEditingMatch(null);
-    toast.success("Match details updated!");
   };
 
   const handleCreateMatch = async () => {
@@ -500,22 +539,41 @@ function AdminPanelInner() {
       return;
     }
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 800));
-    // Generate a temporary matchId for the newly created match
-    const newMatchId = `M-${Date.now()}`;
-    if (matchRefereeId) {
-      setMatchReferee(newMatchId, matchRefereeId);
-      setMatchRefereesState(getMatchReferees());
+    try {
+      // Parse datetime-local value to timestamp (nanoseconds for ICP)
+      const dateMs = new Date(matchDate).getTime();
+      const dateNs = BigInt(dateMs) * BigInt(1_000_000);
+      // Extract kickoff time as HH:MM from the datetime-local input
+      const kickoffTime = matchDate.includes("T")
+        ? (matchDate.split("T")[1]?.slice(0, 5) ?? "00:00")
+        : "00:00";
+      const newMatchId = await actor?.createMatch(
+        homeTeam,
+        awayTeam,
+        dateNs,
+        kickoffTime,
+      );
+      if (newMatchId && matchRefereeId) {
+        setMatchReferee(newMatchId, matchRefereeId);
+        setMatchRefereesState(getMatchReferees());
+      }
+      if (newMatchId && matchPitchId) {
+        setMatchPitch(newMatchId, matchPitchId);
+        setMatchPitchesState(getMatchPitches());
+      }
+      toast.success("Match scheduled successfully!");
+      setShowCreateMatch(false);
+      setHomeTeam("");
+      setAwayTeam("");
+      setMatchDate("");
+      setMatchRefereeId("");
+      setMatchPitchId("");
+      await fetchMatches();
+    } catch {
+      toast.error("Failed to schedule match. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    if (matchPitchId) {
-      setMatchPitch(newMatchId, matchPitchId);
-      setMatchPitchesState(getMatchPitches());
-    }
-    setLoading(false);
-    setShowCreateMatch(false);
-    setMatchRefereeId("");
-    setMatchPitchId("");
-    toast.success("Match scheduled successfully!");
   };
 
   const handleSendNotification = async () => {
@@ -726,10 +784,10 @@ function AdminPanelInner() {
       {/* Summary stats */}
       <div className="px-4 mt-4 grid grid-cols-4 gap-2 mb-2">
         {[
-          { label: "Users", value: MOCK_USERS.length, icon: "👤" },
-          { label: "Teams", value: MOCK_TEAMS.length, icon: "🏟️" },
-          { label: "Matches", value: MOCK_MATCHES.length, icon: "⚽" },
-          { label: "Players", value: MOCK_PLAYERS.length, icon: "🏃" },
+          { label: "Users", value: backendUsers.length, icon: "👤" },
+          { label: "Teams", value: backendTeamsForMatch.length, icon: "🏟️" },
+          { label: "Matches", value: backendMatches.length, icon: "⚽" },
+          { label: "Players", value: "–", icon: "🏃" },
         ].map((stat) => (
           <div
             key={stat.label}
@@ -807,6 +865,7 @@ function AdminPanelInner() {
           setActiveTab(v);
           if (v !== "players") setOpenPlayerDialog(false);
           if (v === "news") fetchNews();
+          if (v === "matches") fetchMatches();
           if (v === "inbox") {
             const suggestions = getLocalStore<Suggestion[]>(
               LSH_SUGGESTIONS_KEY,
@@ -967,60 +1026,81 @@ function AdminPanelInner() {
           >
             <div className="px-3 py-2 border-b border-border bg-muted/20">
               <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                All Users ({MOCK_USERS.length})
+                All Users ({backendUsers.length})
               </span>
             </div>
-            {MOCK_USERS.map((user, i) => (
+            {backendUsersLoading ? (
               <div
-                key={user.userId}
-                className="flex items-center gap-3 px-3 py-3 border-b border-border/50 last:border-0"
-                data-ocid={`admin.user.row.${i + 1}`}
+                className="flex items-center justify-center py-8 gap-2 text-muted-foreground text-xs"
+                data-ocid="admin.users.loading_state"
               >
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
-                  style={{
-                    backgroundColor: `${roleColor(user.role)}22`,
-                    color: roleColor(user.role),
-                  }}
-                >
-                  {user.name.charAt(0)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-xs text-foreground">
-                    {user.name}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground">
-                    {user.area}
-                  </div>
-                </div>
-                <span
-                  className="text-[10px] px-1.5 py-0.5 rounded-full font-bold capitalize"
-                  style={{
-                    backgroundColor: `${roleColor(user.role)}22`,
-                    color: roleColor(user.role),
-                  }}
-                >
-                  {user.role}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="w-6 h-6 text-muted-foreground hover:text-foreground"
-                  data-ocid={`admin.user.edit_button.${i + 1}`}
-                  onClick={() => openEditUser(user)}
-                >
-                  <Edit className="w-3 h-3" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="w-6 h-6 text-red-400 hover:text-red-300"
-                  data-ocid={`admin.user.delete_button.${i + 1}`}
-                >
-                  <Trash2 className="w-3 h-3" />
-                </Button>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading users...
               </div>
-            ))}
+            ) : backendUsers.length === 0 ? (
+              <div
+                className="flex flex-col items-center justify-center py-8 gap-2 text-muted-foreground text-xs"
+                data-ocid="admin.users.empty_state"
+              >
+                <Users className="w-6 h-6 opacity-40" />
+                <p>No registered users yet</p>
+                <p className="text-[10px] opacity-60">
+                  Users appear here once they log in and complete onboarding
+                </p>
+              </div>
+            ) : (
+              backendUsers.map((user, i) => (
+                <div
+                  key={user.userId}
+                  className="flex items-center gap-3 px-3 py-3 border-b border-border/50 last:border-0"
+                  data-ocid={`admin.user.row.${i + 1}`}
+                >
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
+                    style={{
+                      backgroundColor: `${roleColor(user.role)}22`,
+                      color: roleColor(user.role),
+                    }}
+                  >
+                    {user.name.charAt(0)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-xs text-foreground">
+                      {user.name}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {user.area}
+                    </div>
+                  </div>
+                  <span
+                    className="text-[10px] px-1.5 py-0.5 rounded-full font-bold capitalize"
+                    style={{
+                      backgroundColor: `${roleColor(user.role)}22`,
+                      color: roleColor(user.role),
+                    }}
+                  >
+                    {user.role}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="w-6 h-6 text-muted-foreground hover:text-foreground"
+                    data-ocid={`admin.user.edit_button.${i + 1}`}
+                    onClick={() => openEditUser(user)}
+                  >
+                    <Edit className="w-3 h-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="w-6 h-6 text-red-400 hover:text-red-300"
+                    data-ocid={`admin.user.delete_button.${i + 1}`}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              ))
+            )}
           </div>
         </TabsContent>
 
@@ -1055,65 +1135,109 @@ function AdminPanelInner() {
             </Button>
           </div>
 
-          <div className="rounded-xl border border-border overflow-hidden bg-card">
-            <div className="px-3 py-2 border-b border-border bg-muted/20">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                All Matches ({MOCK_MATCHES.length})
-              </span>
+          {backendMatchesLoading ? (
+            <div
+              className="flex items-center justify-center py-12 text-muted-foreground"
+              data-ocid="admin.matches.loading_state"
+            >
+              <Loader2 className="w-5 h-5 animate-spin mr-2" />
+              <span className="text-sm">Loading matches...</span>
             </div>
-            {MOCK_MATCHES.map((match, i) => {
-              const home = MOCK_TEAMS.find(
-                (t) => t.teamId === match.homeTeamId,
-              )!;
-              const away = MOCK_TEAMS.find(
-                (t) => t.teamId === match.awayTeamId,
-              )!;
-              return (
-                <div
-                  key={match.matchId}
-                  className="flex items-center gap-3 px-3 py-3 border-b border-border/50 last:border-0"
-                  data-ocid={`admin.match.row.${i + 1}`}
-                >
-                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                    <TeamBadge team={home} size="xs" />
-                    <span className="text-xs font-semibold text-foreground truncate">
-                      {home.name}
-                    </span>
-                    {match.status !== "scheduled" && (
-                      <span className="font-black font-stats text-xs text-foreground">
-                        {match.homeScore}–{match.awayScore}
+          ) : backendMatches.length === 0 ? (
+            <div
+              className="rounded-xl border border-border bg-card py-12 flex flex-col items-center gap-3 text-center"
+              data-ocid="admin.matches.empty_state"
+            >
+              <Calendar className="w-10 h-10 text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">
+                No matches scheduled yet.
+              </p>
+              <p className="text-xs text-muted-foreground/60">
+                Use the "Create Match" button above.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-border overflow-hidden bg-card">
+              <div className="px-3 py-2 border-b border-border bg-muted/20">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                  All Matches ({backendMatches.length})
+                </span>
+              </div>
+              {backendMatches.map((match, i) => {
+                const home = backendTeamsForMatch.find(
+                  (t) => t.teamId === match.homeTeam,
+                );
+                const away = backendTeamsForMatch.find(
+                  (t) => t.teamId === match.awayTeam,
+                );
+                const statusStr = String(match.status);
+                const isLive = statusStr.includes("live");
+                const isPlayed = statusStr.includes("played");
+                return (
+                  <div
+                    key={match.matchId}
+                    className="flex items-center gap-3 px-3 py-3 border-b border-border/50 last:border-0"
+                    data-ocid={`admin.match.row.${i + 1}`}
+                  >
+                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                      {home && (
+                        <TeamBadge
+                          team={{
+                            teamId: home.teamId,
+                            name: home.name,
+                            area: home.area,
+                          }}
+                          size="xs"
+                        />
+                      )}
+                      <span className="text-xs font-semibold text-foreground truncate">
+                        {home?.name ?? match.homeTeam}
                       </span>
-                    )}
-                    <span className="text-xs text-muted-foreground">vs</span>
-                    <span className="text-xs font-semibold text-foreground truncate">
-                      {away.name}
+                      {(isLive || isPlayed) && (
+                        <span className="font-black font-stats text-xs text-foreground">
+                          {Number(match.homeScore)}–{Number(match.awayScore)}
+                        </span>
+                      )}
+                      <span className="text-xs text-muted-foreground">vs</span>
+                      <span className="text-xs font-semibold text-foreground truncate">
+                        {away?.name ?? match.awayTeam}
+                      </span>
+                      {away && (
+                        <TeamBadge
+                          team={{
+                            teamId: away.teamId,
+                            name: away.name,
+                            area: away.area,
+                          }}
+                          size="xs"
+                        />
+                      )}
+                    </div>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold capitalize flex-shrink-0 ${
+                        isLive
+                          ? "bg-accent/20 text-accent"
+                          : isPlayed
+                            ? "bg-green-500/20 text-green-400"
+                            : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {isLive ? "live" : isPlayed ? "played" : "scheduled"}
                     </span>
-                    <TeamBadge team={away} size="xs" />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="w-6 h-6 text-muted-foreground hover:text-foreground flex-shrink-0"
+                      data-ocid={`admin.match.edit_button.${i + 1}`}
+                      onClick={() => openEditMatch(match)}
+                    >
+                      <Edit className="w-3 h-3" />
+                    </Button>
                   </div>
-                  <span
-                    className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold capitalize flex-shrink-0 ${
-                      match.status === "live"
-                        ? "bg-accent/20 text-accent"
-                        : match.status === "played"
-                          ? "bg-green-500/20 text-green-400"
-                          : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {match.status}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="w-6 h-6 text-muted-foreground hover:text-foreground flex-shrink-0"
-                    data-ocid={`admin.match.edit_button.${i + 1}`}
-                    onClick={() => openEditMatch(match)}
-                  >
-                    <Edit className="w-3 h-3" />
-                  </Button>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </TabsContent>
 
         {/* News Tab */}
@@ -1973,11 +2097,11 @@ function AdminPanelInner() {
           </DialogHeader>
           {editingMatch &&
             (() => {
-              const home = MOCK_TEAMS.find(
-                (t) => t.teamId === editingMatch.homeTeamId,
+              const home = backendTeamsForMatch.find(
+                (t) => t.teamId === editingMatch.homeTeam,
               );
-              const away = MOCK_TEAMS.find(
-                (t) => t.teamId === editingMatch.awayTeamId,
+              const away = backendTeamsForMatch.find(
+                (t) => t.teamId === editingMatch.awayTeam,
               );
               return (
                 <div className="space-y-3">
@@ -2348,7 +2472,7 @@ const adminPositionMap: Record<string, Position> = {
   forward: Position.forward,
 };
 
-// ─── TEAMS TAB CONTENT (with real backend teams section) ─────────────────────
+// ─── TEAMS TAB CONTENT (real backend teams only) ─────────────────────────────
 function TeamsTabContent({
   setShowAddTeam,
   teamLogos,
@@ -2362,7 +2486,7 @@ function TeamsTabContent({
   teamLogos: Record<string, string>;
   teamLogoInputRef: React.RefObject<HTMLInputElement | null>;
   setLogoUploadTeamId: (id: string) => void;
-  openEditTeam: (team: (typeof MOCK_TEAMS)[0]) => void;
+  openEditTeam: (team: BackendTeam) => void;
   activeTab: string;
   refreshTrigger?: number;
 }) {
@@ -2370,20 +2494,34 @@ function TeamsTabContent({
   const [backendTeams, setBackendTeams] = useState<BackendTeam[]>([]);
   const [backendTeamsLoading, setBackendTeamsLoading] = useState(false);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshTrigger is intentional — it signals the parent created a new team
-  useEffect(() => {
-    if (activeTab !== "teams" || !actor) return;
+  const fetchTeams = () => {
+    if (!actor) return;
     setBackendTeamsLoading(true);
     actor
       .getAllTeams()
       .then((teams) => setBackendTeams(teams))
       .catch((err) => console.error("Failed to load backend teams:", err))
       .finally(() => setBackendTeamsLoading(false));
+  };
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshTrigger is intentional — it signals the parent created a new team
+  useEffect(() => {
+    if (activeTab !== "teams" || !actor) return;
+    fetchTeams();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, actor, refreshTrigger]);
 
   return (
     <div>
-      <div className="flex justify-end mb-3">
+      <div className="flex items-center justify-between mb-3">
+        <button
+          type="button"
+          className="text-[10px] text-primary hover:underline"
+          onClick={fetchTeams}
+          data-ocid="admin.teams.refresh.button"
+        >
+          Refresh
+        </button>
         <Button
           size="sm"
           className="text-xs gap-1"
@@ -2399,151 +2537,91 @@ function TeamsTabContent({
         </Button>
       </div>
 
-      {/* Sample / mock teams */}
-      <div
-        className="rounded-xl border border-border overflow-hidden bg-card"
-        data-ocid="admin.teams.table"
-      >
-        <div className="px-3 py-2 border-b border-border bg-muted/20">
-          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-            All Teams ({MOCK_TEAMS.length})
-          </span>
+      {backendTeamsLoading ? (
+        <div
+          className="flex items-center justify-center py-10 text-muted-foreground"
+          data-ocid="admin.teams.loading_state"
+        >
+          <Loader2 className="w-5 h-5 animate-spin mr-2" />
+          <span className="text-sm">Loading teams...</span>
         </div>
-        {MOCK_TEAMS.map((team, i) => (
-          <div
-            key={team.teamId}
-            className="flex items-center gap-3 px-3 py-3 border-b border-border/50 last:border-0"
-            data-ocid={`admin.team.row.${i + 1}`}
-          >
-            <TeamBadge team={team} size="sm" />
-            <div className="flex-1 min-w-0">
-              <div className="font-semibold text-xs text-foreground">
-                {team.name}
+      ) : backendTeams.length === 0 ? (
+        <div
+          className="rounded-xl border border-border bg-card py-10 flex flex-col items-center gap-3 text-center"
+          data-ocid="admin.teams.empty_state"
+        >
+          <Trophy className="w-10 h-10 text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">
+            No teams registered yet.
+          </p>
+          <p className="text-xs text-muted-foreground/60">
+            Use the "Add Team" button above to create your first team.
+          </p>
+        </div>
+      ) : (
+        <div
+          className="rounded-xl border border-border overflow-hidden bg-card"
+          data-ocid="admin.teams.table"
+        >
+          <div className="px-3 py-2 border-b border-border bg-muted/20">
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+              All Teams ({backendTeams.length})
+            </span>
+          </div>
+          {backendTeams.map((team, i) => (
+            <div
+              key={team.teamId}
+              className="flex items-center gap-3 px-3 py-3 border-b border-border/50 last:border-0"
+              data-ocid={`admin.team.row.${i + 1}`}
+            >
+              <TeamBadge
+                team={{ teamId: team.teamId, name: team.name, area: team.area }}
+                size="sm"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-xs text-foreground">
+                  {team.name}
+                </div>
+                <AreaBadge area={team.area} className="mt-0.5" />
               </div>
-              <AreaBadge area={team.area} className="mt-0.5" />
-            </div>
-            <div className="flex items-center gap-1">
-              {team.isApproved ? (
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-400 font-bold">
-                  Approved
-                </span>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-6 text-[10px] px-2 text-primary border-primary/40"
-                  data-ocid={`admin.team.approve_button.${i + 1}`}
-                >
-                  Approve
-                </Button>
-              )}
-            </div>
-            {/* Logo upload button */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className={`w-6 h-6 transition-colors ${teamLogos[team.teamId] ? "text-green-400 hover:text-green-300" : "text-muted-foreground hover:text-foreground"}`}
-              data-ocid={`admin.team.upload_button.${i + 1}`}
-              onClick={() => {
-                setLogoUploadTeamId(team.teamId);
-                teamLogoInputRef.current?.click();
-              }}
-              title="Upload team logo"
-            >
-              <ImageIcon className="w-3 h-3" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="w-6 h-6 text-muted-foreground hover:text-foreground"
-              data-ocid={`admin.team.edit_button.${i + 1}`}
-              onClick={() => openEditTeam(team)}
-            >
-              <Edit className="w-3 h-3" />
-            </Button>
-          </div>
-        ))}
-      </div>
-
-      {/* Backend Teams (Real) */}
-      <div className="mt-5">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="font-display font-bold text-xs text-foreground uppercase tracking-wide">
-            Backend Teams (Real)
-          </h3>
-          <button
-            type="button"
-            className="text-[10px] text-primary hover:underline"
-            onClick={() => {
-              if (!actor) return;
-              setBackendTeamsLoading(true);
-              actor
-                .getAllTeams()
-                .then((teams) => setBackendTeams(teams))
-                .catch((err) =>
-                  console.error("Failed to load backend teams:", err),
-                )
-                .finally(() => setBackendTeamsLoading(false));
-            }}
-          >
-            Refresh
-          </button>
-        </div>
-        {backendTeamsLoading ? (
-          <div
-            className="flex items-center justify-center py-6 text-muted-foreground"
-            data-ocid="admin.backend_teams.loading_state"
-          >
-            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-            <span className="text-xs">Loading...</span>
-          </div>
-        ) : backendTeams.length === 0 ? (
-          <div
-            className="rounded-xl border border-border bg-card py-6 text-center text-xs text-muted-foreground"
-            data-ocid="admin.backend_teams.empty_state"
-          >
-            No teams registered on-chain yet. Use "Add Team" above.
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {backendTeams.map((team, i) => (
-              <div
-                key={team.teamId}
-                className="rounded-xl border border-border bg-card px-3 py-2.5 flex items-center gap-3"
-                data-ocid={`admin.backend_team.row.${i + 1}`}
+              <div className="flex items-center gap-1">
+                {team.isApproved ? (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-400 font-bold">
+                    Approved
+                  </span>
+                ) : (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-bold">
+                    Pending
+                  </span>
+                )}
+              </div>
+              {/* Logo upload button */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`w-6 h-6 transition-colors ${teamLogos[team.teamId] ? "text-green-400 hover:text-green-300" : "text-muted-foreground hover:text-foreground"}`}
+                data-ocid={`admin.team.upload_button.${i + 1}`}
+                onClick={() => {
+                  setLogoUploadTeamId(team.teamId);
+                  teamLogoInputRef.current?.click();
+                }}
+                title="Upload team logo"
               >
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
-                  style={{
-                    background: "oklch(0.22 0.06 252)",
-                    color: "oklch(0.82 0.08 82)",
-                  }}
-                >
-                  {team.name.charAt(0)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-xs text-foreground">
-                    {team.name}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground">
-                    {team.area}
-                    {team.coachId ? ` · Coach: ${team.coachId}` : ""}
-                  </p>
-                </div>
-                <Badge
-                  className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold flex-shrink-0 ${
-                    team.isApproved
-                      ? "bg-green-500/20 text-green-400 border-green-500/30"
-                      : "bg-amber-500/20 text-amber-400 border-amber-500/30"
-                  }`}
-                >
-                  {team.isApproved ? "Approved" : "Pending"}
-                </Badge>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+                <ImageIcon className="w-3 h-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-6 h-6 text-muted-foreground hover:text-foreground"
+                data-ocid={`admin.team.edit_button.${i + 1}`}
+                onClick={() => openEditTeam(team)}
+              >
+                <Edit className="w-3 h-3" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -2688,130 +2766,74 @@ function AdminPlayersTab({ autoOpenDialog }: { autoOpenDialog?: boolean }) {
         Confirm player registrations and upload player photos.
       </p>
 
-      {/* Mock players (local) */}
-      <div className="space-y-2">
-        {MOCK_PLAYERS.map((player, i) => {
-          const team = MOCK_TEAMS.find((t) => t.teamId === player.teamId)!;
-          const isConfirmed = confirmations[player.playerId] ?? false;
-          const photo = photos[player.playerId];
-          return (
-            <div
-              key={player.playerId}
-              className="rounded-xl border bg-card px-3 py-2.5 flex items-center gap-3"
-              style={{
-                borderColor: isConfirmed
-                  ? "oklch(0.55 0.18 145 / 0.4)"
-                  : "oklch(0.3 0.02 252)",
-              }}
-              data-ocid={`admin.player.row.${i + 1}`}
-            >
-              {photo ? (
-                <img
-                  src={photo}
-                  alt={player.name}
-                  className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-                />
-              ) : (
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
-                  style={{
-                    backgroundColor: team.color,
-                    color: team.secondaryColor,
-                  }}
-                >
-                  {player.jerseyNumber}
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-xs text-foreground">
-                  {player.name}
-                </p>
-                <p className="text-[10px] text-muted-foreground">
-                  {team.name} · #{player.jerseyNumber}
-                </p>
-              </div>
-              {isConfirmed && (
-                <span className="text-[9px] font-bold text-green-400 px-1.5 py-0.5 rounded-full bg-green-500/10 flex-shrink-0">
-                  ✓ Card
-                </span>
-              )}
-              {/* Photo upload */}
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                ref={(el) => {
-                  photoInputRefs.current[player.playerId] = el;
-                }}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handlePhoto(player.playerId, file);
-                }}
-              />
-              <button
-                type="button"
-                className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-                onClick={() => photoInputRefs.current[player.playerId]?.click()}
-                data-ocid={`admin.player.upload_button.${i + 1}`}
-              >
-                <ImageIcon className="w-3.5 h-3.5" />
-              </button>
-              <Checkbox
-                checked={isConfirmed}
-                onCheckedChange={(v) => toggle(player.playerId, !!v)}
-                data-ocid={`admin.player.checkbox.${i + 1}`}
-              />
-            </div>
-          );
-        })}
+      {/* Backend registered players */}
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          Registered Players
+        </span>
+        <button
+          type="button"
+          className="text-[10px] text-primary hover:underline"
+          onClick={fetchBackendPlayers}
+        >
+          Refresh
+        </button>
       </div>
 
-      {/* Backend registered players section */}
-      <div className="mt-4">
-        <div className="flex items-center gap-2 mb-2">
-          <h3 className="font-display font-bold text-xs text-foreground uppercase tracking-wide">
-            Registered Players (Backend)
-          </h3>
-          <button
-            type="button"
-            className="text-[10px] text-primary hover:underline"
-            onClick={fetchBackendPlayers}
-          >
-            Refresh
-          </button>
+      {backendPlayersLoading ? (
+        <div
+          className="flex items-center justify-center py-10 text-muted-foreground"
+          data-ocid="admin.backend_players.loading_state"
+        >
+          <Loader2 className="w-5 h-5 animate-spin mr-2" />
+          <span className="text-sm">Loading...</span>
         </div>
-        {backendPlayersLoading ? (
-          <div
-            className="flex items-center justify-center py-6 text-muted-foreground"
-            data-ocid="admin.backend_players.loading_state"
-          >
-            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-            <span className="text-xs">Loading...</span>
-          </div>
-        ) : backendPlayers.length === 0 ? (
-          <div
-            className="rounded-xl border border-border bg-card py-6 text-center text-xs text-muted-foreground"
-            data-ocid="admin.backend_players.empty_state"
-          >
-            No players registered on-chain yet. Use "Add Player" above.
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {backendPlayers.map((player, i) => (
+      ) : backendPlayers.length === 0 ? (
+        <div
+          className="rounded-xl border border-border bg-card py-10 flex flex-col items-center gap-3 text-center"
+          data-ocid="admin.backend_players.empty_state"
+        >
+          <UserCheck className="w-10 h-10 text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">
+            No players registered on-chain yet.
+          </p>
+          <p className="text-xs text-muted-foreground/60">
+            Use "Add Player" above to register the first player.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {backendPlayers.map((player, i) => {
+            const isConfirmed = confirmations[player.playerId] ?? false;
+            const photo = photos[player.playerId];
+            return (
               <div
                 key={player.playerId}
-                className="rounded-xl border border-border bg-card px-3 py-2.5 flex items-center gap-3"
-                data-ocid={`admin.backend_player.row.${i + 1}`}
+                className="rounded-xl border bg-card px-3 py-2.5 flex items-center gap-3"
+                style={{
+                  borderColor: isConfirmed
+                    ? "oklch(0.55 0.18 145 / 0.4)"
+                    : "oklch(0.3 0.02 252)",
+                }}
+                data-ocid={`admin.player.row.${i + 1}`}
               >
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
-                  style={{
-                    background: "oklch(0.22 0.06 252)",
-                    color: "oklch(0.82 0.08 82)",
-                  }}
-                >
-                  {String(player.jerseyNumber)}
-                </div>
+                {photo ? (
+                  <img
+                    src={photo}
+                    alt={player.name}
+                    className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                  />
+                ) : (
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
+                    style={{
+                      background: "oklch(0.22 0.06 252)",
+                      color: "oklch(0.82 0.08 82)",
+                    }}
+                  >
+                    {String(player.jerseyNumber)}
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-xs text-foreground">
                     {player.name}
@@ -2826,16 +2848,44 @@ function AdminPlayersTab({ autoOpenDialog }: { autoOpenDialog?: boolean }) {
                     {String(player.position)} · #{String(player.jerseyNumber)}
                   </p>
                 </div>
-                {player.isVerified && (
+                {isConfirmed && (
                   <span className="text-[9px] font-bold text-green-400 px-1.5 py-0.5 rounded-full bg-green-500/10 flex-shrink-0">
-                    ✓ Verified
+                    ✓ Card
                   </span>
                 )}
+                {/* Photo upload */}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  ref={(el) => {
+                    photoInputRefs.current[player.playerId] = el;
+                  }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handlePhoto(player.playerId, file);
+                  }}
+                />
+                <button
+                  type="button"
+                  className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+                  onClick={() =>
+                    photoInputRefs.current[player.playerId]?.click()
+                  }
+                  data-ocid={`admin.player.upload_button.${i + 1}`}
+                >
+                  <ImageIcon className="w-3.5 h-3.5" />
+                </button>
+                <Checkbox
+                  checked={isConfirmed}
+                  onCheckedChange={(v) => toggle(player.playerId, !!v)}
+                  data-ocid={`admin.player.checkbox.${i + 1}`}
+                />
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Add Player Dialog */}
       <Dialog

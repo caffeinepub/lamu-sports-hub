@@ -1,3 +1,4 @@
+import { Role } from "@/backend";
 import { Toaster } from "@/components/ui/sonner";
 import { useActor } from "@/hooks/useActor";
 import { useInternetIdentity } from "@/hooks/useInternetIdentity";
@@ -10,7 +11,7 @@ import {
 } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AboutPage } from "@/pages/AboutPage";
 import { AdminPanelPage } from "@/pages/AdminPanelPage";
@@ -59,26 +60,32 @@ interface AppState {
   hasOnboarded: boolean;
 }
 
-// --- Root Layout (with nav) ---
-function AppLayout({
-  appState,
-  onNotificationsClick,
-  onOfficialSessionVerified,
-  onLockOfficialSession,
-  isOfficialSession,
-}: {
-  appState: AppState;
+// Mutable callback refs so the router layout doesn't need to be recreated
+// when callbacks change.
+interface AppCallbacks {
   onNotificationsClick: () => void;
   onOfficialSessionVerified: () => void;
   onLockOfficialSession: () => void;
-  isOfficialSession: boolean;
-}) {
+  getAppState: () => AppState;
+  getIsOfficialSession: () => boolean;
+}
+
+// --- Root Layout (with nav) ---
+function AppLayout({
+  callbacksRef,
+}: { callbacksRef: React.RefObject<AppCallbacks> }) {
   const year = new Date().getFullYear();
   const footerLink = `https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(typeof window !== "undefined" ? window.location.hostname : "")}`;
+  const appState = callbacksRef.current!.getAppState();
+  const isOfficialSession = callbacksRef.current!.getIsOfficialSession();
 
   return (
     <div className="min-h-screen bg-background">
-      <TopNav onNotificationsClick={onNotificationsClick} />
+      <TopNav
+        onNotificationsClick={() =>
+          callbacksRef.current!.onNotificationsClick()
+        }
+      />
       <main>
         <Outlet />
       </main>
@@ -99,43 +106,36 @@ function AppLayout({
       <BottomNav
         role={appState.role}
         isOfficialSession={isOfficialSession}
-        onOfficialSessionVerified={onOfficialSessionVerified}
-        onLockOfficialSession={onLockOfficialSession}
+        onOfficialSessionVerified={() =>
+          callbacksRef.current!.onOfficialSessionVerified()
+        }
+        onLockOfficialSession={() =>
+          callbacksRef.current!.onLockOfficialSession()
+        }
       />
     </div>
   );
 }
 
-// --- Build router outside component to avoid re-creation ---
-function buildRouter(
-  appState: AppState,
-  setShowNotifications: (v: boolean) => void,
-  onOfficialSessionVerified: () => void,
-  onLockOfficialSession: () => void,
-  isOfficialSession: boolean,
-) {
+// --- Build router ONCE — never rebuild ---
+function buildRouter(callbacksRef: React.RefObject<AppCallbacks>) {
   const rootRoute = createRootRoute({
-    component: () => (
-      <AppLayout
-        appState={appState}
-        onNotificationsClick={() => setShowNotifications(true)}
-        onOfficialSessionVerified={onOfficialSessionVerified}
-        onLockOfficialSession={onLockOfficialSession}
-        isOfficialSession={isOfficialSession}
-      />
-    ),
+    component: () => <AppLayout callbacksRef={callbacksRef} />,
   });
 
   const dashboardRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/",
-    component: () => (
-      <DashboardPage
-        favoriteTeamId={appState.favoriteTeamId}
-        role={appState.role}
-        userName={appState.userName}
-      />
-    ),
+    component: () => {
+      const appState = callbacksRef.current!.getAppState();
+      return (
+        <DashboardPage
+          favoriteTeamId={appState.favoriteTeamId}
+          role={appState.role}
+          userName={appState.userName}
+        />
+      );
+    },
   });
 
   const standingsRoute = createRoute({
@@ -207,13 +207,16 @@ function buildRouter(
   const profileRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/profile",
-    component: () => (
-      <ProfilePage
-        role={appState.role}
-        favoriteTeamId={appState.favoriteTeamId}
-        userName={appState.userName}
-      />
-    ),
+    component: () => {
+      const appState = callbacksRef.current!.getAppState();
+      return (
+        <ProfilePage
+          role={appState.role}
+          favoriteTeamId={appState.favoriteTeamId}
+          userName={appState.userName}
+        />
+      );
+    },
   });
 
   const coachRoute = createRoute({
@@ -338,11 +341,12 @@ export default function App() {
 
   const [appState, setAppState] = useState<AppState>({
     role: "fan",
-    favoriteTeamId: "team-001",
+    favoriteTeamId: "",
     userName: "",
-    hasOnboarded: true,
+    hasOnboarded: false,
   });
   const [roleLoading, setRoleLoading] = useState(false);
+  const [profileChecked, setProfileChecked] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [loginTriggered, setLoginTriggered] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -361,6 +365,30 @@ export default function App() {
     setOfficialSession(false);
     setAppState((prev) => ({ ...prev, role: "fan" }));
   };
+
+  // Mutable ref so router components always read the latest state
+  // without needing the router to be recreated.
+  const appStateRef = useRef(appState);
+  appStateRef.current = appState;
+  const officialSessionRef = useRef(officialSession);
+  officialSessionRef.current = officialSession;
+  const showNotificationsSetterRef = useRef(setShowNotifications);
+  showNotificationsSetterRef.current = setShowNotifications;
+
+  const callbacksRef = useRef<AppCallbacks>({
+    onNotificationsClick: () => showNotificationsSetterRef.current(true),
+    onOfficialSessionVerified: refreshOfficialSession,
+    onLockOfficialSession: lockOfficialSession,
+    getAppState: () => appStateRef.current,
+    getIsOfficialSession: () => officialSessionRef.current,
+  });
+  // Keep callbacks in sync without recreating the ref object
+  callbacksRef.current.onOfficialSessionVerified = refreshOfficialSession;
+  callbacksRef.current.onLockOfficialSession = lockOfficialSession;
+
+  // Build the router ONCE and never rebuild it (avoids navigation resets)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const router = useMemo(() => buildRouter(callbacksRef), []);
 
   // Detect role: official session alone grants admin UI access.
   // isCallerAdmin() is checked as a secondary signal but is NOT required.
@@ -389,14 +417,70 @@ export default function App() {
       .finally(() => setRoleLoading(false));
   }, [actor, actorFetching, officialSession]);
 
+  // Check user profile when actor becomes ready after login
+  // biome-ignore lint/correctness/useExhaustiveDependencies: identity triggers profile re-check on login
+  useEffect(() => {
+    if (!actor || actorFetching || !identity) return;
+    if (profileChecked) return;
+    actor
+      .getCallerUserProfile()
+      .then((profile) => {
+        if (profile?.name) {
+          setAppState((prev) => ({
+            ...prev,
+            userName: profile.name,
+            favoriteTeamId: profile.favoriteTeamId ?? prev.favoriteTeamId,
+            hasOnboarded: true,
+          }));
+          setProfileChecked(true);
+        } else {
+          // No profile — trigger onboarding
+          setShowOnboarding(true);
+          setProfileChecked(true);
+        }
+      })
+      .catch(() => {
+        // On error, show onboarding so user can set up their profile
+        setShowOnboarding(true);
+        setProfileChecked(true);
+      });
+  }, [actor, actorFetching, identity]);
+
   const handleLoginClick = () => {
     setLoginTriggered(true);
   };
 
-  const handleOnboardingComplete = (teamId: string) => {
+  const handleOnboardingComplete = async (
+    teamId: string,
+    name?: string,
+    email?: string,
+    role?: string,
+    area?: string,
+  ) => {
+    try {
+      if (actor && name) {
+        const roleMap: Record<string, Role> = {
+          fan: Role.fan,
+          player: Role.player,
+          coach: Role.coach,
+          admin: Role.admin,
+        };
+        await actor.createOrUpdateUserProfile(
+          name,
+          "",
+          email ?? "",
+          roleMap[role ?? "fan"] ?? Role.fan,
+          area ?? "",
+          teamId || null,
+        );
+      }
+    } catch {
+      // Profile save failed silently — user can update from settings
+    }
     setAppState((prev) => ({
       ...prev,
       favoriteTeamId: teamId,
+      userName: name ?? prev.userName,
       hasOnboarded: true,
     }));
     setShowOnboarding(false);
@@ -452,19 +536,15 @@ export default function App() {
   if (showOnboarding && !appState.hasOnboarded) {
     return (
       <>
-        <OnboardingPage onComplete={handleOnboardingComplete} />
+        <OnboardingPage
+          onComplete={(teamId, name, email, role, area) =>
+            handleOnboardingComplete(teamId, name, email, role, area)
+          }
+        />
         <Toaster position="top-center" />
       </>
     );
   }
-
-  const router = buildRouter(
-    appState,
-    setShowNotifications,
-    refreshOfficialSession,
-    lockOfficialSession,
-    officialSession,
-  );
 
   return (
     <>

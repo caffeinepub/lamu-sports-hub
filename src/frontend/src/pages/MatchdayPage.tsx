@@ -1,11 +1,10 @@
+import type {
+  T__5 as BackendMatch,
+  T__2 as BackendPlayer,
+  T__1 as BackendTeam,
+} from "@/backend";
 import { TeamBadge } from "@/components/shared/TeamBadge";
-import {
-  MOCK_MATCHES,
-  MOCK_PLAYERS,
-  MOCK_TEAMS,
-  formatMatchDate,
-  formatTime,
-} from "@/data/mockData";
+import { useActor } from "@/hooks/useActor";
 import {
   getMatchPitches,
   getMatchReferees,
@@ -20,12 +19,14 @@ import {
   Clock,
   Flag,
   Info,
+  Loader2,
   MapPin,
   Square,
   Target,
   User,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
+import { useEffect, useState } from "react";
 
 type CommentaryType =
   | "goal"
@@ -36,6 +37,44 @@ type CommentaryType =
   | "fulltime"
   | "substitution"
   | "info";
+
+function parseCommentaryType(line: string): CommentaryType {
+  const lower = line.toLowerCase();
+  if (lower.includes("goal") || lower.includes("⚽")) return "goal";
+  if (lower.includes("yellow") || lower.includes("🟨")) return "yellow_card";
+  if (lower.includes("red card") || lower.includes("🟥")) return "red_card";
+  if (
+    lower.includes("kick off") ||
+    lower.includes("kickoff") ||
+    lower.includes("🏁")
+  )
+    return "kickoff";
+  if (
+    lower.includes("half time") ||
+    lower.includes("halftime") ||
+    lower.includes("half-time")
+  )
+    return "halftime";
+  if (
+    lower.includes("full time") ||
+    lower.includes("fulltime") ||
+    lower.includes("full-time") ||
+    lower.includes("final")
+  )
+    return "fulltime";
+  if (lower.includes("sub") || lower.includes("substitut"))
+    return "substitution";
+  return "info";
+}
+
+function parseMinute(line: string): string {
+  const match = line.match(/^(\d+)['′\s]/);
+  return match ? match[1] : "–";
+}
+
+function stripMinutePrefix(line: string): string {
+  return line.replace(/^\d+['′\s]+/, "").trim();
+}
 
 function CommentaryIcon({ type }: { type: CommentaryType }) {
   const map: Record<CommentaryType, React.ReactNode> = {
@@ -65,28 +104,87 @@ function CommentaryBg(type: CommentaryType): string {
   return map[type] || "bg-card border-border/50";
 }
 
+function formatMatchDate(ts: bigint): string {
+  const ms = Number(ts) / 1_000_000;
+  if (!ms) return "—";
+  return new Date(ms).toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function getTeamColor(teamId: string): string {
+  const colors = [
+    "oklch(0.55 0.18 252)",
+    "oklch(0.55 0.18 145)",
+    "oklch(0.6 0.22 24)",
+    "oklch(0.55 0.15 82)",
+    "oklch(0.55 0.18 300)",
+    "oklch(0.55 0.18 200)",
+  ];
+  const idx =
+    Math.abs(
+      (teamId.charCodeAt(0) ?? 0) + (teamId.charCodeAt(teamId.length - 1) ?? 0),
+    ) % colors.length;
+  return colors[idx];
+}
+
 export function MatchdayPage() {
   const { matchId } = useParams({ strict: false }) as { matchId: string };
   const navigate = useNavigate();
+  const { actor, isFetching } = useActor();
 
-  const match =
-    MOCK_MATCHES.find((m) => m.matchId === matchId) || MOCK_MATCHES[5]; // default to live
-  const homeTeam = MOCK_TEAMS.find((t) => t.teamId === match.homeTeamId)!;
-  const awayTeam = MOCK_TEAMS.find((t) => t.teamId === match.awayTeamId)!;
-  const mvpPlayer = match.mvpPlayerId
-    ? MOCK_PLAYERS.find((p) => p.playerId === match.mvpPlayerId)
-    : null;
-  const mvpTeam = mvpPlayer
-    ? MOCK_TEAMS.find((t) => t.teamId === mvpPlayer.teamId)
-    : null;
+  const [match, setMatch] = useState<BackendMatch | null>(null);
+  const [homeTeam, setHomeTeam] = useState<BackendTeam | null>(null);
+  const [awayTeam, setAwayTeam] = useState<BackendTeam | null>(null);
+  const [mvpPlayer, setMvpPlayer] = useState<BackendPlayer | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const isLive = match.status === "live";
-  const isPlayed = match.status === "played";
+  useEffect(() => {
+    if (!actor || isFetching || !matchId) return;
+
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const m = await actor.getMatch(matchId);
+        if (!m) {
+          setError("Match not found.");
+          return;
+        }
+        setMatch(m);
+
+        // Load both teams in parallel
+        const [home, away] = await Promise.all([
+          actor.getTeam(m.homeTeam),
+          actor.getTeam(m.awayTeam),
+        ]);
+        setHomeTeam(home ?? null);
+        setAwayTeam(away ?? null);
+
+        // Load MVP player if set
+        if (m.mvpPlayerId) {
+          const mvp = await actor.getPlayer(m.mvpPlayerId);
+          setMvpPlayer(mvp ?? null);
+        }
+      } catch (err) {
+        console.error("Failed to load matchday data:", err);
+        setError("Failed to load match. Please go back and try again.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    load();
+  }, [actor, isFetching, matchId]);
 
   // Referee lookup
   const matchRefereeMap = getMatchReferees();
   const allReferees = getReferees();
-  const assignedRefereeId = matchRefereeMap[match.matchId];
+  const assignedRefereeId = matchId ? matchRefereeMap[matchId] : undefined;
   const assignedReferee = assignedRefereeId
     ? allReferees.find((r) => r.refereeId === assignedRefereeId)
     : null;
@@ -94,12 +192,68 @@ export function MatchdayPage() {
   // Pitch lookup
   const matchPitchMap = getMatchPitches();
   const allPitches = getPitches();
-  const assignedPitchId = matchPitchMap[match.matchId];
+  const assignedPitchId = matchId ? matchPitchMap[matchId] : undefined;
   const assignedPitch = assignedPitchId
     ? allPitches.find((p) => p.pitchId === assignedPitchId)
     : null;
 
-  const reversedCommentary = [...match.commentary].reverse();
+  if (loading || isFetching) {
+    return (
+      <div
+        className="min-h-screen pb-24 pt-14 flex flex-col items-center justify-center gap-4"
+        data-ocid="matchday.loading_state"
+      >
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Loading match...</p>
+      </div>
+    );
+  }
+
+  if (error || !match) {
+    return (
+      <div
+        className="min-h-screen pb-24 pt-14 flex flex-col items-center justify-center gap-4 px-6 text-center"
+        data-ocid="matchday.error_state"
+      >
+        <span className="text-4xl">⚽</span>
+        <p className="font-bold text-foreground">
+          {error ?? "Match not found."}
+        </p>
+        <button
+          type="button"
+          onClick={() => navigate({ to: "/matches" })}
+          className="px-4 py-2 rounded-xl text-sm font-bold text-white"
+          style={{ background: "oklch(0.55 0.18 252)" }}
+          data-ocid="matchday.go_back.button"
+        >
+          ← Back to Matches
+        </button>
+      </div>
+    );
+  }
+
+  const statusStr = String(match.status);
+  const isLive = statusStr.includes("live");
+  const isPlayed = statusStr.includes("played");
+
+  const homeColor = getTeamColor(match.homeTeam);
+  const awayColor = getTeamColor(match.awayTeam);
+
+  const homeTeamForBadge = homeTeam
+    ? { teamId: homeTeam.teamId, name: homeTeam.name, area: homeTeam.area }
+    : { teamId: match.homeTeam, name: match.homeTeam.slice(0, 6), area: "" };
+
+  const awayTeamForBadge = awayTeam
+    ? { teamId: awayTeam.teamId, name: awayTeam.name, area: awayTeam.area }
+    : { teamId: match.awayTeam, name: match.awayTeam.slice(0, 6), area: "" };
+
+  // Parse commentary strings into structured entries
+  const commentary = (match.commentary ?? []).map((line) => ({
+    type: parseCommentaryType(line),
+    minute: parseMinute(line),
+    text: stripMinutePrefix(line) || line,
+  }));
+  const reversedCommentary = [...commentary].reverse();
 
   return (
     <div data-ocid="matchday.page" className="min-h-screen pb-24 pt-14">
@@ -108,6 +262,7 @@ export function MatchdayPage() {
         type="button"
         className="fixed top-14 left-0 z-40 flex items-center gap-1 px-3 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors bg-card/80 backdrop-blur-sm"
         onClick={() => navigate({ to: "/matches" })}
+        data-ocid="matchday.back.button"
       >
         <ChevronLeft className="w-4 h-4" />
         Matches
@@ -117,7 +272,7 @@ export function MatchdayPage() {
       <div
         className="pt-8 pb-8 px-4 relative overflow-hidden"
         style={{
-          background: `linear-gradient(135deg, ${homeTeam.color}40 0%, oklch(0.1 0.04 252) 40%, ${awayTeam.color}40 100%)`,
+          background: `linear-gradient(135deg, ${homeColor}40 0%, oklch(0.1 0.04 252) 40%, ${awayColor}40 100%)`,
         }}
         data-ocid="matchday.score.card"
       >
@@ -129,11 +284,11 @@ export function MatchdayPage() {
               <span className="font-bold text-sm text-accent tracking-widest uppercase">
                 Live
               </span>
-              <span className="text-xs text-muted-foreground">
-                {match.commentary.length > 0
-                  ? `${match.commentary[match.commentary.length - 1].minute}'`
-                  : ""}
-              </span>
+              {commentary.length > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  {commentary[commentary.length - 1].minute}'
+                </span>
+              )}
             </div>
           )}
           {isPlayed && (
@@ -143,7 +298,7 @@ export function MatchdayPage() {
               </span>
             </div>
           )}
-          {match.status === "scheduled" && (
+          {!isLive && !isPlayed && (
             <div className="px-4 py-1.5 rounded-full bg-primary/20 border border-primary/40">
               <span className="font-bold text-sm text-primary uppercase tracking-widest">
                 Upcoming
@@ -160,9 +315,9 @@ export function MatchdayPage() {
         >
           {/* Home */}
           <div className="flex flex-col items-center gap-2 flex-1">
-            <TeamBadge team={homeTeam} size="xl" />
+            <TeamBadge team={homeTeamForBadge} size="xl" />
             <span className="font-display font-bold text-sm text-foreground text-center leading-tight">
-              {homeTeam.name}
+              {homeTeam?.name ?? match.homeTeam}
             </span>
             <span className="text-xs text-muted-foreground">HOME</span>
           </div>
@@ -177,13 +332,13 @@ export function MatchdayPage() {
                 className="flex items-center gap-3"
               >
                 <span className="font-black font-stats text-6xl text-foreground">
-                  {match.homeScore}
+                  {Number(match.homeScore)}
                 </span>
                 <span className="text-3xl text-muted-foreground font-light">
                   —
                 </span>
                 <span className="font-black font-stats text-6xl text-foreground">
-                  {match.awayScore}
+                  {Number(match.awayScore)}
                 </span>
               </motion.div>
             ) : (
@@ -195,16 +350,16 @@ export function MatchdayPage() {
 
           {/* Away */}
           <div className="flex flex-col items-center gap-2 flex-1">
-            <TeamBadge team={awayTeam} size="xl" />
+            <TeamBadge team={awayTeamForBadge} size="xl" />
             <span className="font-display font-bold text-sm text-foreground text-center leading-tight">
-              {awayTeam.name}
+              {awayTeam?.name ?? match.awayTeam}
             </span>
             <span className="text-xs text-muted-foreground">AWAY</span>
           </div>
         </motion.div>
 
         {/* MVP */}
-        {mvpPlayer && mvpTeam && (
+        {mvpPlayer && (
           <motion.div
             initial={{ y: 10, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -216,7 +371,6 @@ export function MatchdayPage() {
               <span className="text-xs text-yellow-400 font-bold">
                 MVP: {mvpPlayer.name}
               </span>
-              <TeamBadge team={mvpTeam} size="xs" />
             </div>
           </motion.div>
         )}
@@ -232,10 +386,12 @@ export function MatchdayPage() {
             <Calendar className="w-3.5 h-3.5" />
             <span>{formatMatchDate(match.date)}</span>
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Clock className="w-3.5 h-3.5" />
-            <span>KO {formatTime(match.date)}</span>
-          </div>
+          {match.kickoffTime && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Clock className="w-3.5 h-3.5" />
+              <span>KO {match.kickoffTime}</span>
+            </div>
+          )}
           {assignedReferee && (
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <User className="w-3.5 h-3.5" />
@@ -259,7 +415,7 @@ export function MatchdayPage() {
       </div>
 
       {/* Matchday Stories Commentary */}
-      {match.commentary.length > 0 && (
+      {commentary.length > 0 && (
         <div className="px-4 mt-5">
           <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
             <span className="text-base">📲</span>
@@ -276,7 +432,7 @@ export function MatchdayPage() {
                   animate={{ x: 0, opacity: 1 }}
                   transition={{ delay: i * 0.04 }}
                   data-ocid={`matchday.story.item.${i + 1}`}
-                  className={`rounded-xl p-3 border flex items-start gap-3 ${CommentaryBg(entry.type as CommentaryType)}`}
+                  className={`rounded-xl p-3 border flex items-start gap-3 ${CommentaryBg(entry.type)}`}
                 >
                   {/* Minute */}
                   <div className="flex-shrink-0 w-8 text-center">
@@ -287,7 +443,7 @@ export function MatchdayPage() {
 
                   {/* Icon */}
                   <div className="flex-shrink-0 mt-0.5">
-                    <CommentaryIcon type={entry.type as CommentaryType} />
+                    <CommentaryIcon type={entry.type} />
                   </div>
 
                   {/* Text */}
@@ -309,7 +465,7 @@ export function MatchdayPage() {
         </div>
       )}
 
-      {match.commentary.length === 0 && match.status === "scheduled" && (
+      {commentary.length === 0 && !isLive && !isPlayed && (
         <div className="px-4 mt-8 text-center">
           <div className="rounded-xl p-8 border border-border bg-card/50">
             <span className="text-4xl mb-3 block">⏰</span>
@@ -318,6 +474,18 @@ export function MatchdayPage() {
             </p>
             <p className="text-sm text-muted-foreground">
               Live commentary will appear here once the match begins.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {commentary.length === 0 && isPlayed && (
+        <div className="px-4 mt-8 text-center">
+          <div className="rounded-xl p-8 border border-border bg-card/50">
+            <span className="text-4xl mb-3 block">🏁</span>
+            <p className="font-bold text-foreground mb-1">Match finished</p>
+            <p className="text-sm text-muted-foreground">
+              No commentary was recorded for this match.
             </p>
           </div>
         </div>

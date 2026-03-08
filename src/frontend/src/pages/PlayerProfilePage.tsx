@@ -1,19 +1,18 @@
+import type { T__2 as BackendPlayer, T__1 as BackendTeam } from "@/backend";
 import {
   AreaBadge,
   IslandPrideBadge,
   TeamBadge,
+  getTeamColor,
 } from "@/components/shared/TeamBadge";
-import {
-  MOCK_PLAYERS,
-  MOCK_TEAMS,
-  getPositionColor,
-  getPositionLabel,
-} from "@/data/mockData";
+import { Button } from "@/components/ui/button";
+import { useActor } from "@/hooks/useActor";
 import { getPlayerPhotos } from "@/utils/localStore";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   AlertTriangle,
   ChevronLeft,
+  Loader2,
   Square,
   Star,
   Target,
@@ -21,18 +20,89 @@ import {
   Zap,
 } from "lucide-react";
 import { motion } from "motion/react";
+import { useEffect, useState } from "react";
+
+function getPositionLabel(pos: string): string {
+  const map: Record<string, string> = {
+    goalkeeper: "Goalkeeper",
+    defender: "Defender",
+    midfielder: "Midfielder",
+    forward: "Forward",
+  };
+  return map[pos.toLowerCase()] || pos;
+}
+
+function getPositionColor(pos: string): string {
+  const map: Record<string, string> = {
+    goalkeeper: "oklch(0.55 0.18 252)",
+    defender: "oklch(0.55 0.18 145)",
+    midfielder: "oklch(0.6 0.22 24)",
+    forward: "oklch(0.82 0.15 85)",
+  };
+  return map[pos.toLowerCase()] || "oklch(0.62 0 0)";
+}
 
 export function PlayerProfilePage() {
   const { playerId } = useParams({ strict: false }) as { playerId: string };
   const navigate = useNavigate();
+  const { actor } = useActor();
 
-  const player =
-    MOCK_PLAYERS.find((p) => p.playerId === playerId) || MOCK_PLAYERS[0];
-  const team = MOCK_TEAMS.find((t) => t.teamId === player.teamId)!;
-  const posColor = getPositionColor(player.position);
-  const posLabel = getPositionLabel(player.position);
+  const [player, setPlayer] = useState<BackendPlayer | null>(null);
+  const [team, setTeam] = useState<BackendTeam | null>(null);
+  const [loading, setLoading] = useState(true);
   const playerPhotos = getPlayerPhotos();
+
+  useEffect(() => {
+    if (!actor || !playerId) return;
+    setLoading(true);
+    actor
+      .getPlayer(playerId)
+      .then(async (p) => {
+        setPlayer(p);
+        if (p?.teamId) {
+          try {
+            const t = await actor.getTeam(p.teamId);
+            setTeam(t);
+          } catch {
+            // team fetch failed silently
+          }
+        }
+      })
+      .catch((err) => console.error("Failed to load player:", err))
+      .finally(() => setLoading(false));
+  }, [actor, playerId]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen pb-24 pt-14 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!player) {
+    return (
+      <div className="min-h-screen pb-24 pt-14 flex flex-col items-center justify-center gap-3 px-4 text-center">
+        <p className="text-muted-foreground">Player not found.</p>
+        <Button variant="outline" onClick={() => navigate({ to: "/players" })}>
+          Back to Players
+        </Button>
+      </div>
+    );
+  }
+
+  const teamColor = team ? getTeamColor(team.teamId) : "oklch(0.4 0.06 255)";
+  const posStr = String(player.position);
+  const posColor = getPositionColor(posStr);
+  const posLabel = getPositionLabel(posStr);
   const playerPhoto = playerPhotos[player.playerId];
+
+  const goals = Number(player.goals);
+  const assists = Number(player.assists);
+  const matchesPlayed = Number(player.matchesPlayed);
+  const yellowCards = Number(player.yellowCards);
+  const redCards = Number(player.redCards);
+  const jerseyNumber = Number(player.jerseyNumber);
 
   return (
     <div data-ocid="player_profile.page" className="min-h-screen pb-24 pt-14">
@@ -40,25 +110,30 @@ export function PlayerProfilePage() {
       <button
         type="button"
         className="fixed top-14 left-0 z-40 flex items-center gap-1 px-3 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors bg-card/80 backdrop-blur-sm"
-        onClick={() => navigate({ to: `/teams/${team.teamId}` })}
+        onClick={() =>
+          team
+            ? navigate({ to: `/teams/${team.teamId}` })
+            : navigate({ to: "/players" })
+        }
+        data-ocid="player_profile.back.button"
       >
         <ChevronLeft className="w-4 h-4" />
-        {team.name}
+        {team ? team.name : "Players"}
       </button>
 
       {/* Hero */}
       <div
         className="pt-8 pb-8 px-4 relative overflow-hidden"
         style={{
-          background: `linear-gradient(135deg, ${team.color}55 0%, oklch(0.12 0.04 252) 70%)`,
+          background: `linear-gradient(135deg, ${teamColor}55 0%, oklch(0.12 0.04 252) 70%)`,
         }}
       >
         {/* Big jersey number watermark */}
         <div
           className="absolute -bottom-4 -right-2 text-[120px] font-black font-stats opacity-8 leading-none pointer-events-none select-none"
-          style={{ color: team.secondaryColor }}
+          style={{ color: teamColor }}
         >
-          {player.jerseyNumber}
+          {jerseyNumber}
         </div>
 
         <motion.div
@@ -70,7 +145,7 @@ export function PlayerProfilePage() {
             {playerPhoto ? (
               <div
                 className="w-20 h-20 rounded-full border-4 flex-shrink-0 overflow-hidden"
-                style={{ borderColor: `${team.secondaryColor}66` }}
+                style={{ borderColor: `${teamColor}66` }}
               >
                 <img
                   src={playerPhoto}
@@ -82,12 +157,12 @@ export function PlayerProfilePage() {
               <div
                 className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-black font-stats border-4 flex-shrink-0"
                 style={{
-                  backgroundColor: team.color,
-                  color: team.secondaryColor,
-                  borderColor: `${team.secondaryColor}66`,
+                  backgroundColor: teamColor,
+                  color: "oklch(0.95 0.02 82)",
+                  borderColor: `${teamColor}66`,
                 }}
               >
-                {player.jerseyNumber}
+                {jerseyNumber}
               </div>
             )}
 
@@ -113,10 +188,21 @@ export function PlayerProfilePage() {
                   "{player.nickname}"
                 </p>
               )}
-              <div className="flex items-center gap-2 mt-2 flex-wrap">
-                <TeamBadge team={team} size="sm" showName />
-                <AreaBadge area={team.area} />
-              </div>
+              {team && (
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  <TeamBadge
+                    team={{
+                      teamId: team.teamId,
+                      name: team.name,
+                      area: team.area,
+                      color: teamColor,
+                    }}
+                    size="sm"
+                    showName
+                  />
+                  <AreaBadge area={team.area} />
+                </div>
+              )}
             </div>
           </div>
         </motion.div>
@@ -132,13 +218,13 @@ export function PlayerProfilePage() {
         <div className="grid grid-cols-2 gap-3 mb-3">
           <StatCard
             icon={<Target className="w-5 h-5" />}
-            value={player.goals}
+            value={goals}
             label="Goals"
             color="#22C55E"
           />
           <StatCard
             icon={<Zap className="w-5 h-5" />}
-            value={player.assists}
+            value={assists}
             label="Assists"
             color="#3B82F6"
           />
@@ -147,21 +233,21 @@ export function PlayerProfilePage() {
         <div className="grid grid-cols-3 gap-3 mb-3">
           <StatCard
             icon={<Trophy className="w-4 h-4" />}
-            value={player.matchesPlayed}
+            value={matchesPlayed}
             label="Apps"
             color="oklch(0.82 0.08 82)"
             small
           />
           <StatCard
             icon={<AlertTriangle className="w-4 h-4" />}
-            value={player.yellowCards}
+            value={yellowCards}
             label="Yellow"
             color="#EAB308"
             small
           />
           <StatCard
             icon={<Square className="w-4 h-4" />}
-            value={player.redCards}
+            value={redCards}
             label="Red"
             color="#EF4444"
             small
@@ -178,22 +264,22 @@ export function PlayerProfilePage() {
               {
                 label: "Goals per game",
                 value:
-                  player.matchesPlayed > 0
-                    ? (player.goals / player.matchesPlayed).toFixed(2)
+                  matchesPlayed > 0
+                    ? (goals / matchesPlayed).toFixed(2)
                     : "0.00",
                 color: "#22C55E",
               },
               {
                 label: "Assists per game",
                 value:
-                  player.matchesPlayed > 0
-                    ? (player.assists / player.matchesPlayed).toFixed(2)
+                  matchesPlayed > 0
+                    ? (assists / matchesPlayed).toFixed(2)
                     : "0.00",
                 color: "#3B82F6",
               },
               {
                 label: "Goal contributions",
-                value: player.goals + player.assists,
+                value: goals + assists,
                 color: "oklch(0.82 0.08 82)",
               },
             ].map((row) => (

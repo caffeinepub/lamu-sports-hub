@@ -1,8 +1,39 @@
 import { type MockTeam, getAreaColor } from "@/data/mockData";
 import { getTeamLogos } from "@/utils/localStore";
 
+// A union type that works for both MockTeam and real backend teams
+export type TeamLike = {
+  teamId: string;
+  name: string;
+  area: string;
+  color?: string;
+  secondaryColor?: string;
+};
+
+// Deterministic color generation for backend teams without colors
+const TEAM_COLORS = [
+  "oklch(0.55 0.18 252)",
+  "oklch(0.55 0.18 145)",
+  "oklch(0.6 0.22 24)",
+  "oklch(0.55 0.15 82)",
+  "oklch(0.55 0.18 300)",
+  "oklch(0.55 0.18 200)",
+];
+
+export function getTeamColor(teamId: string): string {
+  const idx =
+    Math.abs(
+      (teamId.charCodeAt(0) || 0) + (teamId.charCodeAt(teamId.length - 1) || 0),
+    ) % TEAM_COLORS.length;
+  return TEAM_COLORS[idx];
+}
+
+export function getTeamSecondaryColor(_teamId: string): string {
+  return "oklch(0.95 0.02 82)";
+}
+
 interface TeamBadgeProps {
-  team: MockTeam;
+  team: TeamLike | MockTeam;
   size?: "xs" | "sm" | "md" | "lg" | "xl";
   showName?: boolean;
   className?: string;
@@ -31,6 +62,9 @@ export function TeamBadge({
     .toUpperCase();
 
   const uploadedLogo = getTeamLogos()[team.teamId];
+  const bgColor = team.color || getTeamColor(team.teamId);
+  const fgColor =
+    (team as MockTeam).secondaryColor || getTeamSecondaryColor(team.teamId);
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>
@@ -39,7 +73,7 @@ export function TeamBadge({
         style={
           uploadedLogo
             ? undefined
-            : { backgroundColor: team.color, color: team.secondaryColor }
+            : { backgroundColor: bgColor, color: fgColor }
         }
       >
         {uploadedLogo ? (

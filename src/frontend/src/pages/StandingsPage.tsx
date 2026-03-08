@@ -1,7 +1,10 @@
+import type { T__5 as BackendMatch, T__1 as BackendTeam } from "@/backend";
 import { TeamBadge } from "@/components/shared/TeamBadge";
-import { computeStandings } from "@/data/mockData";
+import { useActor } from "@/hooks/useActor";
 import { getSeasonSettings } from "@/utils/localStore";
+import { computeBackendStandings } from "@/utils/standingsUtils";
 import { useNavigate } from "@tanstack/react-router";
+import { Loader2 } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 
@@ -24,14 +27,52 @@ function FormBadgeComp({ result }: { result: FormBadge }) {
 
 export function StandingsPage() {
   const navigate = useNavigate();
-  const standings = computeStandings();
+  const { actor } = useActor();
   const [division, setDivision] = useState<"senior" | "u18">("senior");
   const { seasonName, tournamentName } = getSeasonSettings();
+
+  const [teams, setTeams] = useState<BackendTeam[]>([]);
+  const [matches, setMatches] = useState<BackendMatch[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     document.title =
       "League Standings – Lamu Sports Hub | Lamu Football Tables";
   }, []);
+
+  useEffect(() => {
+    if (!actor) return;
+    setLoading(true);
+    Promise.all([actor.getAllTeams(), actor.getAllMatches()])
+      .then(([t, m]) => {
+        setTeams(t);
+        setMatches(m);
+      })
+      .catch((err) => console.error("Failed to load standings data:", err))
+      .finally(() => setLoading(false));
+  }, [actor]);
+
+  const standings = computeBackendStandings(teams, matches);
+
+  // Derive summary stats from real data
+  const topGoalsTeam =
+    standings.length > 0
+      ? standings.reduce(
+          (a, b) => (b.goalsFor > a.goalsFor ? b : a),
+          standings[0],
+        )
+      : null;
+  const topPointsTeam =
+    standings.length > 0
+      ? standings.reduce((a, b) => (b.points > a.points ? b : a), standings[0])
+      : null;
+  const bestDefenceTeam =
+    standings.length > 0
+      ? standings.reduce(
+          (a, b) => (b.goalsAgainst < a.goalsAgainst ? b : a),
+          standings[0],
+        )
+      : null;
 
   return (
     <div data-ocid="standings.page" className="min-h-screen pb-24 pt-14">
@@ -147,140 +188,176 @@ export function StandingsPage() {
                   <span className="text-center font-black">Pts</span>
                 </div>
 
-                {standings.map((entry, i) => {
-                  const isChampions = i < 4;
-                  const isRelegation = i >= standings.length - 3;
-
-                  return (
-                    <motion.button
-                      type="button"
-                      key={entry.team.teamId}
-                      initial={{ x: -20, opacity: 0 }}
-                      animate={{ x: 0, opacity: 1 }}
-                      transition={{ delay: i * 0.04 }}
-                      data-ocid={`standings.row.${i + 1}`}
-                      className={`w-full grid px-3 py-3 items-center border-b border-border/40 last:border-0 hover:bg-muted/20 cursor-pointer transition-colors relative text-left ${
-                        isChampions
-                          ? "zone-champions"
-                          : isRelegation
-                            ? "zone-relegation"
-                            : ""
-                      }`}
-                      style={{
-                        gridTemplateColumns:
-                          "28px minmax(100px,1fr) 26px 26px 26px 26px 30px 30px 30px 36px",
-                        minWidth: 520,
-                      }}
-                      onClick={() =>
-                        navigate({ to: `/teams/${entry.team.teamId}` })
-                      }
+                {loading ? (
+                  Array.from({ length: 6 }).map((_, i) => (
+                    <div
+                      // biome-ignore lint/suspicious/noArrayIndexKey: skeleton
+                      key={i}
+                      className="px-3 py-3.5 border-b border-border/40 last:border-0 animate-pulse"
+                      style={{ minWidth: 520 }}
                     >
-                      {/* Position */}
-                      <span
-                        className={`text-sm font-black ${
-                          i === 0
-                            ? "text-yellow-400"
-                            : i === 1
-                              ? "text-gray-300"
-                              : i === 2
-                                ? "text-amber-600"
-                                : "text-muted-foreground"
-                        }`}
-                      >
-                        {entry.position}
-                      </span>
+                      <div className="h-4 bg-muted/40 rounded w-full" />
+                    </div>
+                  ))
+                ) : standings.length === 0 ? (
+                  <div
+                    className="px-3 py-12 text-center"
+                    data-ocid="standings.empty_state"
+                    style={{ minWidth: 520 }}
+                  >
+                    <p className="text-sm text-muted-foreground">
+                      No teams registered yet. Check back soon.
+                    </p>
+                  </div>
+                ) : (
+                  standings.map((entry, i) => {
+                    const isChampions = i < 2;
+                    const isRelegation =
+                      i >= standings.length - 2 && standings.length > 3;
 
-                      {/* Club */}
-                      <div className="flex items-center gap-2 min-w-0">
-                        <TeamBadge team={entry.team} size="sm" />
-                        <div className="min-w-0">
-                          <span className="text-xs font-bold text-foreground truncate block">
-                            {entry.team.name}
-                          </span>
-                          <div className="hidden sm:flex gap-0.5 mt-0.5">
-                            {entry.form.map((f, fi) => (
-                              // biome-ignore lint/suspicious/noArrayIndexKey: form order is stable
-                              <FormBadgeComp key={`form-${fi}`} result={f} />
-                            ))}
+                    return (
+                      <motion.button
+                        type="button"
+                        key={entry.team.teamId}
+                        initial={{ x: -20, opacity: 0 }}
+                        animate={{ x: 0, opacity: 1 }}
+                        transition={{ delay: i * 0.04 }}
+                        data-ocid={`standings.row.${i + 1}`}
+                        className={`w-full grid px-3 py-3 items-center border-b border-border/40 last:border-0 hover:bg-muted/20 cursor-pointer transition-colors relative text-left ${
+                          isChampions
+                            ? "zone-champions"
+                            : isRelegation
+                              ? "zone-relegation"
+                              : ""
+                        }`}
+                        style={{
+                          gridTemplateColumns:
+                            "28px minmax(100px,1fr) 26px 26px 26px 26px 30px 30px 30px 36px",
+                          minWidth: 520,
+                        }}
+                        onClick={() =>
+                          navigate({ to: `/teams/${entry.team.teamId}` })
+                        }
+                      >
+                        {/* Position */}
+                        <span
+                          className={`text-sm font-black ${
+                            i === 0
+                              ? "text-yellow-400"
+                              : i === 1
+                                ? "text-gray-300"
+                                : i === 2
+                                  ? "text-amber-600"
+                                  : "text-muted-foreground"
+                          }`}
+                        >
+                          {entry.position}
+                        </span>
+
+                        {/* Club */}
+                        <div className="flex items-center gap-2 min-w-0">
+                          <TeamBadge team={entry.team} size="sm" />
+                          <div className="min-w-0">
+                            <span className="text-xs font-bold text-foreground truncate block">
+                              {entry.team.name}
+                            </span>
+                            <div className="hidden sm:flex gap-0.5 mt-0.5">
+                              {entry.form.map((f, fi) => (
+                                // biome-ignore lint/suspicious/noArrayIndexKey: form order is stable
+                                <FormBadgeComp key={`form-${fi}`} result={f} />
+                              ))}
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* MP */}
-                      <span className="text-xs text-center text-muted-foreground">
-                        {entry.played}
-                      </span>
-                      {/* W */}
-                      <span className="text-xs text-center font-semibold text-green-400">
-                        {entry.wins}
-                      </span>
-                      {/* D */}
-                      <span className="text-xs text-center text-yellow-400">
-                        {entry.draws}
-                      </span>
-                      {/* L */}
-                      <span className="text-xs text-center text-red-400">
-                        {entry.losses}
-                      </span>
-                      {/* GF */}
-                      <span className="text-xs text-center text-foreground">
-                        {entry.goalsFor}
-                      </span>
-                      {/* GA */}
-                      <span className="text-xs text-center text-muted-foreground">
-                        {entry.goalsAgainst}
-                      </span>
-                      {/* GD */}
-                      <span
-                        className={`text-xs text-center font-bold ${
-                          entry.goalDiff > 0
-                            ? "text-green-400"
-                            : entry.goalDiff < 0
-                              ? "text-red-400"
-                              : "text-muted-foreground"
-                        }`}
-                      >
-                        {entry.goalDiff > 0 ? "+" : ""}
-                        {entry.goalDiff}
-                      </span>
-                      {/* Pts */}
-                      <span className="text-sm text-center font-black text-foreground">
-                        {entry.points}
-                      </span>
-                    </motion.button>
-                  );
-                })}
+                        {/* MP */}
+                        <span className="text-xs text-center text-muted-foreground">
+                          {entry.played}
+                        </span>
+                        {/* W */}
+                        <span className="text-xs text-center font-semibold text-green-400">
+                          {entry.wins}
+                        </span>
+                        {/* D */}
+                        <span className="text-xs text-center text-yellow-400">
+                          {entry.draws}
+                        </span>
+                        {/* L */}
+                        <span className="text-xs text-center text-red-400">
+                          {entry.losses}
+                        </span>
+                        {/* GF */}
+                        <span className="text-xs text-center text-foreground">
+                          {entry.goalsFor}
+                        </span>
+                        {/* GA */}
+                        <span className="text-xs text-center text-muted-foreground">
+                          {entry.goalsAgainst}
+                        </span>
+                        {/* GD */}
+                        <span
+                          className={`text-xs text-center font-bold ${
+                            entry.goalDiff > 0
+                              ? "text-green-400"
+                              : entry.goalDiff < 0
+                                ? "text-red-400"
+                                : "text-muted-foreground"
+                          }`}
+                        >
+                          {entry.goalDiff > 0 ? "+" : ""}
+                          {entry.goalDiff}
+                        </span>
+                        {/* Pts */}
+                        <span className="text-sm text-center font-black text-foreground">
+                          {entry.points}
+                        </span>
+                      </motion.button>
+                    );
+                  })
+                )}
               </div>
             </div>
           </div>
 
           {/* Stats footer */}
-          <div className="px-4 mt-4 grid grid-cols-3 gap-3">
-            {[
-              { label: "Most Goals", value: "Shela United", sub: "27 scored" },
-              { label: "Top Points", value: "Shela United", sub: "26 pts" },
-              {
-                label: "Best Defence",
-                value: "Shela United",
-                sub: "12 conceded",
-              },
-            ].map((stat) => (
-              <div
-                key={stat.label}
-                className="rounded-lg p-3 bg-card border border-border text-center"
-              >
-                <div className="text-[10px] text-muted-foreground mb-1">
-                  {stat.label}
+          {!loading && standings.length > 0 && (
+            <div className="px-4 mt-4 grid grid-cols-3 gap-3">
+              {[
+                {
+                  label: "Most Goals",
+                  value: topGoalsTeam?.team.name ?? "—",
+                  sub: topGoalsTeam ? `${topGoalsTeam.goalsFor} scored` : "",
+                },
+                {
+                  label: "Top Points",
+                  value: topPointsTeam?.team.name ?? "—",
+                  sub: topPointsTeam ? `${topPointsTeam.points} pts` : "",
+                },
+                {
+                  label: "Best Defence",
+                  value: bestDefenceTeam?.team.name ?? "—",
+                  sub: bestDefenceTeam
+                    ? `${bestDefenceTeam.goalsAgainst} conceded`
+                    : "",
+                },
+              ].map((stat) => (
+                <div
+                  key={stat.label}
+                  className="rounded-lg p-3 bg-card border border-border text-center"
+                >
+                  <div className="text-[10px] text-muted-foreground mb-1">
+                    {stat.label}
+                  </div>
+                  <div className="text-xs font-bold text-foreground leading-tight">
+                    {stat.value}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">
+                    {stat.sub}
+                  </div>
                 </div>
-                <div className="text-xs font-bold text-foreground leading-tight">
-                  {stat.value}
-                </div>
-                <div className="text-[10px] text-muted-foreground">
-                  {stat.sub}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </>
       )}
     </div>
