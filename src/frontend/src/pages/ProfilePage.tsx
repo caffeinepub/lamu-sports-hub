@@ -127,6 +127,7 @@ export function ProfilePage({
   const [profilePhoto, setProfilePhoto] = useState<string | null>(
     getProfilePhoto,
   );
+  const [photoLightbox, setPhotoLightbox] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   // Real backend data
@@ -234,6 +235,40 @@ export function ProfilePage({
     reader.readAsDataURL(file);
   };
 
+  // ── Photo lightbox ────────────────────────────────────────────────────────
+  const PhotoLightbox =
+    photoLightbox && profilePhoto ? (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
+        style={{ cursor: "zoom-out" }}
+        aria-label="Profile photo fullscreen"
+        aria-modal="true"
+        role="presentation"
+        onClick={() => setPhotoLightbox(false)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setPhotoLightbox(false);
+        }}
+      >
+        <img
+          src={profilePhoto}
+          alt="Profile full size"
+          className="max-w-[92vw] max-h-[92vh] rounded-2xl object-contain shadow-2xl"
+          style={{
+            border: "2px solid oklch(0.6 0.22 24 / 0.4)",
+            cursor: "default",
+          }}
+        />
+        <button
+          type="button"
+          className="absolute top-5 right-5 w-9 h-9 rounded-full flex items-center justify-center bg-white/10 hover:bg-white/20 text-white"
+          onClick={() => setPhotoLightbox(false)}
+          aria-label="Close fullscreen photo"
+        >
+          ✕
+        </button>
+      </div>
+    ) : null;
+
   // ── Simple profile save handler ───────────────────────────────────────────
   const handleSimpleSave = () => {
     if (!simpleProfile) return;
@@ -259,6 +294,7 @@ export function ProfilePage({
     const displaySimpleName = simpleName || simpleProfile.name || "Member";
     return (
       <div data-ocid="profile.page" className="min-h-screen pb-24 pt-14">
+        {PhotoLightbox}
         {/* Header */}
         <div
           className="px-4 pt-6 pb-8 relative overflow-hidden"
@@ -282,12 +318,20 @@ export function ProfilePage({
                 onChange={handlePhotoChange}
               />
               {profilePhoto ? (
-                <img
-                  src={profilePhoto}
-                  alt="Profile"
-                  className="w-16 h-16 rounded-full object-cover"
-                  style={{ border: "3px solid oklch(0.6 0.22 24 / 0.5)" }}
-                />
+                <button
+                  type="button"
+                  onClick={() => setPhotoLightbox(true)}
+                  title="View full photo"
+                  className="focus:outline-none"
+                  style={{ cursor: "zoom-in" }}
+                >
+                  <img
+                    src={profilePhoto}
+                    alt="Profile"
+                    className="w-16 h-16 rounded-full object-cover"
+                    style={{ border: "3px solid oklch(0.6 0.22 24 / 0.5)" }}
+                  />
+                </button>
               ) : (
                 <div
                   className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-black font-stats"
@@ -638,6 +682,7 @@ export function ProfilePage({
 
   return (
     <div data-ocid="profile.page" className="min-h-screen pb-24 pt-14">
+      {PhotoLightbox}
       {/* Header */}
       <div
         className="px-4 pt-6 pb-8 relative overflow-hidden"
@@ -661,12 +706,20 @@ export function ProfilePage({
               onChange={handlePhotoChange}
             />
             {profilePhoto ? (
-              <img
-                src={profilePhoto}
-                alt="Profile"
-                className="w-16 h-16 rounded-full object-cover"
-                style={{ border: "3px solid oklch(0.55 0.18 252 / 0.4)" }}
-              />
+              <button
+                type="button"
+                onClick={() => setPhotoLightbox(true)}
+                title="View full photo"
+                className="focus:outline-none"
+                style={{ cursor: "zoom-in" }}
+              >
+                <img
+                  src={profilePhoto}
+                  alt="Profile"
+                  className="w-16 h-16 rounded-full object-cover"
+                  style={{ border: "3px solid oklch(0.55 0.18 252 / 0.4)" }}
+                />
+              </button>
             ) : (
               <div
                 className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-black font-stats"

@@ -453,6 +453,48 @@ export function softDeleteTeam(teamId: string): void {
   }
 }
 
+// ── News Photos ────────────────────────────────────────────────────────────────
+// Maps newsId -> base64 data URL of the uploaded photo
+export const LSH_NEWS_PHOTOS_KEY = "lsh_news_photos";
+
+export function getNewsPhotos(): Record<string, string> {
+  return getLocalStore<Record<string, string>>(LSH_NEWS_PHOTOS_KEY, {});
+}
+
+export function setNewsPhoto(newsId: string, base64: string): void {
+  const current = getNewsPhotos();
+  current[newsId] = base64;
+  setLocalStore(LSH_NEWS_PHOTOS_KEY, current);
+}
+
+export function deleteNewsPhoto(newsId: string): void {
+  const current = getNewsPhotos();
+  delete current[newsId];
+  setLocalStore(LSH_NEWS_PHOTOS_KEY, current);
+}
+
+// ── Notifications Read State ──────────────────────────────────────────────────
+// Persists which notification IDs have been marked as read
+export const LSH_NOTIF_READ_KEY = "lsh_notif_read_ids";
+
+export function getReadNotifIds(): string[] {
+  return getLocalStore<string[]>(LSH_NOTIF_READ_KEY, []);
+}
+
+export function markNotifRead(notifId: string): void {
+  const current = getReadNotifIds();
+  if (!current.includes(notifId)) {
+    current.push(notifId);
+    setLocalStore(LSH_NOTIF_READ_KEY, current);
+  }
+}
+
+export function markAllNotifsRead(notifIds: string[]): void {
+  const current = getReadNotifIds();
+  const merged = Array.from(new Set([...current, ...notifIds]));
+  setLocalStore(LSH_NOTIF_READ_KEY, merged);
+}
+
 // ── Soft-deleted Players ───────────────────────────────────────────────────────
 export const LSH_DELETED_PLAYERS_KEY = "lsh_deleted_players";
 

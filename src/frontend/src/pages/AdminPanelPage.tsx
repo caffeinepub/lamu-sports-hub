@@ -62,6 +62,7 @@ import {
   getMatchPitches,
   getMatchReferees,
   getNewsConfirmations,
+  getNewsPhotos,
   getOfficialCode,
   getOfficials,
   getPitches,
@@ -76,6 +77,7 @@ import {
   setLocalStore,
   setMatchPitch,
   setMatchReferee,
+  setNewsPhoto,
   setOfficialCode,
   setTeamLogo,
   setTeamOverride,
@@ -384,6 +386,10 @@ function AdminPanelInner() {
   const [newsConfirmations, setNewsConfirmations] =
     useState<Record<string, NewsConfirmation>>(getNewsConfirmations);
 
+  // News photos (local store, keyed by newsId)
+  const [newsPhotos, setNewsPhotosState] =
+    useState<Record<string, string>>(getNewsPhotos);
+
   // Load real backend teams whenever the matches tab is active or create-match dialog opens
   useEffect(() => {
     if (!actor) return;
@@ -489,6 +495,8 @@ function AdminPanelInner() {
     try {
       const items = await actor.getAllNewsAdmin();
       setNewsList(items as NewsItem[]);
+      // Sync local photos state in case new photos were saved
+      setNewsPhotosState(getNewsPhotos());
     } catch {
       toast.error("Failed to load news");
     } finally {
@@ -738,7 +746,15 @@ function AdminPanelInner() {
     }
     setAddNewsLoading(true);
     try {
-      await actor?.createNews(newsTitle.trim(), newsBody.trim(), newsPublished);
+      const newsId = await actor?.createNews(
+        newsTitle.trim(),
+        newsBody.trim(),
+        newsPublished,
+      );
+      // If a photo was selected, save it to localStorage keyed by the returned newsId
+      if (newsId && newsPhotoPreview) {
+        setNewsPhoto(newsId, newsPhotoPreview);
+      }
       toast.success("News post created!");
       setShowAddNews(false);
       setNewsTitle("");
@@ -1355,7 +1371,7 @@ function AdminPanelInner() {
                   className="flex items-center gap-3 px-3 py-3 border-b border-border/50 last:border-0"
                   data-ocid={`admin.news.row.${i + 1}`}
                 >
-                  {/* Thumbnail */}
+                  {/* Thumbnail — show backend photo, or local photo, or placeholder */}
                   <div
                     className="w-10 h-10 rounded-lg flex-shrink-0 overflow-hidden"
                     style={{
@@ -1366,6 +1382,12 @@ function AdminPanelInner() {
                     {item.photo ? (
                       <img
                         src={item.photo.getDirectURL()}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    ) : newsPhotos[item.newsId] ? (
+                      <img
+                        src={newsPhotos[item.newsId]}
                         alt=""
                         className="w-full h-full object-cover"
                       />
@@ -3200,8 +3222,10 @@ function AdminPlayersTab({ autoOpenDialog }: { autoOpenDialog?: boolean }) {
                 </div>
               ) : (
                 <Select
-                  value={newPlayerTeamId}
-                  onValueChange={setNewPlayerTeamId}
+                  value={newPlayerTeamId || "__none__"}
+                  onValueChange={(v) =>
+                    setNewPlayerTeamId(v === "__none__" ? "" : v)
+                  }
                 >
                   <SelectTrigger
                     className="h-9 text-sm"
@@ -3210,6 +3234,12 @@ function AdminPlayersTab({ autoOpenDialog }: { autoOpenDialog?: boolean }) {
                     <SelectValue placeholder="Select team..." />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem
+                      value="__none__"
+                      className="text-sm text-muted-foreground"
+                    >
+                      — Select a team —
+                    </SelectItem>
                     {backendTeams.map((t) => (
                       <SelectItem
                         key={t.teamId}

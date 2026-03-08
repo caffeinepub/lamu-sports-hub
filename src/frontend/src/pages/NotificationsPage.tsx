@@ -1,6 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { MOCK_NOTIFICATIONS } from "@/data/mockData";
 import {
+  getReadNotifIds,
+  markAllNotifsRead,
+  markNotifRead,
+} from "@/utils/localStore";
+import {
   AlertCircle,
   Bell,
   CheckCheck,
@@ -35,11 +40,24 @@ function formatTimestamp(ts: string): string {
 }
 
 export function NotificationsPage() {
-  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
+  // Merge read state from localStorage with the mock list so read status persists across sessions
+  const [readIds, setReadIds] = useState<string[]>(() => getReadNotifIds());
+
+  const notifications = MOCK_NOTIFICATIONS.map((n) => ({
+    ...n,
+    isRead: readIds.includes(n.notificationId) || n.isRead,
+  }));
 
   const markAllRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    const allIds = MOCK_NOTIFICATIONS.map((n) => n.notificationId);
+    markAllNotifsRead(allIds);
+    setReadIds(allIds);
     toast.success("All notifications marked as read");
+  };
+
+  const markOneRead = (notifId: string) => {
+    markNotifRead(notifId);
+    setReadIds((prev) => (prev.includes(notifId) ? prev : [...prev, notifId]));
   };
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
@@ -105,7 +123,10 @@ export function NotificationsPage() {
                 animate={{ x: 0, opacity: 1 }}
                 transition={{ delay: i * 0.06 }}
                 data-ocid={`notifications.item.${i + 1}`}
-                className={`rounded-xl p-4 border transition-all ${
+                onClick={() => {
+                  if (!notif.isRead) markOneRead(notif.notificationId);
+                }}
+                className={`rounded-xl p-4 border transition-all cursor-pointer active:scale-[0.99] ${
                   notif.isRead
                     ? "bg-card border-border opacity-70"
                     : "bg-card border-primary/30 ring-1 ring-primary/10"

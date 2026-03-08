@@ -43,6 +43,7 @@ import {
   type SystemStatus,
   getLocalStore,
   getNewsConfirmations,
+  getNewsPhotos,
   getUserSettings,
 } from "@/utils/localStore";
 import { computeBackendStandings } from "@/utils/standingsUtils";
@@ -238,6 +239,7 @@ export function DashboardPage({
   const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
   const [newsConfirmations, _setNewsConfirmations] =
     useState<Record<string, NewsConfirmation>>(getNewsConfirmations);
+  const [newsLocalPhotos] = useState<Record<string, string>>(getNewsPhotos);
 
   // Keep a stable ref to actor for use inside interval callback
   const actorRef = useRef(actor);
@@ -990,14 +992,21 @@ export function DashboardPage({
                   <div
                     className="w-20 flex-shrink-0 relative"
                     style={{
-                      background: item.photo
-                        ? undefined
-                        : NEWS_GRADIENTS[i % NEWS_GRADIENTS.length],
+                      background:
+                        item.photo || newsLocalPhotos[item.newsId]
+                          ? undefined
+                          : NEWS_GRADIENTS[i % NEWS_GRADIENTS.length],
                     }}
                   >
                     {item.photo ? (
                       <img
                         src={item.photo.getDirectURL()}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    ) : newsLocalPhotos[item.newsId] ? (
+                      <img
+                        src={newsLocalPhotos[item.newsId]}
                         alt=""
                         className="w-full h-full object-cover"
                       />
@@ -1166,16 +1175,20 @@ export function DashboardPage({
         >
           {selectedNews && (
             <>
-              {selectedNews.photo && (
+              {(selectedNews.photo || newsLocalPhotos[selectedNews.newsId]) && (
                 <div className="w-full h-48 rounded-xl overflow-hidden mb-4 -mt-2">
                   <img
-                    src={selectedNews.photo.getDirectURL()}
+                    src={
+                      selectedNews.photo
+                        ? selectedNews.photo.getDirectURL()
+                        : newsLocalPhotos[selectedNews.newsId]
+                    }
                     alt=""
                     className="w-full h-full object-cover"
                   />
                 </div>
               )}
-              {!selectedNews.photo && (
+              {!selectedNews.photo && !newsLocalPhotos[selectedNews.newsId] && (
                 <div
                   className="w-full h-32 rounded-xl mb-4 -mt-2 flex items-center justify-center"
                   style={{

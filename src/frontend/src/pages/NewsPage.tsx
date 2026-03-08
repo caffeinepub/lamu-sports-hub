@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useActor } from "@/hooks/useActor";
-import { getNewsConfirmations } from "@/utils/localStore";
+import { getNewsConfirmations, getNewsPhotos } from "@/utils/localStore";
 import { CheckCircle, Newspaper, RefreshCw } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -305,7 +305,11 @@ export function NewsPage() {
       });
 
     Promise.all(promises).then(() => {
-      if (!cancelled) setPhotoBlobUrls({ ...urls });
+      if (!cancelled) {
+        // Merge with local photos so photos saved via admin panel show up
+        const localPhotos = getNewsPhotos();
+        setPhotoBlobUrls({ ...localPhotos, ...urls });
+      }
     });
 
     return () => {
