@@ -17,7 +17,7 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { Users } from "lucide-react";
 import { motion } from "motion/react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 // Deterministic color palette for teams
 const TEAM_COLORS = [
@@ -66,7 +66,7 @@ export function TeamsPage() {
 
   // Load real teams from backend, then merge with locally stored teams,
   // apply name/area overrides and filter out soft-deleted teams.
-  useEffect(() => {
+  const loadTeams = useCallback(() => {
     if (actorFetching) return;
     const localTeams = getLocalTeams();
     const overrides = getTeamOverrides();
@@ -158,6 +158,23 @@ export function TeamsPage() {
       })
       .finally(() => setLoadingData(false));
   }, [actor, actorFetching]);
+
+  useEffect(() => {
+    loadTeams();
+  }, [loadTeams]);
+
+  // Re-load teams when window regains focus, localStorage changes, or admin dispatches update
+  useEffect(() => {
+    const reload = () => loadTeams();
+    window.addEventListener("focus", reload);
+    window.addEventListener("storage", reload);
+    window.addEventListener("lsh:teams-updated", reload);
+    return () => {
+      window.removeEventListener("focus", reload);
+      window.removeEventListener("storage", reload);
+      window.removeEventListener("lsh:teams-updated", reload);
+    };
+  }, [loadTeams]);
 
   const isLoading = actorFetching || loadingData;
 

@@ -4,7 +4,6 @@ import App from "./App";
 import { InternetIdentityProvider } from "./hooks/useInternetIdentity";
 import "../index.css";
 import { runMigrations } from "./utils/localStore";
-runMigrations();
 
 BigInt.prototype.toJSON = function () {
   return this.toString();
@@ -15,6 +14,9 @@ declare global {
     toJSON(): string;
   }
 }
+
+// Run data migrations before the app boots to clean demo data
+runMigrations();
 
 const queryClient = new QueryClient();
 

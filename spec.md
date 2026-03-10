@@ -1,55 +1,40 @@
 # Lamu Sports Hub
 
 ## Current State
-- Admin Panel has team editing dialog but `handleSaveTeam` only does a fake setTimeout — no actual backend call, so edits never persist
-- Teams tab in Admin Panel has no delete button for individual teams
-- Players tab in Admin Panel has no delete button per player
-- Team edit dialog has no logo upload field (logo upload only works via a separate icon button on the row outside the dialog)
-- Officials section (AdminOfficialsTab) initialises with 4 hardcoded seed people: Said Joseph, Fatuma Hassan, Omar Abdallah, Amina Juma
-- Referees section (AdminRefereesTab) initialises with 3 hardcoded seed referees: Mohamed Shariff, Abdalla Kombo, Ibrahim Salim
-- The `localStore.ts` seed data for both Officials and Referees is loaded on first render via `getReferees()` / `getOfficials()` which fall back to SEED data if localStorage is empty
-- Profile page already has a Camera button for own profile photo upload (working)
+Full-stack app with Motoko backend and React/TypeScript frontend. Features: Dashboard, Standings (auto-calculated from matches via standingsUtils.ts), Teams, Players, Matches, News, Leaderboard, Notifications, Admin Panel, Profile, Settings, and more. Local storage fallback for PIN-session users. Known persistent issues: demo notifications, team name edits not always reflecting, news not showing on dashboard.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Delete button (red trash icon) on each team row in TeamsTabContent, with a confirmation dialog before deleting. Since backend has no deleteTeam function, delete from the local state and show a toast. The team list should refresh from backend but exclude the deleted team IDs stored locally.
-- Delete button (red trash icon) on each player row in AdminPlayersTab, with a confirmation dialog. Use `actor.createPlayer` workaround — since there is no deletePlayer in backend.d.ts, mark the player as deleted in localStorage and filter them from the displayed list.
-- Team logo upload field inside the Edit Team dialog (in addition to keeping the existing row icon button) — so when editing a team, there is a preview + upload button right in the dialog
-- Player profile picture upload inside each player row (already exists as a button) — ensure it persists correctly and shows the photo on the player card
+- **Matchday countdown alert banner** on Dashboard: when a match is scheduled within 2 hours, show a dismissible banner with team names, time, and venue
+- **Fan comments/reactions** on news posts: heart, fire, clap emoji reactions (stored locally per newsId); comment thread stored locally
+- **Season summary stats** widget on Dashboard: top scorer, most assists, most clean sheets, total goals this season — computed from real match/player data
+- **Global search** component: search bar in TopNav (mobile: search icon, opens overlay); searches teams, players, and news, shows results live
+- **Bulk player import** in Admin Panel > Players tab: paste or upload CSV with columns name,position,jerseyNumber,teamId; preview and confirm before importing
+- **Match result entry with event tracking** in Admin Panel > Matches: when marking a match as played, a modal to enter goal scorers (player + minute), assists (player + minute), and yellow/red cards — saves locally and auto-increments player stats
 
 ### Modify
-- `handleSaveTeam`: currently does fake setTimeout; replace with a real call that at least saves the team name and area to localStorage as an override (since backend has no updateTeam function), then refreshes the team list. Show a success toast with the actual new team name.
-- `getReferees()` in localStore.ts: change so it returns `[]` (empty array) instead of SEED_REFEREES when localStorage has no data. Remove the SEED_REFEREES seed. Officials should start empty too.
-- `getOfficials()` in localStore.ts: change so it returns `[]` (empty array) instead of SEED_OFFICIALS when localStorage has no data. Remove the SEED_OFFICIALS seed.
-- `getAwards()` in localStore.ts: change so it returns `[]` instead of SEED_AWARDS. Remove demo award data.
+- **Notifications page**: hard remove any remaining demo data; `runMigrations()` must run on app startup in main.tsx
+- **Team name edits**: after edit, also force-refresh all consumers via a custom event (`lsh:teams-updated`) that TeamsPage, PlayersPage, SettingsPage, and DashboardPage listen to
+- **Dashboard news section**: fallback to `getLocalNews()` if backend returns empty; also add auto-poll every 30s
+- **Leaderboard page**: compute top scorers from real local players (combining backend + local players) sorted by goals desc
+- **Standings page**: already uses computeBackendStandings; add form guide column (last 5 results dots)
+- **Player profile page**: add a Comments/Reactions tab below stats
+- **Team profile page**: add recent match results section (last 5 matches with scores)
 
 ### Remove
-- SEED_REFEREES constant and its usage in getReferees()
-- SEED_OFFICIALS constant and its usage in getOfficials()
-- SEED_AWARDS constant and its usage in getAwards()
-- Demo data that would confuse officials trying to enter real data
+- Any remaining hardcoded demo player/team/referee names in initial render
 
 ## Implementation Plan
-
-1. **localStore.ts** — Remove SEED_REFEREES, SEED_OFFICIALS, SEED_AWARDS. Update getReferees/getOfficials/getAwards to return [] when localStorage is empty. Add a `LSH_TEAM_OVERRIDES_KEY` for storing team name/area edits and `LSH_DELETED_TEAMS_KEY` / `LSH_DELETED_PLAYERS_KEY` for soft-deletes.
-
-2. **AdminPanelPage.tsx** — TeamsTabContent:
-   - Add delete button with confirmation dialog per team row
-   - On confirm: store teamId in `LSH_DELETED_TEAMS_KEY` in localStorage, remove from local state, toast success
-   - Filter displayed teams against deleted IDs
-   - Pass a `onTeamLogoChange` callback so logo can also be uploaded inside the edit dialog
-
-3. **AdminPanelPage.tsx** — handleSaveTeam:
-   - Store `{ teamId, name, area }` in localStorage overrides map
-   - Update local displayed teams state immediately with the new name/area
-   - Close dialog and toast success with the real new name
-
-4. **AdminPanelPage.tsx** — Edit Team dialog:
-   - Add logo upload section (same pattern as Add News photo upload) — file input, preview thumbnail, upload button
-   - On file selected, call setTeamLogo and refresh teamLogos state
-
-5. **AdminPanelPage.tsx** — AdminPlayersTab:
-   - Add delete button per player row
-   - On confirm: store playerId in `LSH_DELETED_PLAYERS_KEY` in localStorage, filter from displayed list
-   - Keep photo upload and confirmation checkbox as-is
+1. Add `runMigrations()` call in main.tsx before React render
+2. Add `lsh:teams-updated` custom event dispatching in Admin Panel team CRUD; add window event listeners in TeamsPage, PlayersPage, SettingsPage
+3. Fix Dashboard news: merge backend news + local news, sort by timestamp, auto-poll
+4. Add matchday alert banner component to DashboardPage (check matches within 2h window)
+5. Add global search overlay to TopNav with results from backend teams/players and local news
+6. Add emoji reactions + comments to NewsPage individual post view (local storage)
+7. Add season summary stats widget to DashboardPage
+8. Add bulk import dialog to AdminPanelPage Players tab
+9. Add match event entry modal to AdminPanelPage Matches tab
+10. Update LeaderboardPage to compute from real data
+11. Add form guide dots to StandingsPage
+12. Add recent matches to TeamProfilePage

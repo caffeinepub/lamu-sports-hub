@@ -10,12 +10,111 @@ import {
 } from "@/components/shared/TeamBadge";
 import { Button } from "@/components/ui/button";
 import { useActor } from "@/hooks/useActor";
-import { getPlayerPhotos } from "@/utils/localStore";
+import {
+  getMatchEvents,
+  getMatchReferees,
+  getPlayerPhotos,
+} from "@/utils/localStore";
 import { computeBackendStandings } from "@/utils/standingsUtils";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { Loader2, User, X } from "lucide-react";
+import { Activity, Loader2, User, X } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
+
+function RecentMatchCard({
+  match,
+  teams,
+  teamId,
+}: {
+  match: BackendMatch;
+  teams: BackendTeam[];
+  teamId: string;
+}) {
+  const home = teams.find((t) => t.teamId === match.homeTeam);
+  const away = teams.find((t) => t.teamId === match.awayTeam);
+  const isHome = match.homeTeam === teamId;
+  const homeScore = Number(match.homeScore);
+  const awayScore = Number(match.awayScore);
+  const ourScore = isHome ? homeScore : awayScore;
+  const theirScore = isHome ? awayScore : homeScore;
+  const opponent = isHome ? away : home;
+  const opponentColor = opponent
+    ? getTeamColor(opponent.teamId)
+    : "oklch(0.4 0.06 255)";
+
+  let result: "W" | "D" | "L" = "D";
+  if (ourScore > theirScore) result = "W";
+  else if (ourScore < theirScore) result = "L";
+
+  const resultColors = {
+    W: {
+      bg: "oklch(0.22 0.08 140 / 0.3)",
+      border: "oklch(0.4 0.14 140 / 0.6)",
+      text: "oklch(0.65 0.18 140)",
+    },
+    D: {
+      bg: "oklch(0.22 0.06 80 / 0.3)",
+      border: "oklch(0.45 0.12 80 / 0.6)",
+      text: "oklch(0.75 0.12 80)",
+    },
+    L: {
+      bg: "oklch(0.2 0.08 24 / 0.3)",
+      border: "oklch(0.4 0.14 24 / 0.6)",
+      text: "oklch(0.65 0.18 24)",
+    },
+  }[result];
+
+  const matchDate = new Date(Number(match.date) / 1_000_000).toLocaleDateString(
+    "en-GB",
+    {
+      day: "numeric",
+      month: "short",
+    },
+  );
+
+  const events = getMatchEvents(match.matchId);
+  const scorers = events.goals.map((g) => g.playerName);
+
+  return (
+    <div
+      className="rounded-xl p-3 border flex items-center gap-3"
+      style={{ background: resultColors.bg, borderColor: resultColors.border }}
+    >
+      <div
+        className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-black flex-shrink-0"
+        style={{
+          background: resultColors.bg,
+          color: resultColors.text,
+          border: `1.5px solid ${resultColors.border}`,
+        }}
+      >
+        {result}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <div
+            className="w-4 h-4 rounded-full flex-shrink-0"
+            style={{ backgroundColor: opponentColor }}
+          />
+          <span className="text-xs font-bold text-foreground truncate">
+            vs {opponent?.name ?? "Unknown"}
+          </span>
+        </div>
+        {scorers.length > 0 && (
+          <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+            ⚽ {scorers.slice(0, 3).join(", ")}
+          </p>
+        )}
+        <p className="text-[10px] text-muted-foreground">{matchDate}</p>
+      </div>
+      <div className="text-right flex-shrink-0">
+        <span className="font-black font-stats text-lg text-foreground">
+          {ourScore}–{theirScore}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 export function TeamProfilePage() {
   const { teamId } = useParams({ strict: false }) as { teamId: string };
@@ -52,6 +151,20 @@ export function TeamProfilePage() {
   const standing = team
     ? standings.find((s) => s.team.teamId === team.teamId)
     : null;
+
+  // Recent played matches for this team
+  const recentMatches = allMatches
+    .filter(
+      (m) =>
+        (m.homeTeam === teamId || m.awayTeam === teamId) &&
+        (m.status?.toString().includes("played") ||
+          String(m.status) === "played"),
+    )
+    .sort((a, b) => Number(b.date) - Number(a.date))
+    .slice(0, 5);
+
+  // Form guide from standings
+  const formGuide = standing?.form ?? [];
 
   if (loading) {
     return (
@@ -122,7 +235,7 @@ export function TeamProfilePage() {
             <AreaBadge area={team.area} className="mt-1" />
             {team.coachId && (
               <div className="text-xs text-muted-foreground mt-1">
-                Coach ID: {team.coachId.slice(0, 8)}...
+                Coach: {team.coachId.slice(0, 16)}
               </div>
             )}
           </div>
@@ -168,7 +281,63 @@ export function TeamProfilePage() {
             </div>
           ))}
         </motion.div>
+
+        {/* Form guide */}
+        {formGuide.length > 0 && (
+          <motion.div
+            initial={{ y: 10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.15 }}
+            className="flex items-center gap-2 mt-3"
+          >
+            <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">
+              Form:
+            </span>
+            {formGuide.map((f, i) => (
+              <span
+                // biome-ignore lint/suspicious/noArrayIndexKey: form order is stable
+                key={i}
+                className={`w-5 h-5 rounded text-[9px] font-black flex items-center justify-center ${
+                  f === "W"
+                    ? "bg-green-500/80 text-white"
+                    : f === "D"
+                      ? "bg-yellow-500/80 text-white"
+                      : "bg-red-500/80 text-white"
+                }`}
+              >
+                {f}
+              </span>
+            ))}
+          </motion.div>
+        )}
       </div>
+
+      {/* Recent Results */}
+      {recentMatches.length > 0 && (
+        <div className="px-4 mt-5">
+          <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide flex items-center gap-1.5 mb-3">
+            <Activity className="w-4 h-4" />
+            Recent Results
+          </h2>
+          <div className="space-y-2" data-ocid="team_profile.results.list">
+            {recentMatches.map((match, i) => (
+              <motion.div
+                key={match.matchId}
+                initial={{ y: 10, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: i * 0.05 }}
+                data-ocid={`team_profile.result.item.${i + 1}`}
+              >
+                <RecentMatchCard
+                  match={match}
+                  teams={allTeams}
+                  teamId={teamId}
+                />
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Roster */}
       <div className="px-4 mt-5">

@@ -1,6 +1,7 @@
 import type { T__4 as BackendNewsItem } from "@/backend";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Sheet,
   SheetContent,
@@ -10,9 +11,14 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useActor } from "@/hooks/useActor";
 import {
+  addNewsComment,
   getLocalNews,
+  getNewsComments,
   getNewsConfirmations,
   getNewsPhotos,
+  getNewsReactions,
+  getUserSettings,
+  setNewsReaction,
 } from "@/utils/localStore";
 import { CheckCircle, Newspaper, RefreshCw } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -293,6 +299,12 @@ export function NewsPage() {
 
   // Load on actor ready — set loading immediately so skeleton shows
   const newsLoadedRef = useRef(false);
+  // Reset ref on unmount so news reloads fresh when navigating back
+  useEffect(() => {
+    return () => {
+      newsLoadedRef.current = false;
+    };
+  }, []);
   useEffect(() => {
     // Wait while actor is initialising — but cap the wait at 8s to avoid infinite spinner
     if (actorFetching) {

@@ -6,6 +6,7 @@ import type {
 import { TeamBadge, getTeamColor } from "@/components/shared/TeamBadge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useActor } from "@/hooks/useActor";
+import { getLocalPlayers } from "@/utils/localStore";
 import { computeBackendStandings } from "@/utils/standingsUtils";
 import { useNavigate } from "@tanstack/react-router";
 import { AlertTriangle, Loader2, Target, Trophy, Zap } from "lucide-react";
@@ -61,7 +62,32 @@ export function LeaderboardPage() {
       actor.getAllMatches(),
     ])
       .then(([p, t, m]) => {
-        setPlayers(p);
+        // Merge backend + local players (deduplicate by playerId)
+        const local = getLocalPlayers();
+        const backendIds = new Set(p.map((bp) => bp.playerId));
+        const localAsBacked = local
+          .filter((lp) => !backendIds.has(lp.playerId))
+          .map(
+            (lp) =>
+              ({
+                playerId: lp.playerId,
+                userId: "",
+                name: lp.name,
+                nickname: lp.nickname,
+                teamId: lp.teamId,
+                position: lp.position as any,
+                jerseyNumber: BigInt(lp.jerseyNumber),
+                goals: BigInt(0),
+                assists: BigInt(0),
+                yellowCards: BigInt(0),
+                redCards: BigInt(0),
+                matchesPlayed: BigInt(0),
+                isVerified: false,
+                bio: "",
+                photoUrl: "",
+              }) as unknown as BackendPlayer,
+          );
+        setPlayers([...p, ...localAsBacked]);
         setTeams(t);
         setMatches(m);
       })

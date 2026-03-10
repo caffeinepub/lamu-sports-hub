@@ -675,10 +675,106 @@ export function deleteLocalPlayer(playerId: string): void {
 }
 
 // ── Migrations ───────────────────────────────────────────────────────────────
+const DEMO_PHRASES = [
+  "welcome",
+  "season",
+  "match day",
+  "demo",
+  "test notification",
+  "league begins",
+];
+function isDemoNotification(n: LocalNotification): boolean {
+  const text = n.message.toLowerCase();
+  return DEMO_PHRASES.some((p) => text.includes(p));
+}
+
 export function runMigrations(): void {
   if (!localStorage.getItem("lsh_migration_v2")) {
     // Clear any stale demo notifications from previous versions
     localStorage.setItem(LSH_LOCAL_NOTIFS_KEY, JSON.stringify([]));
     localStorage.setItem("lsh_migration_v2", "done");
   }
+  if (!localStorage.getItem("lsh_migration_v3")) {
+    // Remove demo-phrase notifications but keep real official notifications
+    const current = getLocalNotifications();
+    const cleaned = current.filter((n) => !isDemoNotification(n));
+    setLocalStore(LSH_LOCAL_NOTIFS_KEY, cleaned);
+    localStorage.setItem("lsh_migration_v3", "done");
+  }
+}
+
+// ── News Reactions ────────────────────────────────────────────────────────────
+// Key: lsh_reactions_[newsId] => { [userId]: emoji }
+export function getNewsReactions(newsId: string): Record<string, string> {
+  return getLocalStore<Record<string, string>>(`lsh_reactions_${newsId}`, {});
+}
+
+export function setNewsReaction(
+  newsId: string,
+  userId: string,
+  emoji: string | null,
+): void {
+  const current = getNewsReactions(newsId);
+  if (emoji === null) {
+    delete current[userId];
+  } else {
+    current[userId] = emoji;
+  }
+  setLocalStore(`lsh_reactions_${newsId}`, current);
+}
+
+// ── News Comments ─────────────────────────────────────────────────────────────
+export type NewsComment = {
+  commentId: string;
+  author: string;
+  text: string;
+  timestamp: string;
+};
+
+export function getNewsComments(newsId: string): NewsComment[] {
+  return getLocalStore<NewsComment[]>(`lsh_comments_${newsId}`, []);
+}
+
+export function addNewsComment(
+  newsId: string,
+  comment: Omit<NewsComment, "commentId" | "timestamp">,
+): NewsComment {
+  const all = getNewsComments(newsId);
+  const newComment: NewsComment = {
+    ...comment,
+    commentId: `CMT-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    timestamp: new Date().toISOString(),
+  };
+  all.push(newComment);
+  setLocalStore(`lsh_comments_${newsId}`, all);
+  return newComment;
+}
+
+// ── Match Events ──────────────────────────────────────────────────────────────
+export type GoalEvent = {
+  team: "home" | "away";
+  playerName: string;
+  minute: number;
+};
+
+export type CardEvent = {
+  playerName: string;
+  cardType: "yellow" | "red";
+  minute: number;
+};
+
+export type MatchEvents = {
+  goals: GoalEvent[];
+  cards: CardEvent[];
+};
+
+export function getMatchEvents(matchId: string): MatchEvents {
+  return getLocalStore<MatchEvents>(`lsh_match_events_${matchId}`, {
+    goals: [],
+    cards: [],
+  });
+}
+
+export function setMatchEvents(matchId: string, events: MatchEvents): void {
+  setLocalStore(`lsh_match_events_${matchId}`, events);
 }

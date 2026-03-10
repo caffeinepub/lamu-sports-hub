@@ -34,6 +34,8 @@ import { useActor } from "@/hooks/useActor";
 import { isOfficialSessionVerified } from "@/utils/localStore";
 import {
   type Award,
+  type CardEvent,
+  type GoalEvent,
   LSH_AWARDS_KEY,
   LSH_OFFICIALS_KEY,
   LSH_PITCHES_KEY,
@@ -70,6 +72,7 @@ import {
   getLocalPlayers,
   getLocalStore,
   getLocalTeams,
+  getMatchEvents,
   getMatchPitches,
   getMatchReferees,
   getNewsConfirmations,
@@ -86,6 +89,7 @@ import {
   getTeamOverrides,
   setAppLogo,
   setLocalStore,
+  setMatchEvents,
   setMatchPitch,
   setMatchReferee,
   setNewsPhoto,
@@ -105,6 +109,7 @@ import {
   CheckCircle,
   ClipboardCopy,
   Cog,
+  Download,
   Edit,
   ImageIcon,
   Info,
@@ -118,6 +123,7 @@ import {
   Shield,
   Trash2,
   Trophy,
+  Upload,
   UserCheck,
   Users,
   X,
@@ -376,7 +382,66 @@ function AdminPanelInner() {
     setDeletingTeamName("");
     setDeleteTeamLoading(false);
     setTeamRefreshTrigger((n) => n + 1);
+    window.dispatchEvent(new CustomEvent("lsh:teams-updated"));
     toast.success("Team removed.");
+  };
+
+  // Match Events state
+  const [showMatchEvents, setShowMatchEvents] = useState(false);
+  const [matchEventsMatchId, setMatchEventsMatchId] = useState<string>("");
+  const [currentEvents, setCurrentEvents] = useState<{
+    goals: GoalEvent[];
+    cards: CardEvent[];
+  }>({ goals: [], cards: [] });
+  const [newGoalTeam, setNewGoalTeam] = useState<"home" | "away">("home");
+  const [newGoalPlayer, setNewGoalPlayer] = useState("");
+  const [newGoalMinute, setNewGoalMinute] = useState("");
+  const [newCardPlayer, setNewCardPlayer] = useState("");
+  const [newCardType, setNewCardType] = useState<"yellow" | "red">("yellow");
+  const [newCardMinute, setNewCardMinute] = useState("");
+
+  const openMatchEvents = (matchId: string) => {
+    setMatchEventsMatchId(matchId);
+    setCurrentEvents(getMatchEvents(matchId));
+    setShowMatchEvents(true);
+  };
+
+  const addGoalEvent = () => {
+    if (!newGoalPlayer.trim()) return;
+    const updated = {
+      ...currentEvents,
+      goals: [
+        ...currentEvents.goals,
+        {
+          team: newGoalTeam,
+          playerName: newGoalPlayer.trim(),
+          minute: Number.parseInt(newGoalMinute) || 0,
+        },
+      ],
+    };
+    setCurrentEvents(updated);
+    setMatchEvents(matchEventsMatchId, updated);
+    setNewGoalPlayer("");
+    setNewGoalMinute("");
+  };
+
+  const addCardEvent = () => {
+    if (!newCardPlayer.trim()) return;
+    const updated = {
+      ...currentEvents,
+      cards: [
+        ...currentEvents.cards,
+        {
+          playerName: newCardPlayer.trim(),
+          cardType: newCardType,
+          minute: Number.parseInt(newCardMinute) || 0,
+        },
+      ],
+    };
+    setCurrentEvents(updated);
+    setMatchEvents(matchEventsMatchId, updated);
+    setNewCardPlayer("");
+    setNewCardMinute("");
   };
 
   // Add User state
@@ -594,6 +659,7 @@ function AdminPanelInner() {
       setEditingTeam(null);
       // Trigger a teams refresh
       setTeamRefreshTrigger((n) => n + 1);
+      window.dispatchEvent(new CustomEvent("lsh:teams-updated"));
     } catch {
       toast.error("Failed to update team.");
     } finally {
@@ -776,6 +842,9 @@ function AdminPanelInner() {
           coachName: newTeamCoach.trim(),
           createdAt: Date.now(),
         });
+        toast.warning(
+          "Saved locally — log in as an Official to save permanently to the league.",
+        );
       }
 
       toast.success(`Team "${newTeamName}" created!`);
@@ -786,6 +855,7 @@ function AdminPanelInner() {
       // Switch to teams tab and trigger a refresh
       setActiveTab("teams");
       setTeamRefreshTrigger((n) => n + 1);
+      window.dispatchEvent(new CustomEvent("lsh:teams-updated"));
     } catch {
       toast.error("Failed to create team. Please try again.");
     } finally {
@@ -856,6 +926,9 @@ function AdminPanelInner() {
         if (newsPhotoPreview) {
           setNewsPhoto(localId, newsPhotoPreview);
         }
+        toast.warning(
+          "Saved locally — log in as an Official to save permanently to the league.",
+        );
       }
 
       toast.success("News post created!");
@@ -1427,6 +1500,19 @@ function AdminPanelInner() {
                       onClick={() => openEditMatch(match)}
                     >
                       <Edit className="w-3 h-3" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="w-6 h-6 text-xs flex-shrink-0"
+                      title="Match Events"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openMatchEvents(match.matchId);
+                      }}
+                      data-ocid={`admin.matches.events_button.${i + 1}`}
+                    >
+                      ⚽
                     </Button>
                   </div>
                 );
@@ -2755,6 +2841,203 @@ function AdminPanelInner() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Match Events Dialog */}
+      <Dialog
+        open={showMatchEvents}
+        onOpenChange={(o) => {
+          if (!o) setShowMatchEvents(false);
+        }}
+      >
+        <DialogContent
+          data-ocid="admin.match_events.dialog"
+          className="max-w-lg max-h-[85vh] overflow-y-auto"
+        >
+          <DialogHeader>
+            <DialogTitle className="font-display">Match Events</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-5">
+            {/* Goals */}
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">
+                ⚽ Goal Events
+              </p>
+              <div className="space-y-1.5 mb-3">
+                {currentEvents.goals.map((g, i) => (
+                  <div
+                    key={`goal-${i}-${g.playerName}`}
+                    className="flex items-center gap-2 text-xs bg-green-500/10 rounded-lg px-2 py-1.5 border border-green-500/20"
+                  >
+                    <span className="text-green-400 font-bold">
+                      {g.minute}'
+                    </span>
+                    <span className="font-semibold">{g.playerName}</span>
+                    <span className="text-muted-foreground capitalize">
+                      ({g.team})
+                    </span>
+                    <button
+                      type="button"
+                      className="ml-auto text-muted-foreground hover:text-red-400"
+                      onClick={() => {
+                        const updated = {
+                          ...currentEvents,
+                          goals: currentEvents.goals.filter((_, j) => j !== i),
+                        };
+                        setCurrentEvents(updated);
+                        setMatchEvents(matchEventsMatchId, updated);
+                      }}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                {currentEvents.goals.length === 0 && (
+                  <p className="text-xs text-muted-foreground text-center py-2">
+                    No goals yet
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Select
+                  value={newGoalTeam}
+                  onValueChange={(v) => setNewGoalTeam(v as "home" | "away")}
+                >
+                  <SelectTrigger className="h-8 text-xs w-20 flex-shrink-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="home" className="text-xs">
+                      Home
+                    </SelectItem>
+                    <SelectItem value="away" className="text-xs">
+                      Away
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  value={newGoalPlayer}
+                  onChange={(e) => setNewGoalPlayer(e.target.value)}
+                  placeholder="Player name"
+                  className="h-8 text-xs flex-1"
+                  data-ocid="admin.match_events.goal_player.input"
+                />
+                <Input
+                  value={newGoalMinute}
+                  onChange={(e) => setNewGoalMinute(e.target.value)}
+                  placeholder="Min"
+                  type="number"
+                  className="h-8 text-xs w-16 flex-shrink-0"
+                />
+                <Button
+                  size="sm"
+                  className="h-8 px-2"
+                  onClick={addGoalEvent}
+                  disabled={!newGoalPlayer.trim()}
+                  data-ocid="admin.match_events.add_goal.button"
+                >
+                  <Plus className="w-3 h-3" />
+                </Button>
+              </div>
+            </div>
+            {/* Cards */}
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">
+                🟨 Card Events
+              </p>
+              <div className="space-y-1.5 mb-3">
+                {currentEvents.cards.map((c, i) => (
+                  <div
+                    key={`card-${i}-${c.playerName}`}
+                    className={`flex items-center gap-2 text-xs rounded-lg px-2 py-1.5 border ${c.cardType === "red" ? "bg-red-500/10 border-red-500/20" : "bg-yellow-500/10 border-yellow-500/20"}`}
+                  >
+                    <span
+                      className={`font-bold ${c.cardType === "red" ? "text-red-400" : "text-yellow-400"}`}
+                    >
+                      {c.minute}'
+                    </span>
+                    <span className="font-semibold">{c.playerName}</span>
+                    <span className="capitalize text-muted-foreground">
+                      {c.cardType}
+                    </span>
+                    <button
+                      type="button"
+                      className="ml-auto text-muted-foreground hover:text-red-400"
+                      onClick={() => {
+                        const updated = {
+                          ...currentEvents,
+                          cards: currentEvents.cards.filter((_, j) => j !== i),
+                        };
+                        setCurrentEvents(updated);
+                        setMatchEvents(matchEventsMatchId, updated);
+                      }}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                {currentEvents.cards.length === 0 && (
+                  <p className="text-xs text-muted-foreground text-center py-2">
+                    No cards yet
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Select
+                  value={newCardType}
+                  onValueChange={(v) => setNewCardType(v as "yellow" | "red")}
+                >
+                  <SelectTrigger className="h-8 text-xs w-20 flex-shrink-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="yellow" className="text-xs">
+                      Yellow
+                    </SelectItem>
+                    <SelectItem value="red" className="text-xs">
+                      Red
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  value={newCardPlayer}
+                  onChange={(e) => setNewCardPlayer(e.target.value)}
+                  placeholder="Player name"
+                  className="h-8 text-xs flex-1"
+                  data-ocid="admin.match_events.card_player.input"
+                />
+                <Input
+                  value={newCardMinute}
+                  onChange={(e) => setNewCardMinute(e.target.value)}
+                  placeholder="Min"
+                  type="number"
+                  className="h-8 text-xs w-16 flex-shrink-0"
+                />
+                <Button
+                  size="sm"
+                  className="h-8 px-2"
+                  onClick={addCardEvent}
+                  disabled={!newCardPlayer.trim()}
+                  data-ocid="admin.match_events.add_card.button"
+                >
+                  <Plus className="w-3 h-3" />
+                </Button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              size="sm"
+              onClick={() => setShowMatchEvents(false)}
+              data-ocid="admin.match_events.close_button"
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.6 0.22 24) 0%, oklch(0.55 0.25 20) 100%)",
+              }}
+            >
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -2996,6 +3279,69 @@ function AdminPlayersTab({ autoOpenDialog }: { autoOpenDialog?: boolean }) {
   const [confirmations, setConfirmations] = useState<Record<string, boolean>>(
     getPlayerConfirmations,
   );
+
+  // Bulk Import state
+  const [showBulkImport, setShowBulkImport] = useState(false);
+  const [bulkCsvText, setBulkCsvText] = useState("");
+  const [bulkPreview, setBulkPreview] = useState<
+    Array<{
+      name: string;
+      position: string;
+      jerseyNumber: string;
+      teamId: string;
+    }>
+  >([]);
+  const [bulkParsed, setBulkParsed] = useState(false);
+
+  const parseBulkCsv = () => {
+    const lines = bulkCsvText.trim().split("\n").filter(Boolean);
+    const parsed = lines.slice(1).map((line) => {
+      const [name, position, jerseyNumber, teamId] = line
+        .split(",")
+        .map((s) => s.trim());
+      return {
+        name: name ?? "",
+        position: position ?? "forward",
+        jerseyNumber: jerseyNumber ?? "0",
+        teamId: teamId ?? "",
+      };
+    });
+    setBulkPreview(parsed);
+    setBulkParsed(true);
+  };
+
+  const confirmBulkImport = () => {
+    for (const row of bulkPreview) {
+      if (!row.name) continue;
+      addLocalPlayer({
+        playerId: `LOCAL-PLAYER-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        name: row.name,
+        nickname: "",
+        teamId: row.teamId,
+        position: row.position,
+        jerseyNumber: Number.parseInt(row.jerseyNumber) || 0,
+        isConfirmed: false,
+        createdAt: Date.now(),
+      });
+    }
+    toast.success(`${bulkPreview.length} players imported!`);
+    setShowBulkImport(false);
+    setBulkCsvText("");
+    setBulkPreview([]);
+    setBulkParsed(false);
+  };
+
+  const downloadSampleCsv = () => {
+    const csv =
+      "name,position,jerseyNumber,teamId\nAhmed Hassan,forward,9,YOUR-TEAM-ID\nOmar Said,goalkeeper,1,YOUR-TEAM-ID";
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "lsh_players_import_sample.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
   const [photos, setPhotos] = useState<Record<string, string>>(getPlayerPhotos);
   const photoInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -3189,6 +3535,9 @@ function AdminPlayersTab({ autoOpenDialog }: { autoOpenDialog?: boolean }) {
           isConfirmed: false,
           createdAt: Date.now(),
         });
+        toast.warning(
+          "Saved locally — log in as an Official to save permanently to the league.",
+        );
       }
 
       toast.success(`Player "${newPlayerName}" registered!`);
@@ -3209,7 +3558,17 @@ function AdminPlayersTab({ autoOpenDialog }: { autoOpenDialog?: boolean }) {
   return (
     <div className="space-y-4" data-ocid="admin.players.panel">
       {/* Add Player button */}
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          className="text-xs gap-1"
+          onClick={() => setShowBulkImport(true)}
+          data-ocid="admin.bulk_import.open_modal_button"
+        >
+          <Upload className="w-3 h-3" />
+          Bulk Import
+        </Button>
         <Button
           size="sm"
           className="text-xs gap-1"
@@ -3404,6 +3763,132 @@ function AdminPlayersTab({ autoOpenDialog }: { autoOpenDialog?: boolean }) {
               ) : (
                 "Remove"
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Import Dialog */}
+      <Dialog
+        open={showBulkImport}
+        onOpenChange={(o) => {
+          if (!o) {
+            setShowBulkImport(false);
+            setBulkCsvText("");
+            setBulkPreview([]);
+            setBulkParsed(false);
+          }
+        }}
+      >
+        <DialogContent
+          data-ocid="admin.bulk_import.dialog"
+          className="max-w-lg max-h-[80vh] overflow-y-auto"
+        >
+          <DialogHeader>
+            <DialogTitle className="font-display">
+              Bulk Player Import
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-xs text-muted-foreground">
+              Paste a CSV with columns:{" "}
+              <code className="text-xs bg-muted/30 px-1 rounded">
+                name,position,jerseyNumber,teamId
+              </code>
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs gap-1 w-full"
+              onClick={downloadSampleCsv}
+              data-ocid="admin.bulk_import.download_button"
+            >
+              <Download className="w-3 h-3" />
+              Download Sample CSV
+            </Button>
+            <div>
+              <Label className="text-xs mb-1 block">CSV Data</Label>
+              <Textarea
+                value={bulkCsvText}
+                onChange={(e) => {
+                  setBulkCsvText(e.target.value);
+                  setBulkParsed(false);
+                }}
+                placeholder={
+                  "name,position,jerseyNumber,teamId\nAhmed Hassan,forward,9,TEAM-ID"
+                }
+                className="text-xs font-mono min-h-[120px]"
+                data-ocid="admin.bulk_import.textarea"
+              />
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs gap-1 w-full"
+              onClick={parseBulkCsv}
+              disabled={!bulkCsvText.trim()}
+              data-ocid="admin.bulk_import.parse_button"
+            >
+              Preview ({bulkPreview.length} players)
+            </Button>
+            {bulkParsed && bulkPreview.length > 0 && (
+              <div className="rounded-lg border border-border overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/30">
+                    <tr>
+                      <th className="px-2 py-1.5 text-left text-muted-foreground">
+                        Name
+                      </th>
+                      <th className="px-2 py-1.5 text-left text-muted-foreground">
+                        Pos
+                      </th>
+                      <th className="px-2 py-1.5 text-center text-muted-foreground">
+                        #
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bulkPreview.map((row, i) => (
+                      // biome-ignore lint/suspicious/noArrayIndexKey: preview table
+                      <tr key={i} className="border-t border-border/40">
+                        <td className="px-2 py-1.5 font-medium">
+                          {row.name || (
+                            <span className="text-red-400">missing</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-1.5 capitalize text-muted-foreground">
+                          {row.position}
+                        </td>
+                        <td className="px-2 py-1.5 text-center text-muted-foreground">
+                          {row.jerseyNumber}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowBulkImport(false)}
+              data-ocid="admin.bulk_import.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={!bulkParsed || bulkPreview.length === 0}
+              onClick={confirmBulkImport}
+              data-ocid="admin.bulk_import.confirm_button"
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.6 0.22 24) 0%, oklch(0.55 0.25 20) 100%)",
+              }}
+            >
+              Import {bulkPreview.length} Players
             </Button>
           </DialogFooter>
         </DialogContent>

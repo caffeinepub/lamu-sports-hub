@@ -253,6 +253,24 @@ export function DashboardPage({
     systemStatus.isActive && !!systemStatus.message,
   );
 
+  // Matchday alert — show when a match is starting within 2 hours
+  const [matchdayAlertDismissed, setMatchdayAlertDismissed] = useState(
+    () => sessionStorage.getItem("lsh_matchday_alert_dismissed") === "true",
+  );
+  const matchdayAlert = (() => {
+    if (matchdayAlertDismissed) return null;
+    const now = Date.now();
+    return (
+      matches.find((m) => {
+        const isScheduled = String(m.status).includes("scheduled");
+        if (!isScheduled) return false;
+        const matchMs = Number(m.date) / 1_000_000;
+        const diffMs = matchMs - now;
+        return diffMs > 0 && diffMs < 2 * 60 * 60 * 1000;
+      }) ?? null
+    );
+  })();
+
   // Admin quick-action dialog state
   const [showAdminAddTeam, setShowAdminAddTeam] = useState(false);
   const [showAdminAddPlayer, setShowAdminAddPlayer] = useState(false);
@@ -378,6 +396,58 @@ export function DashboardPage({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Matchday Alert Banner */}
+      {matchdayAlert &&
+        (() => {
+          const homeTeam = teams.find(
+            (t) => t.teamId === matchdayAlert.homeTeam,
+          );
+          const awayTeam = teams.find(
+            (t) => t.teamId === matchdayAlert.awayTeam,
+          );
+          const matchMs = Number(matchdayAlert.date) / 1_000_000;
+          const matchTime = new Date(matchMs).toLocaleTimeString("en-GB", {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+          return (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              className="overflow-hidden"
+              data-ocid="dashboard.matchday_alert.panel"
+            >
+              <div
+                className="flex items-center gap-3 px-4 py-2.5"
+                style={{
+                  background:
+                    "linear-gradient(90deg, oklch(0.4 0.18 24) 0%, oklch(0.35 0.2 22) 100%)",
+                }}
+              >
+                <span className="text-lg flex-shrink-0">⚽</span>
+                <p className="text-xs text-white flex-1 font-semibold">
+                  Match starting soon: {homeTeam?.name ?? "Home"} vs{" "}
+                  {awayTeam?.name ?? "Away"} — {matchTime}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMatchdayAlertDismissed(true);
+                    sessionStorage.setItem(
+                      "lsh_matchday_alert_dismissed",
+                      "true",
+                    );
+                  }}
+                  className="text-white/80 hover:text-white flex-shrink-0"
+                  data-ocid="dashboard.matchday_alert.close_button"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </motion.div>
+          );
+        })()}
 
       {/* Official Controls Quick-Launch — admin only */}
       {isAdmin && (
@@ -947,6 +1017,85 @@ export function DashboardPage({
                 navigate({ to: `/matchday/${matchOfWeek.matchId}` })
               }
             />
+          </motion.div>
+        )}
+
+        {/* Season at a Glance */}
+        {players.length > 0 && (
+          <motion.div
+            initial={{ y: 10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.32 }}
+            data-ocid="dashboard.season_stats.section"
+          >
+            <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide flex items-center gap-1.5 mb-3">
+              <TrendingUp className="w-4 h-4 text-accent" />
+              Season at a Glance
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {(() => {
+                const sorted = [...players].sort(
+                  (a, b) => Number(b.goals) - Number(a.goals),
+                );
+                const topScorer2 = sorted[0];
+                const topAssister = [...players].sort(
+                  (a, b) => Number(b.assists) - Number(a.assists),
+                )[0];
+                const mostApps = [...players].sort(
+                  (a, b) => Number(b.matchesPlayed) - Number(a.matchesPlayed),
+                )[0];
+                const totalGoals = players.reduce(
+                  (s, p) => s + Number(p.goals),
+                  0,
+                );
+                return [
+                  {
+                    icon: "⚽",
+                    label: "Top Scorer",
+                    value: topScorer2?.name.split(" ")[0] ?? "—",
+                    sub: `${Number(topScorer2?.goals ?? 0)} goals`,
+                  },
+                  {
+                    icon: "🎯",
+                    label: "Top Assist",
+                    value: topAssister?.name.split(" ")[0] ?? "—",
+                    sub: `${Number(topAssister?.assists ?? 0)} assists`,
+                  },
+                  {
+                    icon: "🏆",
+                    label: "Total Goals",
+                    value: String(totalGoals),
+                    sub: "this season",
+                  },
+                  {
+                    icon: "👟",
+                    label: "Most Apps",
+                    value: mostApps?.name.split(" ")[0] ?? "—",
+                    sub: `${Number(mostApps?.matchesPlayed ?? 0)} games`,
+                  },
+                ].map((stat) => (
+                  <div
+                    key={stat.label}
+                    className="rounded-xl p-3 border border-border bg-card text-center"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, oklch(0.16 0.04 252) 0%, oklch(0.12 0.03 255) 100%)",
+                    }}
+                  >
+                    <div className="text-2xl mb-1">{stat.icon}</div>
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">
+                      {stat.label}
+                    </div>
+                    <div className="font-bold text-xs text-foreground truncate">
+                      {stat.value}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {stat.sub}
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
           </motion.div>
         )}
 
