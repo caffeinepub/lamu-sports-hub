@@ -9,6 +9,11 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useActor } from "@/hooks/useActor";
+import {
+  getDeletedTeamIds,
+  getLocalTeams,
+  getTeamOverrides,
+} from "@/utils/localStore";
 import { useNavigate } from "@tanstack/react-router";
 import { Users } from "lucide-react";
 import { motion } from "motion/react";
@@ -59,10 +64,41 @@ export function TeamsPage() {
     document.title = "Teams – Lamu Sports Hub | Lamu Football Clubs";
   }, []);
 
-  // Load real teams from backend
+  // Load real teams from backend, then merge with locally stored teams,
+  // apply name/area overrides and filter out soft-deleted teams.
   useEffect(() => {
     if (actorFetching) return;
+    const localTeams = getLocalTeams();
+    const overrides = getTeamOverrides();
+    const deletedIds = new Set(getDeletedTeamIds());
+
+    const applyOverride = (t: BackendTeam): BackendTeam => {
+      const ov = overrides[t.teamId];
+      if (!ov) return t;
+      return { ...t, name: ov.name, area: ov.area };
+    };
+
     if (!actor) {
+      // No backend — show local teams only (excluding deleted)
+      const merged = localTeams
+        .filter((lt) => !deletedIds.has(lt.teamId))
+        .map(
+          (lt) =>
+            ({
+              teamId: lt.teamId,
+              name: overrides[lt.teamId]?.name ?? lt.name,
+              area: overrides[lt.teamId]?.area ?? lt.area,
+              coachId: lt.coachName,
+              logoUrl: "",
+              wins: BigInt(0),
+              losses: BigInt(0),
+              draws: BigInt(0),
+              goalsFor: BigInt(0),
+              goalsAgainst: BigInt(0),
+              isApproved: false,
+            }) as BackendTeam,
+        );
+      setTeams(merged);
       setLoadingData(false);
       return;
     }
@@ -70,10 +106,55 @@ export function TeamsPage() {
     actor
       .getAllTeams()
       .then((rawTeams) => {
-        setTeams(rawTeams);
+        const backendIds = new Set(rawTeams.map((t) => t.teamId));
+        // Apply overrides + filter deleted for backend teams
+        const processedBackend = rawTeams
+          .filter((t) => !deletedIds.has(t.teamId))
+          .map(applyOverride);
+        // Append local-only teams that aren't in backend and aren't deleted
+        const extraLocal = localTeams
+          .filter(
+            (lt) => !backendIds.has(lt.teamId) && !deletedIds.has(lt.teamId),
+          )
+          .map(
+            (lt) =>
+              ({
+                teamId: lt.teamId,
+                name: overrides[lt.teamId]?.name ?? lt.name,
+                area: overrides[lt.teamId]?.area ?? lt.area,
+                coachId: lt.coachName,
+                logoUrl: "",
+                wins: BigInt(0),
+                losses: BigInt(0),
+                draws: BigInt(0),
+                goalsFor: BigInt(0),
+                goalsAgainst: BigInt(0),
+                isApproved: false,
+              }) as BackendTeam,
+          );
+        setTeams([...processedBackend, ...extraLocal]);
       })
       .catch(() => {
-        setTeams([]);
+        // Fall back to local teams on error
+        const merged = localTeams
+          .filter((lt) => !deletedIds.has(lt.teamId))
+          .map(
+            (lt) =>
+              ({
+                teamId: lt.teamId,
+                name: overrides[lt.teamId]?.name ?? lt.name,
+                area: overrides[lt.teamId]?.area ?? lt.area,
+                coachId: lt.coachName,
+                logoUrl: "",
+                wins: BigInt(0),
+                losses: BigInt(0),
+                draws: BigInt(0),
+                goalsFor: BigInt(0),
+                goalsAgainst: BigInt(0),
+                isApproved: false,
+              }) as BackendTeam,
+          );
+        setTeams(merged);
       })
       .finally(() => setLoadingData(false));
   }, [actor, actorFetching]);

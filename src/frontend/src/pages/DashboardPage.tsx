@@ -41,6 +41,7 @@ import {
   LSH_SYSTEM_STATUS_KEY,
   type NewsConfirmation,
   type SystemStatus,
+  getLocalNews,
   getLocalStore,
   getNewsConfirmations,
   getNewsPhotos,
@@ -139,6 +140,31 @@ function toTeamLike(t: BackendTeam) {
     color: getTeamColor(t.teamId),
     secondaryColor: "oklch(0.95 0.02 82)",
   };
+}
+
+// Pure helper: merge backend + local news, return latest 3 published items
+function mergeNewsDashboard(backendItems: NewsItem[]): NewsItem[] {
+  const localItems = getLocalNews()
+    .filter((ln) => ln.isPublished)
+    .map(
+      (ln) =>
+        ({
+          newsId: ln.newsId,
+          title: ln.title,
+          body: ln.body,
+          isPublished: ln.isPublished,
+          authorId: ln.authorId,
+          timestamp: BigInt(ln.timestamp) * BigInt(1_000_000),
+          photo: undefined,
+        }) as NewsItem,
+    );
+  const publishedBackend = backendItems.filter((i) => i.isPublished);
+  const backendIds = new Set(publishedBackend.map((i) => i.newsId));
+  const merged = [
+    ...publishedBackend,
+    ...localItems.filter((li) => !backendIds.has(li.newsId)),
+  ].sort((a, b) => (b.timestamp > a.timestamp ? 1 : -1));
+  return merged.slice(0, 3);
 }
 
 export function DashboardPage({
@@ -249,32 +275,42 @@ export function DashboardPage({
 
   const fetchNews = useCallback(() => {
     const currentActor = actorRef.current;
-    if (!currentActor) return;
+    if (!currentActor) {
+      // No backend yet — show local news immediately
+      const local = mergeNewsDashboard([]);
+      setNewsList(local);
+      setNewsLoading(false);
+      return;
+    }
+    setNewsError(null);
     setNewsLoading(true);
     currentActor
       .getAllNews()
       .then((items) => {
-        // Backend already filters published, just take latest 3
-        setNewsList((items as NewsItem[]).slice(0, 3));
+        setNewsList(mergeNewsDashboard(items as NewsItem[]));
         setNewsError(null);
       })
       .catch((err) => {
         console.error("Failed to load news:", err);
         setNewsError("Could not load news. Tap Refresh to try again.");
+        setNewsList(mergeNewsDashboard([]));
       })
       .finally(() => {
         setNewsLoading(false);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Watch actor directly — triggers as soon as actor becomes available
   useEffect(() => {
+    // Show local news immediately even before actor is ready
+    setNewsList(mergeNewsDashboard([]));
     if (!actor) return;
     setNewsLoading(true);
     actor
       .getAllNews()
       .then((items) => {
-        setNewsList((items as NewsItem[]).slice(0, 3));
+        setNewsList(mergeNewsDashboard(items as NewsItem[]));
         setNewsError(null);
       })
       .catch((err) => {
@@ -284,6 +320,7 @@ export function DashboardPage({
       .finally(() => {
         setNewsLoading(false);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actor]);
 
   // Poll every 15 seconds so news posted by admin appears automatically
@@ -295,7 +332,7 @@ export function DashboardPage({
       currentActor
         .getAllNews()
         .then((items) => {
-          setNewsList((items as NewsItem[]).slice(0, 3));
+          setNewsList(mergeNewsDashboard(items as NewsItem[]));
           setNewsError(null);
         })
         .catch((err) => {
@@ -303,6 +340,7 @@ export function DashboardPage({
         });
     }, 15000);
     return () => clearInterval(intervalId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actor]);
 
   return (

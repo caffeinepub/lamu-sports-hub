@@ -11,12 +11,12 @@ import { getPlayerPhotos } from "@/utils/localStore";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   AlertTriangle,
-  ChevronLeft,
   Loader2,
   Square,
   Star,
   Target,
   Trophy,
+  X,
   Zap,
 } from "lucide-react";
 import { motion } from "motion/react";
@@ -117,7 +117,7 @@ export function PlayerProfilePage() {
         }
         data-ocid="player_profile.back.button"
       >
-        <ChevronLeft className="w-4 h-4" />
+        <X className="w-4 h-4" />
         {team ? team.name : "Players"}
       </button>
 

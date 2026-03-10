@@ -1,6 +1,8 @@
 import { Button } from "@/components/ui/button";
-import { MOCK_NOTIFICATIONS } from "@/data/mockData";
 import {
+  type LocalNotification,
+  deleteLocalNotification,
+  getLocalNotifications,
   getReadNotifIds,
   markAllNotifsRead,
   markNotifRead,
@@ -11,6 +13,7 @@ import {
   CheckCheck,
   Clock,
   MessageSquare,
+  Trash2,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
@@ -40,24 +43,44 @@ function formatTimestamp(ts: string): string {
 }
 
 export function NotificationsPage() {
-  // Merge read state from localStorage with the mock list so read status persists across sessions
-  const [readIds, setReadIds] = useState<string[]>(() => getReadNotifIds());
+  // Load local notifications + persist read state separately
+  const [notifications, setNotifications] = useState<LocalNotification[]>(
+    () => {
+      const all = getLocalNotifications();
+      const readIds = getReadNotifIds();
+      return all.map((n) => ({
+        ...n,
+        isRead: n.isRead || readIds.includes(n.notificationId),
+      }));
+    },
+  );
 
-  const notifications = MOCK_NOTIFICATIONS.map((n) => ({
-    ...n,
-    isRead: readIds.includes(n.notificationId) || n.isRead,
-  }));
+  const reload = () => {
+    const all = getLocalNotifications();
+    const readIds = getReadNotifIds();
+    setNotifications(
+      all.map((n) => ({
+        ...n,
+        isRead: n.isRead || readIds.includes(n.notificationId),
+      })),
+    );
+  };
 
   const markAllRead = () => {
-    const allIds = MOCK_NOTIFICATIONS.map((n) => n.notificationId);
+    const allIds = notifications.map((n) => n.notificationId);
     markAllNotifsRead(allIds);
-    setReadIds(allIds);
+    reload();
     toast.success("All notifications marked as read");
   };
 
   const markOneRead = (notifId: string) => {
     markNotifRead(notifId);
-    setReadIds((prev) => (prev.includes(notifId) ? prev : [...prev, notifId]));
+    reload();
+  };
+
+  const handleDelete = (notifId: string) => {
+    deleteLocalNotification(notifId);
+    reload();
   };
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
@@ -112,6 +135,9 @@ export function NotificationsPage() {
             <Bell className="w-10 h-10 text-muted-foreground mx-auto mb-3 opacity-40" />
             <p className="text-sm text-muted-foreground">
               No notifications yet
+            </p>
+            <p className="text-xs text-muted-foreground/60 mt-1">
+              Officials can send notifications from the Admin Panel.
             </p>
           </div>
         ) : (
@@ -177,9 +203,23 @@ export function NotificationsPage() {
                     </div>
                   </div>
 
-                  {!notif.isRead && (
-                    <div className="w-2 h-2 rounded-full bg-accent flex-shrink-0 mt-1.5" />
-                  )}
+                  <div className="flex items-center gap-1">
+                    {!notif.isRead && (
+                      <div className="w-2 h-2 rounded-full bg-accent flex-shrink-0 mt-1.5" />
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="w-6 h-6 text-muted-foreground hover:text-red-400 flex-shrink-0"
+                      data-ocid={`notifications.delete_button.${i + 1}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(notif.notificationId);
+                      }}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
                 </div>
               </motion.div>
             ))}

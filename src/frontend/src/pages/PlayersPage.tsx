@@ -15,6 +15,7 @@ import {
   getPositionLabel,
 } from "@/data/mockData";
 import { useActor } from "@/hooks/useActor";
+import { getLocalPlayers, getLocalTeams } from "@/utils/localStore";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Search,
@@ -228,15 +229,55 @@ export function PlayersPage() {
   const [loadingData, setLoadingData] = useState(true);
   const loadedRef = useRef(false);
 
-  // Load players and teams from backend together
+  // Load players and teams from backend together, merged with local data
   useEffect(() => {
     // If actor is still initialising, wait — but cap the wait at 8s
     if (actorFetching) {
       const timeout = setTimeout(() => setLoadingData(false), 8000);
       return () => clearTimeout(timeout);
     }
-    // If actor finished but is null (anonymous / unavailable), stop loading
+
+    const localPlayers = getLocalPlayers();
+    const localTeams = getLocalTeams();
+
+    // If actor finished but is null (anonymous / unavailable), show local data
     if (!actor) {
+      const localMockPlayers = localPlayers.map(
+        (lp) =>
+          ({
+            playerId: lp.playerId,
+            name: lp.name,
+            nickname: lp.nickname,
+            teamId: lp.teamId,
+            position: lp.position as MockPlayer["position"],
+            jerseyNumber: lp.jerseyNumber,
+            matchesPlayed: 0,
+            goals: 0,
+            assists: 0,
+            yellowCards: 0,
+            redCards: 0,
+            isVerified: lp.isConfirmed,
+            nationality: "Kenyan",
+          }) as MockPlayer,
+      );
+      setPlayers(localMockPlayers);
+      const localBackendTeams = localTeams.map(
+        (lt) =>
+          ({
+            teamId: lt.teamId,
+            name: lt.name,
+            area: lt.area,
+            coachId: lt.coachName,
+            logoUrl: "",
+            wins: BigInt(0),
+            losses: BigInt(0),
+            draws: BigInt(0),
+            goalsFor: BigInt(0),
+            goalsAgainst: BigInt(0),
+            isApproved: false,
+          }) as import("@/backend").T__1,
+      );
+      setBackendTeams(localBackendTeams);
       setLoadingData(false);
       return;
     }
@@ -246,11 +287,72 @@ export function PlayersPage() {
     setLoadingData(true);
     Promise.all([actor.getAllPlayers(), actor.getAllTeams()])
       .then(([rawPlayers, rawTeams]) => {
-        setPlayers(rawPlayers.map(backendToMock));
-        setBackendTeams(rawTeams);
+        const backendPlayerIds = new Set(rawPlayers.map((p) => p.playerId));
+        const backendTeamIds = new Set(rawTeams.map((t) => t.teamId));
+        // Append local-only players not already on backend
+        const extraLocalPlayers = localPlayers
+          .filter((lp) => !backendPlayerIds.has(lp.playerId))
+          .map(
+            (lp) =>
+              ({
+                playerId: lp.playerId,
+                name: lp.name,
+                nickname: lp.nickname,
+                teamId: lp.teamId,
+                position: lp.position as MockPlayer["position"],
+                jerseyNumber: lp.jerseyNumber,
+                matchesPlayed: 0,
+                goals: 0,
+                assists: 0,
+                yellowCards: 0,
+                redCards: 0,
+                isVerified: lp.isConfirmed,
+                nationality: "Kenyan",
+              }) as MockPlayer,
+          );
+        // Append local-only teams not already on backend
+        const extraLocalTeams = localTeams
+          .filter((lt) => !backendTeamIds.has(lt.teamId))
+          .map(
+            (lt) =>
+              ({
+                teamId: lt.teamId,
+                name: lt.name,
+                area: lt.area,
+                coachId: lt.coachName,
+                logoUrl: "",
+                wins: BigInt(0),
+                losses: BigInt(0),
+                draws: BigInt(0),
+                goalsFor: BigInt(0),
+                goalsAgainst: BigInt(0),
+                isApproved: false,
+              }) as import("@/backend").T__1,
+          );
+        setPlayers([...rawPlayers.map(backendToMock), ...extraLocalPlayers]);
+        setBackendTeams([...rawTeams, ...extraLocalTeams]);
       })
       .catch(() => {
-        // Silently fail — empty states will show
+        // Fall back to local data on error
+        const localMockPlayers = localPlayers.map(
+          (lp) =>
+            ({
+              playerId: lp.playerId,
+              name: lp.name,
+              nickname: lp.nickname,
+              teamId: lp.teamId,
+              position: lp.position as MockPlayer["position"],
+              jerseyNumber: lp.jerseyNumber,
+              matchesPlayed: 0,
+              goals: 0,
+              assists: 0,
+              yellowCards: 0,
+              redCards: 0,
+              isVerified: lp.isConfirmed,
+              nationality: "Kenyan",
+            }) as MockPlayer,
+        );
+        setPlayers(localMockPlayers);
       })
       .finally(() => setLoadingData(false));
   }, [actor, actorFetching]);

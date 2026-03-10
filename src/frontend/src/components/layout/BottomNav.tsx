@@ -26,7 +26,13 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useActor } from "@/hooks/useActor";
-import { isOfficialSessionVerified } from "@/utils/localStore";
+import {
+  addLocalNewsItem,
+  addLocalPlayer,
+  addLocalTeam,
+  isOfficialSessionVerified,
+  setNewsPhoto,
+} from "@/utils/localStore";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Award,
@@ -262,13 +268,32 @@ function AddPlayerDialog({ open, onOpenChange }: AddPlayerDialogProps) {
     }
     setLoading(true);
     try {
-      await actor?.adminAddPlayer(
-        teamId,
-        nickname.trim(),
-        name.trim(),
-        positionEnum,
-        BigInt(jerseyNumber || 0),
-      );
+      let backendOk = false;
+      try {
+        await actor?.adminAddPlayer(
+          teamId,
+          nickname.trim(),
+          name.trim(),
+          positionEnum,
+          BigInt(jerseyNumber || 0),
+        );
+        backendOk = true;
+      } catch {
+        backendOk = false;
+      }
+      if (!backendOk) {
+        const localId = `LOCAL-PLAYER-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        addLocalPlayer({
+          playerId: localId,
+          name: name.trim(),
+          nickname: nickname.trim(),
+          teamId,
+          position,
+          jerseyNumber: Number(jerseyNumber) || 0,
+          isConfirmed: false,
+          createdAt: Date.now(),
+        });
+      }
       toast.success("Player registered!");
       resetForm();
       onOpenChange(false);
@@ -655,7 +680,23 @@ function AddTeamDialog({ open, onOpenChange }: AddTeamDialogProps) {
     }
     setLoading(true);
     try {
-      await actor?.adminCreateTeam(name.trim(), area, coachName.trim());
+      let backendOk = false;
+      try {
+        await actor?.adminCreateTeam(name.trim(), area, coachName.trim());
+        backendOk = true;
+      } catch {
+        backendOk = false;
+      }
+      if (!backendOk) {
+        const localId = `LOCAL-TEAM-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        addLocalTeam({
+          teamId: localId,
+          name: name.trim(),
+          area,
+          coachName: coachName.trim(),
+          createdAt: Date.now(),
+        });
+      }
       toast.success(`Team "${name}" created!`);
       resetForm();
       onOpenChange(false);
@@ -811,7 +852,63 @@ function AddNewsDialog({ open, onOpenChange }: AddNewsDialogProps) {
     }
     setLoading(true);
     try {
-      await actor?.createNews(title.trim(), body.trim(), isPublished);
+      let savedId: string | undefined;
+      try {
+        savedId = await actor?.createNews(
+          title.trim(),
+          body.trim(),
+          isPublished,
+        );
+      } catch {
+        savedId = undefined;
+      }
+
+      if (!savedId) {
+        // Local fallback for PIN-session officials without Internet Identity
+        const localId = `LOCAL-NEWS-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        // Convert objectURL preview to base64 if present
+        let photoBase64: string | undefined;
+        if (photoPreview) {
+          try {
+            const resp = await fetch(photoPreview);
+            const blob = await resp.blob();
+            photoBase64 = await new Promise<string>((res, rej) => {
+              const reader = new FileReader();
+              reader.onloadend = () => res(reader.result as string);
+              reader.onerror = rej;
+              reader.readAsDataURL(blob);
+            });
+          } catch {
+            photoBase64 = undefined;
+          }
+        }
+        addLocalNewsItem({
+          newsId: localId,
+          title: title.trim(),
+          body: body.trim(),
+          isPublished,
+          authorId: "official",
+          timestamp: Date.now(),
+          photoBase64,
+        });
+        if (photoBase64) setNewsPhoto(localId, photoBase64);
+      } else if (photoPreview) {
+        // Save photo for the real backend newsId
+        try {
+          const resp = await fetch(photoPreview);
+          const blob = await resp.blob();
+          const base64 = await new Promise<string>((res, rej) => {
+            const reader = new FileReader();
+            reader.onloadend = () => res(reader.result as string);
+            reader.onerror = rej;
+            reader.readAsDataURL(blob);
+          });
+          setNewsPhoto(savedId, base64);
+        } catch {
+          // ignore photo save error
+        }
+      }
+
       toast.success(isPublished ? "News published!" : "News saved as draft.");
       resetForm();
       onOpenChange(false);

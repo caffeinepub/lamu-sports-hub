@@ -9,7 +9,11 @@ import {
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useActor } from "@/hooks/useActor";
-import { getNewsConfirmations, getNewsPhotos } from "@/utils/localStore";
+import {
+  getLocalNews,
+  getNewsConfirmations,
+  getNewsPhotos,
+} from "@/utils/localStore";
 import { CheckCircle, Newspaper, RefreshCw } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -211,6 +215,21 @@ function NewsDetailSheet({
   );
 }
 
+// Pure helper: convert local news items to backend-compatible NewsItem shape
+function localToNewsItem(
+  ln: ReturnType<typeof getLocalNews>[number],
+): NewsItem {
+  return {
+    newsId: ln.newsId,
+    title: ln.title,
+    body: ln.body,
+    isPublished: ln.isPublished,
+    authorId: ln.authorId,
+    timestamp: BigInt(ln.timestamp) * BigInt(1_000_000), // ms -> ns
+    photo: undefined,
+  } as NewsItem;
+}
+
 // ── NewsPage ───────────────────────────────────────────────────────────────────
 export function NewsPage() {
   const { actor, isFetching: actorFetching } = useActor();
@@ -235,18 +254,37 @@ export function NewsPage() {
   }, [actor]);
 
   const loadNews = useCallback(async (showRefreshing = false) => {
+    // Always load local news immediately
+    const localItems = getLocalNews()
+      .filter((ln) => ln.isPublished)
+      .map(localToNewsItem);
+
     // Prefer the live actor ref so refreshes always use the latest actor
     const a = actorRef.current;
-    if (!a) return;
+    if (!a) {
+      // No backend — show local news only
+      setNewsList(localItems);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     if (showRefreshing) setRefreshing(true);
     else setLoading(true);
     try {
       const items = await a.getAllNews();
-      setNewsList(items as NewsItem[]);
+      const backendIds = new Set((items as NewsItem[]).map((i) => i.newsId));
+      // Merge: backend first, then any local-only items
+      const merged = [
+        ...(items as NewsItem[]),
+        ...localItems.filter((li) => !backendIds.has(li.newsId)),
+      ].sort((a, b) => (b.timestamp > a.timestamp ? 1 : -1));
+      setNewsList(merged);
       setNewsConfirmations(getNewsConfirmations());
       setError(null);
     } catch {
       setError("Could not load news. Tap Refresh to try again.");
+      // Still show local news on error
+      setNewsList(localItems);
     } finally {
       setLoading(false);
       setRefreshing(false);

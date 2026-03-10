@@ -495,6 +495,48 @@ export function markAllNotifsRead(notifIds: string[]): void {
   setLocalStore(LSH_NOTIF_READ_KEY, merged);
 }
 
+// ── Local Notifications (sent by officials via Admin Panel > Notify) ──────────
+export type LocalNotification = {
+  notificationId: string;
+  type: "alert" | "reminder" | "message";
+  message: string;
+  timestamp: string; // ISO date string
+  isRead: boolean;
+  target: string; // "all" or area name
+};
+
+export const LSH_LOCAL_NOTIFS_KEY = "lsh_local_notifications";
+
+export function getLocalNotifications(): LocalNotification[] {
+  return getLocalStore<LocalNotification[]>(LSH_LOCAL_NOTIFS_KEY, []);
+}
+
+export function addLocalNotification(
+  notif: Omit<LocalNotification, "notificationId" | "timestamp" | "isRead">,
+): LocalNotification {
+  const all = getLocalNotifications();
+  const newNotif: LocalNotification = {
+    ...notif,
+    notificationId: `NOTIF-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    timestamp: new Date().toISOString(),
+    isRead: false,
+  };
+  all.unshift(newNotif);
+  setLocalStore(LSH_LOCAL_NOTIFS_KEY, all);
+  return newNotif;
+}
+
+export function clearLocalNotifications(): void {
+  setLocalStore(LSH_LOCAL_NOTIFS_KEY, []);
+}
+
+export function deleteLocalNotification(notifId: string): void {
+  const current = getLocalNotifications().filter(
+    (n) => n.notificationId !== notifId,
+  );
+  setLocalStore(LSH_LOCAL_NOTIFS_KEY, current);
+}
+
 // ── Soft-deleted Players ───────────────────────────────────────────────────────
 export const LSH_DELETED_PLAYERS_KEY = "lsh_deleted_players";
 
@@ -507,5 +549,136 @@ export function softDeletePlayer(playerId: string): void {
   if (!current.includes(playerId)) {
     current.push(playerId);
     setLocalStore(LSH_DELETED_PLAYERS_KEY, current);
+  }
+}
+
+// ── Local News (for users without Internet Identity) ──────────────────────────
+// Full news items stored locally so PIN-session officials can publish news
+// even when the backend requires II authentication.
+export type LocalNewsItem = {
+  newsId: string;
+  title: string;
+  body: string;
+  isPublished: boolean;
+  authorId: string;
+  timestamp: number; // ms epoch
+  photoBase64?: string;
+};
+
+export const LSH_LOCAL_NEWS_KEY = "lsh_local_news";
+
+export function getLocalNews(): LocalNewsItem[] {
+  return getLocalStore<LocalNewsItem[]>(LSH_LOCAL_NEWS_KEY, []);
+}
+
+export function addLocalNewsItem(item: LocalNewsItem): void {
+  const current = getLocalNews();
+  current.unshift(item); // newest first
+  setLocalStore(LSH_LOCAL_NEWS_KEY, current);
+}
+
+export function updateLocalNewsItem(
+  newsId: string,
+  updates: Partial<LocalNewsItem>,
+): void {
+  const current = getLocalNews();
+  const idx = current.findIndex((n) => n.newsId === newsId);
+  if (idx !== -1) {
+    current[idx] = { ...current[idx], ...updates };
+    setLocalStore(LSH_LOCAL_NEWS_KEY, current);
+  }
+}
+
+export function deleteLocalNewsItem(newsId: string): void {
+  const current = getLocalNews().filter((n) => n.newsId !== newsId);
+  setLocalStore(LSH_LOCAL_NEWS_KEY, current);
+}
+
+// ── Local Teams (for users without Internet Identity) ─────────────────────────
+export type LocalTeam = {
+  teamId: string;
+  name: string;
+  area: string;
+  coachName: string;
+  createdAt: number;
+};
+
+export const LSH_LOCAL_TEAMS_KEY = "lsh_local_teams";
+
+export function getLocalTeams(): LocalTeam[] {
+  return getLocalStore<LocalTeam[]>(LSH_LOCAL_TEAMS_KEY, []);
+}
+
+export function addLocalTeam(team: LocalTeam): void {
+  const current = getLocalTeams();
+  current.push(team);
+  setLocalStore(LSH_LOCAL_TEAMS_KEY, current);
+}
+
+export function updateLocalTeam(
+  teamId: string,
+  updates: Partial<LocalTeam>,
+): void {
+  const current = getLocalTeams();
+  const idx = current.findIndex((t) => t.teamId === teamId);
+  if (idx !== -1) {
+    current[idx] = { ...current[idx], ...updates };
+    setLocalStore(LSH_LOCAL_TEAMS_KEY, current);
+  }
+}
+
+export function deleteLocalTeam(teamId: string): void {
+  const current = getLocalTeams().filter((t) => t.teamId !== teamId);
+  setLocalStore(LSH_LOCAL_TEAMS_KEY, current);
+}
+
+// ── Local Players (for users without Internet Identity) ───────────────────────
+export type LocalPlayer = {
+  playerId: string;
+  name: string;
+  nickname: string;
+  teamId: string;
+  position: string;
+  jerseyNumber: number;
+  photoBase64?: string;
+  isConfirmed: boolean;
+  createdAt: number;
+};
+
+export const LSH_LOCAL_PLAYERS_KEY = "lsh_local_players";
+
+export function getLocalPlayers(): LocalPlayer[] {
+  return getLocalStore<LocalPlayer[]>(LSH_LOCAL_PLAYERS_KEY, []);
+}
+
+export function addLocalPlayer(player: LocalPlayer): void {
+  const current = getLocalPlayers();
+  current.push(player);
+  setLocalStore(LSH_LOCAL_PLAYERS_KEY, current);
+}
+
+export function updateLocalPlayer(
+  playerId: string,
+  updates: Partial<LocalPlayer>,
+): void {
+  const current = getLocalPlayers();
+  const idx = current.findIndex((p) => p.playerId === playerId);
+  if (idx !== -1) {
+    current[idx] = { ...current[idx], ...updates };
+    setLocalStore(LSH_LOCAL_PLAYERS_KEY, current);
+  }
+}
+
+export function deleteLocalPlayer(playerId: string): void {
+  const current = getLocalPlayers().filter((p) => p.playerId !== playerId);
+  setLocalStore(LSH_LOCAL_PLAYERS_KEY, current);
+}
+
+// ── Migrations ───────────────────────────────────────────────────────────────
+export function runMigrations(): void {
+  if (!localStorage.getItem("lsh_migration_v2")) {
+    // Clear any stale demo notifications from previous versions
+    localStorage.setItem(LSH_LOCAL_NOTIFS_KEY, JSON.stringify([]));
+    localStorage.setItem("lsh_migration_v2", "done");
   }
 }

@@ -13,7 +13,7 @@ import { useActor } from "@/hooks/useActor";
 import { getPlayerPhotos } from "@/utils/localStore";
 import { computeBackendStandings } from "@/utils/standingsUtils";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { ChevronLeft, Loader2, User } from "lucide-react";
+import { Loader2, User, X } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 
@@ -83,7 +83,7 @@ export function TeamProfilePage() {
         onClick={() => navigate({ to: "/teams" })}
         data-ocid="team_profile.back.button"
       >
-        <ChevronLeft className="w-4 h-4" />
+        <X className="w-4 h-4" />
         Teams
       </button>
 

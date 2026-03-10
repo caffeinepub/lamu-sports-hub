@@ -15,7 +15,6 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   AlertTriangle,
   Calendar,
-  ChevronLeft,
   Clock,
   Flag,
   Info,
@@ -24,6 +23,7 @@ import {
   Square,
   Target,
   User,
+  X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
@@ -264,7 +264,7 @@ export function MatchdayPage() {
         onClick={() => navigate({ to: "/matches" })}
         data-ocid="matchday.back.button"
       >
-        <ChevronLeft className="w-4 h-4" />
+        <X className="w-4 h-4" />
         Matches
       </button>
 

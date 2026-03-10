@@ -43,6 +43,7 @@ import {
   LSH_SEASON_SETTINGS_KEY,
   LSH_SUGGESTIONS_KEY,
   LSH_SYSTEM_STATUS_KEY,
+  type LocalNewsItem,
   type NewsConfirmation,
   type Official,
   type Pitch,
@@ -52,13 +53,23 @@ import {
   type Suggestion,
   type SystemStatus,
   type TeamOverride,
+  addLocalNewsItem,
+  addLocalNotification,
+  addLocalPlayer,
+  addLocalTeam,
   clearAppLogo,
   confirmNews,
+  deleteLocalNewsItem,
+  deleteLocalPlayer,
+  deleteLocalTeam,
   getAppLogo,
   getAwards,
   getDeletedPlayerIds,
   getDeletedTeamIds,
+  getLocalNews,
+  getLocalPlayers,
   getLocalStore,
+  getLocalTeams,
   getMatchPitches,
   getMatchReferees,
   getNewsConfirmations,
@@ -356,7 +367,11 @@ function AdminPanelInner() {
   const handleDeleteTeam = () => {
     if (!deletingTeamId) return;
     setDeleteTeamLoading(true);
-    softDeleteTeam(deletingTeamId);
+    if (deletingTeamId.startsWith("LOCAL-TEAM-")) {
+      deleteLocalTeam(deletingTeamId);
+    } else {
+      softDeleteTeam(deletingTeamId);
+    }
     setDeletingTeamId(null);
     setDeletingTeamName("");
     setDeleteTeamLoading(false);
@@ -488,17 +503,56 @@ function AdminPanelInner() {
   const [deleteNewsId, setDeleteNewsId] = useState<string | null>(null);
   const [deleteNewsLoading, setDeleteNewsLoading] = useState(false);
 
-  // Load news when tab becomes active
+  // Load news when tab becomes active — merges backend + local-only items
   const fetchNews = async () => {
-    if (!actor) return;
     setNewsLoading(true);
     try {
+      const localItems = getLocalNews().map(
+        (ln) =>
+          ({
+            newsId: ln.newsId,
+            title: ln.title,
+            body: ln.body,
+            isPublished: ln.isPublished,
+            authorId: ln.authorId,
+            timestamp: BigInt(ln.timestamp) * BigInt(1_000_000),
+            photo: undefined,
+          }) as NewsItem,
+      );
+
+      if (!actor) {
+        // No backend — show local only
+        setNewsList(localItems);
+        setNewsPhotosState(getNewsPhotos());
+        setNewsLoading(false);
+        return;
+      }
+
       const items = await actor.getAllNewsAdmin();
-      setNewsList(items as NewsItem[]);
+      const backendIds = new Set((items as NewsItem[]).map((i) => i.newsId));
+      const merged = [
+        ...(items as NewsItem[]),
+        ...localItems.filter((li) => !backendIds.has(li.newsId)),
+      ].sort((a, b) => (b.timestamp > a.timestamp ? 1 : -1));
+      setNewsList(merged);
       // Sync local photos state in case new photos were saved
       setNewsPhotosState(getNewsPhotos());
     } catch {
-      toast.error("Failed to load news");
+      // On error, at least show locally stored news
+      const localItems = getLocalNews().map(
+        (ln) =>
+          ({
+            newsId: ln.newsId,
+            title: ln.title,
+            body: ln.body,
+            isPublished: ln.isPublished,
+            authorId: ln.authorId,
+            timestamp: BigInt(ln.timestamp) * BigInt(1_000_000),
+            photo: undefined,
+          }) as NewsItem,
+      );
+      setNewsList(localItems);
+      setNewsPhotosState(getNewsPhotos());
     } finally {
       setNewsLoading(false);
     }
@@ -646,11 +700,16 @@ function AdminPanelInner() {
       return;
     }
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 600));
+    await new Promise((r) => setTimeout(r, 300));
+    addLocalNotification({
+      type: "message",
+      message: notifMessage.trim(),
+      target: notifTarget,
+    });
     setLoading(false);
     setNotifMessage("");
     toast.success(
-      `Notification sent to ${notifTarget === "all" ? "all users" : `${notifTarget} area`}!`,
+      `Notification saved for ${notifTarget === "all" ? "all users" : `${notifTarget} area`}!`,
     );
   };
 
@@ -695,17 +754,36 @@ function AdminPanelInner() {
     }
     setAddTeamLoading(true);
     try {
-      await actor?.adminCreateTeam(
-        newTeamName.trim(),
-        newTeamArea,
-        newTeamCoach.trim(),
-      );
+      let backendOk = false;
+      try {
+        await actor?.adminCreateTeam(
+          newTeamName.trim(),
+          newTeamArea,
+          newTeamCoach.trim(),
+        );
+        backendOk = true;
+      } catch {
+        backendOk = false;
+      }
+
+      if (!backendOk) {
+        // Local fallback for PIN-session officials
+        const localId = `LOCAL-TEAM-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        addLocalTeam({
+          teamId: localId,
+          name: newTeamName.trim(),
+          area: newTeamArea,
+          coachName: newTeamCoach.trim(),
+          createdAt: Date.now(),
+        });
+      }
+
       toast.success(`Team "${newTeamName}" created!`);
       setShowAddTeam(false);
       setNewTeamName("");
       setNewTeamArea("Lamu Town");
       setNewTeamCoach("");
-      // Switch to teams tab and trigger a refresh of the backend teams list
+      // Switch to teams tab and trigger a refresh
       setActiveTab("teams");
       setTeamRefreshTrigger((n) => n + 1);
     } catch {
@@ -746,15 +824,40 @@ function AdminPanelInner() {
     }
     setAddNewsLoading(true);
     try {
-      const newsId = await actor?.createNews(
-        newsTitle.trim(),
-        newsBody.trim(),
-        newsPublished,
-      );
-      // If a photo was selected, save it to localStorage keyed by the returned newsId
-      if (newsId && newsPhotoPreview) {
-        setNewsPhoto(newsId, newsPhotoPreview);
+      let savedNewsId: string | undefined;
+      try {
+        savedNewsId = await actor?.createNews(
+          newsTitle.trim(),
+          newsBody.trim(),
+          newsPublished,
+        );
+      } catch {
+        // Backend rejected (anonymous caller) — fall back to local storage
+        savedNewsId = undefined;
       }
+
+      if (savedNewsId) {
+        // Backend success — save photo under the real newsId
+        if (newsPhotoPreview) {
+          setNewsPhoto(savedNewsId, newsPhotoPreview);
+        }
+      } else {
+        // Local fallback — create a local-only news item
+        const localId = `LOCAL-NEWS-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        addLocalNewsItem({
+          newsId: localId,
+          title: newsTitle.trim(),
+          body: newsBody.trim(),
+          isPublished: newsPublished,
+          authorId: "official",
+          timestamp: Date.now(),
+          photoBase64: newsPhotoPreview ?? undefined,
+        });
+        if (newsPhotoPreview) {
+          setNewsPhoto(localId, newsPhotoPreview);
+        }
+      }
+
       toast.success("News post created!");
       setShowAddNews(false);
       setNewsTitle("");
@@ -784,12 +887,23 @@ function AdminPanelInner() {
     }
     setEditNewsLoading(true);
     try {
-      await actor?.updateNews(
-        editingNews.newsId,
-        editNewsTitle.trim(),
-        editNewsBody.trim(),
-        editNewsPublished,
-      );
+      const isLocal = editingNews.newsId.startsWith("LOCAL-NEWS-");
+      if (isLocal) {
+        // Update local-only item
+        const { updateLocalNewsItem } = await import("@/utils/localStore");
+        updateLocalNewsItem(editingNews.newsId, {
+          title: editNewsTitle.trim(),
+          body: editNewsBody.trim(),
+          isPublished: editNewsPublished,
+        });
+      } else {
+        await actor?.updateNews(
+          editingNews.newsId,
+          editNewsTitle.trim(),
+          editNewsBody.trim(),
+          editNewsPublished,
+        );
+      }
       toast.success("News post updated!");
       setEditingNews(null);
       await fetchNews();
@@ -804,7 +918,12 @@ function AdminPanelInner() {
     if (!deleteNewsId) return;
     setDeleteNewsLoading(true);
     try {
-      await actor?.deleteNews(deleteNewsId);
+      const isLocal = deleteNewsId.startsWith("LOCAL-NEWS-");
+      if (isLocal) {
+        deleteLocalNewsItem(deleteNewsId);
+      } else {
+        await actor?.deleteNews(deleteNewsId);
+      }
       toast.success("News post deleted.");
       setDeleteNewsId(null);
       await fetchNews();
@@ -2674,18 +2793,59 @@ function TeamsTabContent({
     useState<string[]>(getDeletedTeamIds);
 
   const fetchTeams = () => {
-    if (!actor) return;
+    // Apply overrides optimistically to current state for instant visual update
+    const overrides = getTeamOverrides();
+    setBackendTeams((prev) =>
+      prev.map((t) => {
+        const ov = overrides[t.teamId];
+        return ov ? { ...t, name: ov.name, area: ov.area } : t;
+      }),
+    );
+    // Always load local teams first, applying overrides
+    const localTeams = getLocalTeams();
+    const localAsBE = localTeams.map(
+      (lt) =>
+        ({
+          teamId: lt.teamId,
+          name: overrides[lt.teamId]?.name ?? lt.name,
+          area: overrides[lt.teamId]?.area ?? lt.area,
+          coachId: lt.coachName,
+          logoUrl: "",
+          wins: BigInt(0),
+          losses: BigInt(0),
+          draws: BigInt(0),
+          goalsFor: BigInt(0),
+          goalsAgainst: BigInt(0),
+          isApproved: false,
+        }) as BackendTeam,
+    );
+
+    if (!actor) {
+      setBackendTeams(localAsBE);
+      return;
+    }
     setBackendTeamsLoading(true);
     actor
       .getAllTeams()
-      .then((teams) => setBackendTeams(teams))
-      .catch((err) => console.error("Failed to load backend teams:", err))
+      .then((teams) => {
+        // Apply overrides to backend teams too
+        const processedBackend = teams.map((t) => {
+          const ov = overrides[t.teamId];
+          return ov ? { ...t, name: ov.name, area: ov.area } : t;
+        });
+        const backendIds = new Set(teams.map((t) => t.teamId));
+        const extra = localAsBE.filter((lt) => !backendIds.has(lt.teamId));
+        setBackendTeams([...processedBackend, ...extra]);
+      })
+      .catch(() => {
+        setBackendTeams(localAsBE);
+      })
       .finally(() => setBackendTeamsLoading(false));
   };
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: refreshTrigger is intentional — it signals the parent created a new team
   useEffect(() => {
-    if (activeTab !== "teams" || !actor) return;
+    if (activeTab !== "teams") return;
     // Re-read soft-deleted ids on each refresh so deletions are immediately reflected
     setDeletedTeamIds(getDeletedTeamIds());
     fetchTeams();
@@ -2853,7 +3013,15 @@ function AdminPlayersTab({ autoOpenDialog }: { autoOpenDialog?: boolean }) {
   const handleDeletePlayer = () => {
     if (!deletingPlayerId) return;
     setDeletePlayerLoading(true);
-    softDeletePlayer(deletingPlayerId);
+    if (deletingPlayerId.startsWith("LOCAL-PLAYER-")) {
+      deleteLocalPlayer(deletingPlayerId);
+      // Re-merge players after local deletion
+      setBackendPlayers((prev) =>
+        prev.filter((p) => p.playerId !== deletingPlayerId),
+      );
+    } else {
+      softDeletePlayer(deletingPlayerId);
+    }
     setDeletedPlayerIds(getDeletedPlayerIds());
     setDeletingPlayerId(null);
     setDeletingPlayerName("");
@@ -2876,39 +3044,90 @@ function AdminPlayersTab({ autoOpenDialog }: { autoOpenDialog?: boolean }) {
   const [newPlayerPosition, setNewPlayerPosition] = useState<string>("forward");
   const [newPlayerJersey, setNewPlayerJersey] = useState("");
 
+  // Helper: merge backend + local players, deduplicating by playerId
+  const mergeWithLocalPlayers = (backendList: PlayerT[]): PlayerT[] => {
+    const localList = getLocalPlayers();
+    const backendIds = new Set(backendList.map((p) => p.playerId));
+    const extra = localList
+      .filter((lp) => !backendIds.has(lp.playerId))
+      .map(
+        (lp) =>
+          ({
+            playerId: lp.playerId,
+            name: lp.name,
+            nickname: lp.nickname,
+            teamId: lp.teamId,
+            position: { [lp.position]: null } as unknown as PlayerT["position"],
+            jerseyNumber: BigInt(lp.jerseyNumber),
+            matchesPlayed: BigInt(0),
+            goals: BigInt(0),
+            assists: BigInt(0),
+            yellowCards: BigInt(0),
+            redCards: BigInt(0),
+            userId: "official",
+            isVerified: lp.isConfirmed,
+          }) as PlayerT,
+      );
+    return [...backendList, ...extra];
+  };
+
   const fetchBackendPlayers = async () => {
-    if (!actor) return;
     setBackendPlayersLoading(true);
     try {
+      if (!actor) {
+        setBackendPlayers(mergeWithLocalPlayers([]));
+        setBackendPlayersLoading(false);
+        return;
+      }
       const players = await actor.getAllPlayers();
-      setBackendPlayers(players);
+      setBackendPlayers(mergeWithLocalPlayers(players));
     } catch {
-      toast.error("Failed to load backend players");
+      setBackendPlayers(mergeWithLocalPlayers([]));
     } finally {
       setBackendPlayersLoading(false);
     }
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fetchBackendPlayers wraps actor safely
   useEffect(() => {
-    if (!actor) return;
-    setBackendPlayersLoading(true);
-    actor
-      .getAllPlayers()
-      .then((players) => setBackendPlayers(players))
-      .catch(() => toast.error("Failed to load backend players"))
-      .finally(() => setBackendPlayersLoading(false));
+    fetchBackendPlayers();
   }, [actor]);
 
-  // Load backend teams for the Add Player team selector.
+  // Load backend teams + local teams for the Add Player team selector.
   // Re-fetch whenever the dialog opens so teams added just before are included.
   // biome-ignore lint/correctness/useExhaustiveDependencies: showAddPlayer is intentional — re-fetch teams when dialog opens
   useEffect(() => {
-    if (!actor) return;
+    const localTeams = getLocalTeams();
+    const localAsBE = localTeams.map(
+      (lt) =>
+        ({
+          teamId: lt.teamId,
+          name: lt.name,
+          area: lt.area,
+          coachId: lt.coachName,
+          logoUrl: "",
+          wins: BigInt(0),
+          losses: BigInt(0),
+          draws: BigInt(0),
+          goalsFor: BigInt(0),
+          goalsAgainst: BigInt(0),
+          isApproved: false,
+        }) as BackendTeam,
+    );
+
+    if (!actor) {
+      setBackendTeams(localAsBE);
+      return;
+    }
     setBackendTeamsLoading(true);
     actor
       .getAllTeams()
-      .then((teams) => setBackendTeams(teams))
-      .catch((err) => console.error("Failed to load teams:", err))
+      .then((teams) => {
+        const backendIds = new Set(teams.map((t) => t.teamId));
+        const extra = localAsBE.filter((lt) => !backendIds.has(lt.teamId));
+        setBackendTeams([...teams, ...extra]);
+      })
+      .catch(() => setBackendTeams(localAsBE))
       .finally(() => setBackendTeamsLoading(false));
   }, [actor, showAddPlayer]);
 
@@ -2943,13 +3162,35 @@ function AdminPlayersTab({ autoOpenDialog }: { autoOpenDialog?: boolean }) {
     }
     setAddPlayerLoading(true);
     try {
-      await actor?.adminAddPlayer(
-        newPlayerTeamId,
-        newPlayerNickname.trim(),
-        newPlayerName.trim(),
-        positionEnum,
-        BigInt(newPlayerJersey || 0),
-      );
+      let backendOk = false;
+      try {
+        await actor?.adminAddPlayer(
+          newPlayerTeamId,
+          newPlayerNickname.trim(),
+          newPlayerName.trim(),
+          positionEnum,
+          BigInt(newPlayerJersey || 0),
+        );
+        backendOk = true;
+      } catch {
+        backendOk = false;
+      }
+
+      if (!backendOk) {
+        // Local fallback for PIN-session officials
+        const localId = `LOCAL-PLAYER-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        addLocalPlayer({
+          playerId: localId,
+          name: newPlayerName.trim(),
+          nickname: newPlayerNickname.trim(),
+          teamId: newPlayerTeamId,
+          position: newPlayerPosition,
+          jerseyNumber: Number(newPlayerJersey) || 0,
+          isConfirmed: false,
+          createdAt: Date.now(),
+        });
+      }
+
       toast.success(`Player "${newPlayerName}" registered!`);
       setShowAddPlayer(false);
       setNewPlayerName("");

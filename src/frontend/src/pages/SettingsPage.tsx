@@ -29,13 +29,16 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { MOCK_PLAYERS, MOCK_TEAMS } from "@/data/mockData";
 import {
   LSH_USER_SETTINGS_KEY,
   type UserSettings,
+  getDeletedTeamIds,
+  getLocalPlayers,
+  getLocalTeams,
   getOfficials,
   getPitches,
   getSeasonSettings,
+  getTeamOverrides,
   getUserSettings,
   setLocalStore,
 } from "@/utils/localStore";
@@ -177,6 +180,20 @@ export function SettingsPage() {
   const seasonSettings = getSeasonSettings();
   const pitches = getPitches();
   const officials = getOfficials();
+
+  // Real teams from local store (with overrides applied, deleted filtered out)
+  const overrides = getTeamOverrides();
+  const deletedIds = new Set(getDeletedTeamIds());
+  const realTeams = getLocalTeams()
+    .filter((t) => !deletedIds.has(t.teamId))
+    .map((t) => ({
+      teamId: t.teamId,
+      name: overrides[t.teamId]?.name ?? t.name,
+      area: overrides[t.teamId]?.area ?? t.area,
+    }));
+
+  // Real players from local store
+  const realPlayers = getLocalPlayers();
 
   const update = <K extends keyof UserSettings>(
     key: K,
@@ -437,15 +454,25 @@ export function SettingsPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {MOCK_TEAMS.map((team) => (
+                {realTeams.length === 0 ? (
                   <SelectItem
-                    key={team.teamId}
-                    value={team.teamId}
-                    className="text-sm"
+                    value="__no_teams__"
+                    disabled
+                    className="text-sm text-muted-foreground"
                   >
-                    {team.name}
+                    No teams registered yet
                   </SelectItem>
-                ))}
+                ) : (
+                  realTeams.map((team) => (
+                    <SelectItem
+                      key={team.teamId}
+                      value={team.teamId}
+                      className="text-sm"
+                    >
+                      {team.name}
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -487,8 +514,8 @@ export function SettingsPage() {
                 >
                   — No favourite player —
                 </SelectItem>
-                {MOCK_PLAYERS.map((player) => {
-                  const team = MOCK_TEAMS.find(
+                {realPlayers.map((player) => {
+                  const team = realTeams.find(
                     (t) => t.teamId === player.teamId,
                   );
                   return (
