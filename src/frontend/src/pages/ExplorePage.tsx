@@ -1,5 +1,10 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { type Video, getLocalStore, getVideos } from "@/utils/localStore";
+import {
+  type LiveStream,
+  type Video,
+  getLiveStreams,
+  getVideos,
+} from "@/utils/localStore";
 import {
   ExternalLink,
   Layers,
@@ -9,23 +14,26 @@ import {
   Zap,
 } from "lucide-react";
 import { motion } from "motion/react";
-
-const LSH_LIVE_STREAMS_KEY = "lsh_live_streams";
-
-type LiveStream = {
-  streamId: string;
-  title: string;
-  url: string;
-  addedAt: number;
-};
-
-function getLiveStreams(): LiveStream[] {
-  return getLocalStore<LiveStream[]>(LSH_LIVE_STREAMS_KEY, []);
-}
+import { useEffect, useState } from "react";
 
 export function ExplorePage() {
-  const videos = getVideos();
-  const liveStreams = getLiveStreams();
+  const [videos, setVideos] = useState<Video[]>(() => getVideos());
+  const [liveStreams, setLiveStreams] = useState<LiveStream[]>(() =>
+    getLiveStreams(),
+  );
+
+  useEffect(() => {
+    function refresh() {
+      setVideos(getVideos());
+      setLiveStreams(getLiveStreams());
+    }
+    window.addEventListener("storage", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.removeEventListener("storage", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, []);
 
   const tactics = videos.filter((v) => v.category === "tactics");
   const preparation = videos.filter((v) => v.category === "preparation");

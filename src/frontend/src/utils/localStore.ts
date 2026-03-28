@@ -84,6 +84,67 @@ export function getVideos(): Video[] {
   return stored;
 }
 
+export function addVideo(video: Omit<Video, "videoId">): Video {
+  const current = getVideos();
+  const newVideo: Video = { ...video, videoId: `vid-${Date.now()}` };
+  setLocalStore(LSH_VIDEOS_KEY, [...current, newVideo]);
+  return newVideo;
+}
+
+export function deleteVideo(videoId: string): void {
+  const current = getVideos();
+  setLocalStore(
+    LSH_VIDEOS_KEY,
+    current.filter((v) => v.videoId !== videoId),
+  );
+}
+
+export function updateVideo(
+  videoId: string,
+  updates: Partial<Omit<Video, "videoId">>,
+): void {
+  const current = getVideos();
+  setLocalStore(
+    LSH_VIDEOS_KEY,
+    current.map((v) => (v.videoId === videoId ? { ...v, ...updates } : v)),
+  );
+}
+
+// ── Live Streams ───────────────────────────────────────────────────────────────
+export const LSH_LIVE_STREAMS_KEY = "lsh_live_streams";
+
+export type LiveStream = {
+  streamId: string;
+  title: string;
+  url: string;
+  addedAt: number;
+};
+
+export function getLiveStreams(): LiveStream[] {
+  return getLocalStore<LiveStream[]>(LSH_LIVE_STREAMS_KEY, []);
+}
+
+export function addLiveStream(
+  stream: Omit<LiveStream, "streamId" | "addedAt">,
+): LiveStream {
+  const current = getLiveStreams();
+  const newStream: LiveStream = {
+    ...stream,
+    streamId: `stream-${Date.now()}`,
+    addedAt: Date.now(),
+  };
+  setLocalStore(LSH_LIVE_STREAMS_KEY, [...current, newStream]);
+  return newStream;
+}
+
+export function deleteLiveStream(streamId: string): void {
+  const current = getLiveStreams();
+  setLocalStore(
+    LSH_LIVE_STREAMS_KEY,
+    current.filter((s) => s.streamId !== streamId),
+  );
+}
+
 // ── Suggestions ───────────────────────────────────────────────────────────────
 export type Suggestion = {
   suggestionId: string;

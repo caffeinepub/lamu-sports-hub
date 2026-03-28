@@ -45,6 +45,7 @@ import {
   LSH_SEASON_SETTINGS_KEY,
   LSH_SUGGESTIONS_KEY,
   LSH_SYSTEM_STATUS_KEY,
+  type LiveStream,
   type LocalNewsItem,
   type NewsConfirmation,
   type Official,
@@ -55,19 +56,25 @@ import {
   type Suggestion,
   type SystemStatus,
   type TeamOverride,
+  type Video,
+  addLiveStream,
   addLocalNewsItem,
   addLocalNotification,
   addLocalPlayer,
   addLocalTeam,
+  addVideo,
   clearAppLogo,
   confirmNews,
+  deleteLiveStream,
   deleteLocalNewsItem,
   deleteLocalPlayer,
   deleteLocalTeam,
+  deleteVideo,
   getAppLogo,
   getAwards,
   getDeletedPlayerIds,
   getDeletedTeamIds,
+  getLiveStreams,
   getLocalNews,
   getLocalPlayers,
   getLocalStore,
@@ -87,6 +94,7 @@ import {
   getSeasonSettings,
   getTeamLogos,
   getTeamOverrides,
+  getVideos,
   setAppLogo,
   setLocalStore,
   setMatchEvents,
@@ -114,12 +122,15 @@ import {
   ImageIcon,
   Info,
   KeyRound,
+  Layers,
   Loader2,
   Lock,
   MessageSquare,
   Newspaper,
   Phone,
+  PlayCircle,
   Plus,
+  Radio,
   Shield,
   Trash2,
   Trophy,
@@ -1196,7 +1207,15 @@ function AdminPanelInner() {
           </TabsTrigger>
         </TabsList>
         {/* Row 2 */}
-        <TabsList className="w-full grid grid-cols-5 mb-4">
+        <TabsList className="w-full grid grid-cols-6 mb-4">
+          <TabsTrigger
+            value="explore"
+            className="text-[9px] px-0.5"
+            data-ocid="admin.explore.tab"
+          >
+            <Layers className="w-3 h-3 mr-0.5" />
+            Explore
+          </TabsTrigger>
           <TabsTrigger
             value="notify"
             className="text-[9px] px-0.5"
@@ -1731,6 +1750,11 @@ function AdminPanelInner() {
             requests={recoveryRequests}
             onUpdate={() => setRecoveryRequests(getRecoveryRequests())}
           />
+        </TabsContent>
+
+        {/* Explore Tab */}
+        <TabsContent value="explore">
+          <ExploreTabContent />
         </TabsContent>
 
         {/* Notify Tab */}
@@ -6245,6 +6269,241 @@ function AdminRecoveryTab({
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── ExploreTabContent ─────────────────────────────────────────────────────────
+function ExploreTabContent() {
+  const [streams, setStreams] = useState<LiveStream[]>(() => getLiveStreams());
+  const [videos, setVideoList] = useState<Video[]>(() => getVideos());
+
+  const [streamTitle, setStreamTitle] = useState("");
+  const [streamUrl, setStreamUrl] = useState("");
+
+  const [videoTitle, setVideoTitle] = useState("");
+  const [videoUrl, setVideoUrl] = useState("");
+  const [videoCategory, setVideoCategory] = useState<
+    "tactics" | "preparation" | "highlights"
+  >("highlights");
+
+  function toEmbedUrl(url: string): string {
+    const ytMatch = url.match(
+      /(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/,
+    );
+    if (ytMatch) return `https://www.youtube.com/embed/${ytMatch[1]}`;
+    return url;
+  }
+
+  function handleAddStream() {
+    if (!streamTitle.trim() || !streamUrl.trim()) return;
+    addLiveStream({ title: streamTitle.trim(), url: streamUrl.trim() });
+    setStreams(getLiveStreams());
+    setStreamTitle("");
+    setStreamUrl("");
+    toast.success("Live stream added");
+  }
+
+  function handleDeleteStream(streamId: string) {
+    deleteLiveStream(streamId);
+    setStreams(getLiveStreams());
+  }
+
+  function handleAddVideo() {
+    if (!videoTitle.trim() || !videoUrl.trim()) return;
+    addVideo({
+      title: videoTitle.trim(),
+      url: toEmbedUrl(videoUrl.trim()),
+      category: videoCategory,
+    });
+    setVideoList(getVideos());
+    setVideoTitle("");
+    setVideoUrl("");
+    toast.success("Video added");
+  }
+
+  function handleDeleteVideo(videoId: string) {
+    deleteVideo(videoId);
+    setVideoList(getVideos());
+  }
+
+  const categories: Array<{
+    key: "tactics" | "preparation" | "highlights";
+    label: string;
+  }> = [
+    { key: "tactics", label: "Tactics" },
+    { key: "preparation", label: "Training" },
+    { key: "highlights", label: "Highlights" },
+  ];
+
+  return (
+    <div className="space-y-4">
+      {/* Live Streams Section */}
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <h3 className="font-display font-bold text-sm text-foreground flex items-center gap-1.5">
+          <Radio className="w-4 h-4 text-primary" />
+          Live Streams
+        </h3>
+        <div className="space-y-2">
+          <Input
+            placeholder="Stream title"
+            value={streamTitle}
+            onChange={(e) => setStreamTitle(e.target.value)}
+            className="h-8 text-xs"
+            data-ocid="admin.explore.stream_title.input"
+          />
+          <Input
+            placeholder="Stream URL (YouTube, etc.)"
+            value={streamUrl}
+            onChange={(e) => setStreamUrl(e.target.value)}
+            className="h-8 text-xs"
+            data-ocid="admin.explore.stream_url.input"
+          />
+          <Button
+            size="sm"
+            className="w-full h-8 text-xs"
+            onClick={handleAddStream}
+            disabled={!streamTitle.trim() || !streamUrl.trim()}
+            data-ocid="admin.explore.add_stream.button"
+          >
+            <Plus className="w-3 h-3 mr-1" />
+            Add Live Stream
+          </Button>
+        </div>
+        {streams.length === 0 ? (
+          <p
+            className="text-[11px] text-muted-foreground text-center py-2"
+            data-ocid="admin.explore.streams.empty_state"
+          >
+            No live streams yet
+          </p>
+        ) : (
+          <div className="space-y-2" data-ocid="admin.explore.streams.list">
+            {streams.map((s, i) => (
+              <div
+                key={s.streamId}
+                className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2"
+                data-ocid={`admin.explore.stream.item.${i + 1}`}
+              >
+                <div className="flex-1 min-w-0 mr-2">
+                  <p className="text-xs font-medium text-foreground truncate">
+                    {s.title}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground truncate">
+                    {s.url}
+                  </p>
+                </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6 shrink-0"
+                  onClick={() => handleDeleteStream(s.streamId)}
+                  data-ocid={`admin.explore.stream.delete_button.${i + 1}`}
+                >
+                  <Trash2 className="w-3 h-3 text-destructive" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Videos Section */}
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <h3 className="font-display font-bold text-sm text-foreground flex items-center gap-1.5">
+          <PlayCircle className="w-4 h-4 text-primary" />
+          Videos
+        </h3>
+        <div className="space-y-2">
+          <Input
+            placeholder="Video title"
+            value={videoTitle}
+            onChange={(e) => setVideoTitle(e.target.value)}
+            className="h-8 text-xs"
+            data-ocid="admin.explore.video_title.input"
+          />
+          <Input
+            placeholder="YouTube URL (youtube.com/watch?v=...)"
+            value={videoUrl}
+            onChange={(e) => setVideoUrl(e.target.value)}
+            className="h-8 text-xs"
+            data-ocid="admin.explore.video_url.input"
+          />
+          <Select
+            value={videoCategory}
+            onValueChange={(v) => setVideoCategory(v as typeof videoCategory)}
+          >
+            <SelectTrigger
+              className="h-8 text-xs"
+              data-ocid="admin.explore.video_category.select"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="highlights" className="text-xs">
+                Highlights
+              </SelectItem>
+              <SelectItem value="tactics" className="text-xs">
+                Tactics
+              </SelectItem>
+              <SelectItem value="preparation" className="text-xs">
+                Training
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            size="sm"
+            className="w-full h-8 text-xs"
+            onClick={handleAddVideo}
+            disabled={!videoTitle.trim() || !videoUrl.trim()}
+            data-ocid="admin.explore.add_video.button"
+          >
+            <Plus className="w-3 h-3 mr-1" />
+            Add Video
+          </Button>
+        </div>
+        {categories.map(({ key, label }) => {
+          const catVideos = videos.filter((v) => v.category === key);
+          if (catVideos.length === 0) return null;
+          return (
+            <div key={key}>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                {label}
+              </p>
+              <div className="space-y-1">
+                {catVideos.map((v, i) => (
+                  <div
+                    key={v.videoId}
+                    className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2"
+                    data-ocid={`admin.explore.video.item.${i + 1}`}
+                  >
+                    <p className="text-xs text-foreground truncate flex-1 mr-2">
+                      {v.title}
+                    </p>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6 shrink-0"
+                      onClick={() => handleDeleteVideo(v.videoId)}
+                      data-ocid={`admin.explore.video.delete_button.${i + 1}`}
+                    >
+                      <Trash2 className="w-3 h-3 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+        {videos.length === 0 && (
+          <p
+            className="text-[11px] text-muted-foreground text-center py-2"
+            data-ocid="admin.explore.videos.empty_state"
+          >
+            No videos yet
+          </p>
+        )}
+      </div>
     </div>
   );
 }
