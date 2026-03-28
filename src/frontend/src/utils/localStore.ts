@@ -701,6 +701,14 @@ export function runMigrations(): void {
     setLocalStore(LSH_LOCAL_NOTIFS_KEY, cleaned);
     localStorage.setItem("lsh_migration_v3", "done");
   }
+  // v4: force-wipe all demo notifications regardless of prior migration state
+  // Resets the key so every user gets a clean slate on this deploy
+  if (!localStorage.getItem("lsh_migration_v4")) {
+    const current = getLocalNotifications();
+    const cleaned = current.filter((n) => !isDemoNotification(n));
+    setLocalStore(LSH_LOCAL_NOTIFS_KEY, cleaned);
+    localStorage.setItem("lsh_migration_v4", "done");
+  }
 }
 
 // ── News Reactions ────────────────────────────────────────────────────────────

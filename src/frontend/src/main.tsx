@@ -15,7 +15,7 @@ declare global {
   }
 }
 
-// Run data migrations before the app boots to clean demo data
+// Run data migrations before rendering — clears demo notifications etc.
 runMigrations();
 
 const queryClient = new QueryClient();

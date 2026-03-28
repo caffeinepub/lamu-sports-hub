@@ -274,8 +274,10 @@ export function NewsPage() {
       setRefreshing(false);
       return;
     }
-    if (showRefreshing) setRefreshing(true);
-    else setLoading(true);
+    if (showRefreshing) {
+      setRefreshing(true);
+      setError(null); // clear stale error before retrying
+    } else setLoading(true);
     try {
       const items = await a.getAllNews();
       const backendIds = new Set((items as NewsItem[]).map((i) => i.newsId));
