@@ -183,7 +183,10 @@ export function AdminPanelPage() {
       return;
     }
 
-    if (actorFetching) return;
+    if (actorFetching) {
+      const t = setTimeout(() => setAdminCheckLoading(false), 8000);
+      return () => clearTimeout(t);
+    }
     if (!actor) {
       setAdminCheckLoading(false);
       setIsAdmin(false);

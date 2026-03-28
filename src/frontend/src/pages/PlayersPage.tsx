@@ -229,6 +229,13 @@ export function PlayersPage() {
   const [loadingData, setLoadingData] = useState(true);
   const loadedRef = useRef(false);
 
+  // Reset loadedRef on unmount so data reloads when component remounts
+  useEffect(() => {
+    return () => {
+      loadedRef.current = false;
+    };
+  }, []);
+
   // Load players and teams from backend together, merged with local data
   useEffect(() => {
     // If actor is still initialising, wait — but cap the wait at 8s

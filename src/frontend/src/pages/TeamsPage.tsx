@@ -160,8 +160,12 @@ export function TeamsPage() {
   }, [actor, actorFetching]);
 
   useEffect(() => {
+    if (actorFetching) {
+      const t = setTimeout(() => setLoadingData(false), 8000);
+      return () => clearTimeout(t);
+    }
     loadTeams();
-  }, [loadTeams]);
+  }, [loadTeams, actorFetching]);
 
   // Re-load teams when window regains focus, localStorage changes, or admin dispatches update
   useEffect(() => {

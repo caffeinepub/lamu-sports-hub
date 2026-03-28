@@ -44,6 +44,7 @@ import {
   Compass,
   DollarSign,
   FilePlus,
+  Globe,
   Grid3x3,
   Heart,
   Home,
@@ -55,6 +56,7 @@ import {
   Settings,
   Shield,
   ShieldCheck,
+  TrendingUp,
   Trophy,
   User,
   UserCheck,
@@ -180,6 +182,18 @@ const MORE_ITEMS = [
     label: "Support",
     icon: <Heart className="w-5 h-5" />,
     ocid: "nav.monetize.link",
+  },
+  {
+    path: "/epl",
+    label: "EPL",
+    icon: <Globe className="w-5 h-5" />,
+    ocid: "nav.epl.link",
+  },
+  {
+    path: "/stats",
+    label: "Stats",
+    icon: <TrendingUp className="w-5 h-5" />,
+    ocid: "nav.stats.link",
   },
 ];
 

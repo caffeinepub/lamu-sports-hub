@@ -7,7 +7,11 @@ import {
 } from "@/components/shared/TeamBadge";
 import { Button } from "@/components/ui/button";
 import { useActor } from "@/hooks/useActor";
-import { getPlayerPhotos } from "@/utils/localStore";
+import {
+  getLocalPlayers,
+  getLocalTeams,
+  getPlayerPhotos,
+} from "@/utils/localStore";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   AlertTriangle,
@@ -53,7 +57,54 @@ export function PlayerProfilePage() {
   const playerPhotos = getPlayerPhotos();
 
   useEffect(() => {
-    if (!actor || !playerId) return;
+    if (!playerId) return;
+    if (!actor) {
+      // Fallback to local store when actor is unavailable
+      const localPlayers = getLocalPlayers();
+      const found = localPlayers.find((p) => p.playerId === playerId);
+      if (found) {
+        setPlayer({
+          playerId: found.playerId,
+          name: found.name,
+          nickname: found.nickname ?? "",
+          teamId: found.teamId ?? "",
+          position: found.position ?? "",
+          jerseyNumber: BigInt(found.jerseyNumber ?? 0),
+          goals: BigInt(0),
+          assists: BigInt(0),
+          yellowCards: BigInt(0),
+          redCards: BigInt(0),
+          appearances: BigInt(0),
+          matchesPlayed: BigInt(0),
+          userId: "",
+          isVerified: false,
+          isApproved: false,
+          isActive: true,
+        } as unknown as BackendPlayer);
+        // Try to resolve team from local store
+        if (found.teamId) {
+          const localTeams = getLocalTeams();
+          const t = localTeams.find((lt) => lt.teamId === found.teamId);
+          if (t) {
+            setTeam({
+              teamId: t.teamId,
+              name: t.name,
+              area: t.area,
+              coachId: t.coachName ?? "",
+              logoUrl: "",
+              wins: BigInt(0),
+              losses: BigInt(0),
+              draws: BigInt(0),
+              goalsFor: BigInt(0),
+              goalsAgainst: BigInt(0),
+              isApproved: false,
+            } as BackendTeam);
+          }
+        }
+      }
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     actor
       .getPlayer(playerId)

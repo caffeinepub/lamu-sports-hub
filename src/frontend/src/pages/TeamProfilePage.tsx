@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useActor } from "@/hooks/useActor";
 import {
+  getLocalTeams,
   getMatchEvents,
   getMatchReferees,
   getPlayerPhotos,
@@ -129,7 +130,29 @@ export function TeamProfilePage() {
   const playerPhotos = getPlayerPhotos();
 
   useEffect(() => {
-    if (!actor || !teamId) return;
+    if (!teamId) return;
+    if (!actor) {
+      // Fallback to local store when actor is unavailable
+      const localTeams = getLocalTeams();
+      const found = localTeams.find((t) => t.teamId === teamId);
+      if (found) {
+        setTeam({
+          teamId: found.teamId,
+          name: found.name,
+          area: found.area,
+          coachId: found.coachName ?? "",
+          logoUrl: "",
+          wins: BigInt(0),
+          losses: BigInt(0),
+          draws: BigInt(0),
+          goalsFor: BigInt(0),
+          goalsAgainst: BigInt(0),
+          isApproved: false,
+        } as BackendTeam);
+      }
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     Promise.all([
       actor.getTeam(teamId),

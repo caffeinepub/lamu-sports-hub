@@ -18,6 +18,7 @@ import { AdminPanelPage } from "@/pages/AdminPanelPage";
 import { AwardsPage } from "@/pages/AwardsPage";
 import { CoachDashboardPage } from "@/pages/CoachDashboardPage";
 import { DashboardPage } from "@/pages/DashboardPage";
+import { EPLPage } from "@/pages/EPLPage";
 import { ExplorePage } from "@/pages/ExplorePage";
 import { HistoryPage } from "@/pages/HistoryPage";
 import { LandingPage } from "@/pages/LandingPage";
@@ -38,6 +39,7 @@ import { RecoveryStatusPage } from "@/pages/RecoveryStatusPage";
 import { RefereesPage } from "@/pages/RefereesPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { StandingsPage } from "@/pages/StandingsPage";
+import { StatsPage } from "@/pages/StatsPage";
 import { SuggestionsPage } from "@/pages/SuggestionsPage";
 import { TeamProfilePage } from "@/pages/TeamProfilePage";
 import { TeamsPage } from "@/pages/TeamsPage";
@@ -259,6 +261,18 @@ function buildRouter(callbacksRef: React.RefObject<AppCallbacks>) {
     component: ExplorePage,
   });
 
+  const eplRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/epl",
+    component: EPLPage,
+  });
+
+  const statsRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/stats",
+    component: StatsPage,
+  });
+
   const aboutRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/about",
@@ -326,6 +340,8 @@ function buildRouter(callbacksRef: React.RefObject<AppCallbacks>) {
     refereesRoute,
     awardsRoute,
     exploreRoute,
+    eplRoute,
+    statsRoute,
     aboutRoute,
     historyRoute,
     suggestionsRoute,
@@ -623,7 +639,7 @@ export default function App() {
               transition={{ type: "spring", damping: 30, stiffness: 300 }}
               className="fixed right-0 top-0 bottom-0 w-full sm:w-80 bg-card border-l border-border z-[70] overflow-y-auto"
             >
-              <NotificationsPage />
+              <NotificationsPage onClose={() => setShowNotifications(false)} />
             </motion.div>
           </>
         )}

@@ -328,9 +328,8 @@ export function NewsPage() {
   }, [actor, actorFetching, loadNews]);
 
   // Photo blob URLs — ExternalBlob has getBytes() / getDirectURL()
-  const [photoBlobUrls, setPhotoBlobUrls] = useState<Record<string, string>>(
-    {},
-  );
+  const [photoBlobUrls, setPhotoBlobUrls] =
+    useState<Record<string, string>>(getNewsPhotos);
   useEffect(() => {
     let cancelled = false;
     const urls: Record<string, string> = {};

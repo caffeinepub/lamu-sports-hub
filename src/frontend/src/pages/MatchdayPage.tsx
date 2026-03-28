@@ -144,7 +144,16 @@ export function MatchdayPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!actor || isFetching || !matchId) return;
+    if (!matchId) return;
+    if (isFetching) {
+      const t = setTimeout(() => setLoading(false), 8000);
+      return () => clearTimeout(t);
+    }
+    if (!actor) {
+      setLoading(false);
+      setError("Match data unavailable offline.");
+      return;
+    }
 
     const load = async () => {
       setLoading(true);

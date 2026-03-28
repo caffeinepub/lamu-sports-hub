@@ -14,6 +14,7 @@ import {
   Clock,
   MessageSquare,
   Trash2,
+  X,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
@@ -42,7 +43,11 @@ function formatTimestamp(ts: string): string {
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
-export function NotificationsPage() {
+interface NotificationsPageProps {
+  onClose?: () => void;
+}
+
+export function NotificationsPage({ onClose }: NotificationsPageProps) {
   // Load local notifications + persist read state separately
   const [notifications, setNotifications] = useState<LocalNotification[]>(
     () => {
@@ -99,7 +104,19 @@ export function NotificationsPage() {
           <motion.div
             initial={{ y: -10, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
+            className="flex items-center gap-2"
           >
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors"
+                aria-label="Close notifications"
+                data-ocid="notifications.close.button"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
             <h1 className="font-display font-black text-2xl text-foreground flex items-center gap-2">
               <Bell className="w-6 h-6 text-primary" />
               Notifications
