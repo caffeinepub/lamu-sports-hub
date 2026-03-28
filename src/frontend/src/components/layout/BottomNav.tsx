@@ -26,6 +26,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useActor } from "@/hooks/useActor";
+import { compressImage } from "@/utils/imageUtils";
 import {
   addLocalNewsItem,
   addLocalPlayer,
@@ -884,14 +885,7 @@ function AddNewsDialog({ open, onOpenChange }: AddNewsDialogProps) {
         let photoBase64: string | undefined;
         if (photoPreview) {
           try {
-            const resp = await fetch(photoPreview);
-            const blob = await resp.blob();
-            photoBase64 = await new Promise<string>((res, rej) => {
-              const reader = new FileReader();
-              reader.onloadend = () => res(reader.result as string);
-              reader.onerror = rej;
-              reader.readAsDataURL(blob);
-            });
+            photoBase64 = await compressImage(photoPreview);
           } catch {
             photoBase64 = undefined;
           }
@@ -909,14 +903,7 @@ function AddNewsDialog({ open, onOpenChange }: AddNewsDialogProps) {
       } else if (photoPreview) {
         // Save photo for the real backend newsId
         try {
-          const resp = await fetch(photoPreview);
-          const blob = await resp.blob();
-          const base64 = await new Promise<string>((res, rej) => {
-            const reader = new FileReader();
-            reader.onloadend = () => res(reader.result as string);
-            reader.onerror = rej;
-            reader.readAsDataURL(blob);
-          });
+          const base64 = await compressImage(photoPreview);
           setNewsPhoto(savedId, base64);
         } catch {
           // ignore photo save error

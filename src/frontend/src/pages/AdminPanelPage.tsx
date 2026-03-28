@@ -31,6 +31,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 import { type T__5 as BackendMatch, Status } from "@/backend";
 import { useActor } from "@/hooks/useActor";
+import { compressImage } from "@/utils/imageUtils";
 import { isOfficialSessionVerified } from "@/utils/localStore";
 import {
   type Award,
@@ -364,18 +365,20 @@ function AdminPanelInner() {
   const editLogoInputRef = useRef<HTMLInputElement>(null);
   const [editLogoPreview, setEditLogoPreview] = useState<string | null>(null);
 
-  const handleEditLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleEditLogoChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = e.target.files?.[0];
     if (!file || !editingTeam) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const dataUrl = reader.result as string;
+    try {
+      const dataUrl = await compressImage(file, 400, 0.8);
       setTeamLogo(editingTeam.teamId, dataUrl);
       setTeamLogosState(getTeamLogos());
       setEditLogoPreview(dataUrl);
       toast.success("Team logo uploaded!");
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      toast.error("Failed to process logo image.");
+    }
     e.target.value = "";
   };
 
@@ -877,34 +880,35 @@ function AdminPanelInner() {
     }
   };
 
-  const handleTeamLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleTeamLogoChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = e.target.files?.[0];
     if (!file || !logoUploadTeamId) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const dataUrl = reader.result as string;
+    try {
+      const dataUrl = await compressImage(file, 400, 0.8);
       setTeamLogo(logoUploadTeamId, dataUrl);
       setTeamLogosState(getTeamLogos());
       toast.success("Team logo updated!");
       setLogoUploadTeamId(null);
-    };
-    reader.readAsDataURL(file);
-    // Reset input
+    } catch {
+      toast.error("Failed to process logo image.");
+    }
     e.target.value = "";
   };
 
-  const handleNewsPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleNewsPhotoChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setNewsPhotoFile(file);
-    // Use FileReader to get a persistent base64 data URL instead of a
-    // temporary blob:// URL that expires when the page is refreshed.
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const dataUrl = ev.target?.result as string;
-      if (dataUrl) setNewsPhotoPreview(dataUrl);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const dataUrl = await compressImage(file, 800, 0.75);
+      setNewsPhotoPreview(dataUrl);
+    } catch {
+      toast.error("Failed to process photo.");
+    }
   };
 
   const handleAddNews = async () => {
@@ -3517,16 +3521,16 @@ function AdminPlayersTab({ autoOpenDialog }: { autoOpenDialog?: boolean }) {
     toast.success(checked ? "Player confirmed ✓" : "Confirmation removed");
   };
 
-  const handlePhoto = (playerId: string, file: File) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const dataUrl = reader.result as string;
+  const handlePhoto = async (playerId: string, file: File) => {
+    try {
+      const dataUrl = await compressImage(file, 400, 0.8);
       const updated = { ...photos, [playerId]: dataUrl };
       setPhotos(updated);
       setLocalStore(LSH_PLAYER_PHOTOS_KEY, updated);
       toast.success("Player photo uploaded!");
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      toast.error("Failed to process player photo.");
+    }
   };
 
   const handleAddPlayer = async () => {
@@ -5619,17 +5623,19 @@ function AdminSettingsTab() {
     toast.success("System status updated!");
   };
 
-  const handleAppLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAppLogoChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const dataUrl = reader.result as string;
+    try {
+      const dataUrl = await compressImage(file, 400, 0.9);
       setAppLogo(dataUrl);
       setAppLogoState(dataUrl);
       toast.success("App logo updated! Reload the page to see it everywhere.");
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      toast.error("Failed to process logo image.");
+    }
     e.target.value = "";
   };
 
