@@ -886,8 +886,14 @@ function AdminPanelInner() {
     const file = e.target.files?.[0];
     if (!file) return;
     setNewsPhotoFile(file);
-    const url = URL.createObjectURL(file);
-    setNewsPhotoPreview(url);
+    // Use FileReader to get a persistent base64 data URL instead of a
+    // temporary blob:// URL that expires when the page is refreshed.
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      if (dataUrl) setNewsPhotoPreview(dataUrl);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleAddNews = async () => {

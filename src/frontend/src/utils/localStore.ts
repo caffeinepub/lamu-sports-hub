@@ -1014,6 +1014,160 @@ export function runMigrations(): void {
     }
     localStorage.setItem("lsh_migration_v6", "done");
   }
+  // v7: force-reseed FKF teams — runs even if v5/v6 already ran, to catch
+  // devices where teams were cleared after migration or migration ran before
+  // the real team list was finalised.
+  if (!localStorage.getItem("lsh_migration_v7")) {
+    const FKF_FINAL: LocalTeam[] = [
+      {
+        teamId: "fkf-001",
+        name: "Manda City",
+        area: "Manda",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-002",
+        name: "Galatasaray FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-003",
+        name: "Fayaz Bakers FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-004",
+        name: "Monaco FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-005",
+        name: "Amu Stars FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-006",
+        name: "Jaguar FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-007",
+        name: "Nyundo B",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-008",
+        name: "Dragon Juniors",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-009",
+        name: "Crocodile Juniors",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-010",
+        name: "Sportlight FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-011",
+        name: "Team Lawasco",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-012",
+        name: "Deepsea FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-013",
+        name: "All Brothers FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-014",
+        name: "Kashmir City",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-015",
+        name: "Boda Nations",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-016",
+        name: "Dragon Fly",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-017",
+        name: "Benfica FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-018",
+        name: "Flamingo FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-019",
+        name: "Deep Shark FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-020",
+        name: "Team Wazee",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+    ];
+    const existing = getLocalTeams();
+    const existingIds = new Set(existing.map((t) => t.teamId));
+    const missing = FKF_FINAL.filter((t) => !existingIds.has(t.teamId));
+    if (missing.length > 0) {
+      setLocalStore(LSH_LOCAL_TEAMS_KEY, [...existing, ...missing]);
+    }
+    localStorage.setItem("lsh_migration_v7", "done");
+  }
 }
 
 // ── News Reactions ────────────────────────────────────────────────────────────

@@ -2,7 +2,14 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, Calendar, Globe, Shield, Trophy } from "lucide-react";
+import {
+  AlertCircle,
+  Calendar,
+  Globe,
+  RefreshCw,
+  Shield,
+  Trophy,
+} from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 
@@ -38,7 +45,10 @@ function useEPLData() {
   const [fixtures, setFixtures] = useState<EPLEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [refreshCount, setRefreshCount] = useState(0);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshCount is intentional trigger
   useEffect(() => {
     let cancelled = false;
     async function fetchAll() {
@@ -65,6 +75,7 @@ function useEPLData() {
           setStandings(sData.table ?? []);
           setResults((rData.events ?? []).slice(0, 20).reverse());
           setFixtures(fData.events ?? []);
+          setLastUpdated(new Date());
           setLoading(false);
         }
       } catch {
@@ -75,12 +86,26 @@ function useEPLData() {
       }
     }
     fetchAll();
+    // Auto-refresh every 5 minutes so results update after each match
+    const interval = setInterval(fetchAll, 5 * 60 * 1000);
     return () => {
       cancelled = true;
+      clearInterval(interval);
     };
-  }, []);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: refreshCount triggers manual refresh
+  }, [refreshCount]);
 
-  return { standings, results, fixtures, loading, error };
+  const manualRefresh = () => setRefreshCount((c) => c + 1);
+
+  return {
+    standings,
+    results,
+    fixtures,
+    loading,
+    error,
+    lastUpdated,
+    manualRefresh,
+  };
 }
 
 function getRankStyle(rank: number): string {
@@ -151,7 +176,15 @@ function ErrorState() {
 }
 
 export function EPLPage() {
-  const { standings, results, fixtures, loading, error } = useEPLData();
+  const {
+    standings,
+    results,
+    fixtures,
+    loading,
+    error,
+    lastUpdated,
+    manualRefresh,
+  } = useEPLData();
 
   return (
     <div data-ocid="epl.page" className="min-h-screen pb-24 pt-14">
@@ -182,12 +215,27 @@ export function EPLPage() {
               2024/25 Season · Live Data
             </p>
           </div>
-          <Badge
-            className="ml-auto text-xs"
-            style={{ background: "oklch(0.55 0.25 60)", color: "white" }}
-          >
-            EPL
-          </Badge>
+          <div className="ml-auto flex flex-col items-end gap-1">
+            <Badge
+              className="text-xs cursor-pointer hover:opacity-80 transition-opacity flex items-center gap-1"
+              style={{ background: "oklch(0.55 0.25 60)", color: "white" }}
+              onClick={manualRefresh}
+            >
+              <RefreshCw
+                className={`w-2.5 h-2.5 ${loading ? "animate-spin" : ""}`}
+              />
+              {loading ? "Updating…" : "EPL"}
+            </Badge>
+            {lastUpdated && !loading && (
+              <span className="text-[9px] text-muted-foreground/60">
+                Updated{" "}
+                {lastUpdated.toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+            )}
+          </div>
         </motion.div>
 
         {/* Legend */}

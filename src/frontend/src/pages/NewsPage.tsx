@@ -233,7 +233,9 @@ function localToNewsItem(
     authorId: ln.authorId,
     timestamp: BigInt(ln.timestamp) * BigInt(1_000_000), // ms -> ns
     photo: undefined,
-  } as NewsItem;
+    // Attach inline so the photo effect can use it without an extra store lookup
+    _photoBase64: ln.photoBase64,
+  } as NewsItem & { _photoBase64?: string };
 }
 
 // ── NewsPage ───────────────────────────────────────────────────────────────────
@@ -335,6 +337,13 @@ export function NewsPage() {
     const urls: Record<string, string> = {};
     const revokeUrls: string[] = [];
 
+    // Collect inline photoBase64 from local news items
+    for (const item of newsList) {
+      const base64 = (item as NewsItem & { _photoBase64?: string })
+        ._photoBase64;
+      if (base64) urls[item.newsId] = base64;
+    }
+
     const promises = newsList
       .filter((item) => item.photo != null)
       .map(async (item) => {
@@ -357,9 +366,9 @@ export function NewsPage() {
 
     Promise.all(promises).then(() => {
       if (!cancelled) {
-        // Merge with local photos so photos saved via admin panel show up
+        // Priority: inline base64 > localStorage photos > backend blobs
         const localPhotos = getNewsPhotos();
-        setPhotoBlobUrls({ ...localPhotos, ...urls });
+        setPhotoBlobUrls({ ...urls, ...localPhotos, ...urls });
       }
     });
 
