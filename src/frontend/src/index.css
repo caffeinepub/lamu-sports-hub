@@ -25,7 +25,8 @@
 /* Bricolage Grotesque – accent / stat numbers */
 @font-face {
   font-family: "Bricolage Grotesque";
-  src: url("/assets/fonts/BricolageGrotesque[opsz,wdth,wght].woff2") format("woff2");
+  src: url("/assets/fonts/BricolageGrotesque[opsz,wdth,wght].woff2")
+    format("woff2");
   font-weight: 200 800;
   font-style: normal;
   font-display: swap;
@@ -175,7 +176,12 @@
     @apply bg-background text-foreground font-body antialiased;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     @apply font-display;
   }
 }
@@ -208,7 +214,11 @@
 
   /* Glass card effect */
   .glass-card {
-    @apply backdrop-blur-sm border border-border/60; background-color: oklch(var(--card) / 0.8);
+    backdrop-filter: blur(8px);
+    border-width: 1px;
+    border-style: solid;
+    border-color: oklch(var(--border) / 0.6);
+    background-color: oklch(var(--card) / 0.8);
   }
 
   /* Ocean gradient background */
@@ -240,8 +250,13 @@
 
 /* Match status pulse animation */
 @keyframes live-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }
 
 .live-indicator {

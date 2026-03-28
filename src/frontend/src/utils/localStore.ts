@@ -709,6 +709,157 @@ export function runMigrations(): void {
     setLocalStore(LSH_LOCAL_NOTIFS_KEY, cleaned);
     localStorage.setItem("lsh_migration_v4", "done");
   }
+  // v5: seed real FKF Lamu County League teams if no local teams exist yet
+  if (!localStorage.getItem("lsh_migration_v5")) {
+    const existing = getLocalTeams();
+    // Only seed if there are no teams at all
+    if (existing.length === 0) {
+      const FKF_TEAMS: LocalTeam[] = [
+        {
+          teamId: "fkf-001",
+          name: "Manda City",
+          area: "Manda",
+          coachName: "",
+          createdAt: Date.now(),
+        },
+        {
+          teamId: "fkf-002",
+          name: "Galatasaray FC",
+          area: "Lamu Town",
+          coachName: "",
+          createdAt: Date.now(),
+        },
+        {
+          teamId: "fkf-003",
+          name: "Fayaz Bakers FC",
+          area: "Lamu Town",
+          coachName: "",
+          createdAt: Date.now(),
+        },
+        {
+          teamId: "fkf-004",
+          name: "Monaco FC",
+          area: "Lamu Town",
+          coachName: "",
+          createdAt: Date.now(),
+        },
+        {
+          teamId: "fkf-005",
+          name: "Amu Stars FC",
+          area: "Lamu Town",
+          coachName: "",
+          createdAt: Date.now(),
+        },
+        {
+          teamId: "fkf-006",
+          name: "Jaguar FC",
+          area: "Lamu Town",
+          coachName: "",
+          createdAt: Date.now(),
+        },
+        {
+          teamId: "fkf-007",
+          name: "Nyundo B",
+          area: "Lamu Town",
+          coachName: "",
+          createdAt: Date.now(),
+        },
+        {
+          teamId: "fkf-008",
+          name: "Dragon Juniors",
+          area: "Lamu Town",
+          coachName: "",
+          createdAt: Date.now(),
+        },
+        {
+          teamId: "fkf-009",
+          name: "Crocodile Juniors",
+          area: "Lamu Town",
+          coachName: "",
+          createdAt: Date.now(),
+        },
+        {
+          teamId: "fkf-010",
+          name: "Sportlight FC",
+          area: "Lamu Town",
+          coachName: "",
+          createdAt: Date.now(),
+        },
+        {
+          teamId: "fkf-011",
+          name: "Team Lawasco",
+          area: "Lamu Town",
+          coachName: "",
+          createdAt: Date.now(),
+        },
+        {
+          teamId: "fkf-012",
+          name: "Deepsea FC",
+          area: "Lamu Town",
+          coachName: "",
+          createdAt: Date.now(),
+        },
+        {
+          teamId: "fkf-013",
+          name: "All Brothers FC",
+          area: "Lamu Town",
+          coachName: "",
+          createdAt: Date.now(),
+        },
+        {
+          teamId: "fkf-014",
+          name: "Kashmir City",
+          area: "Lamu Town",
+          coachName: "",
+          createdAt: Date.now(),
+        },
+        {
+          teamId: "fkf-015",
+          name: "Boda Nations",
+          area: "Lamu Town",
+          coachName: "",
+          createdAt: Date.now(),
+        },
+        {
+          teamId: "fkf-016",
+          name: "Dragon Fly",
+          area: "Lamu Town",
+          coachName: "",
+          createdAt: Date.now(),
+        },
+        {
+          teamId: "fkf-017",
+          name: "Benfica FC",
+          area: "Lamu Town",
+          coachName: "",
+          createdAt: Date.now(),
+        },
+        {
+          teamId: "fkf-018",
+          name: "Flamingo FC",
+          area: "Lamu Town",
+          coachName: "",
+          createdAt: Date.now(),
+        },
+        {
+          teamId: "fkf-019",
+          name: "Deep Shark FC",
+          area: "Lamu Town",
+          coachName: "",
+          createdAt: Date.now(),
+        },
+        {
+          teamId: "fkf-020",
+          name: "Team Wazee",
+          area: "Lamu Town",
+          coachName: "",
+          createdAt: Date.now(),
+        },
+      ];
+      setLocalStore(LSH_LOCAL_TEAMS_KEY, FKF_TEAMS);
+    }
+    localStorage.setItem("lsh_migration_v5", "done");
+  }
 }
 
 // ── News Reactions ────────────────────────────────────────────────────────────
