@@ -180,7 +180,7 @@ export function MatchesPage() {
                         awayTeam={away}
                         onClick={() => navigate({ to: "/matches" })}
                         refereeName={getRefereeName(match.matchId)}
-                        pitchName={getPitchName(match.matchId)}
+                        pitchName={getPitchName(match.matchId) || match.ground}
                       />
                     </motion.div>
                   );
@@ -226,7 +226,7 @@ export function MatchesPage() {
                           navigate({ to: `/matchday/${match.matchId}` })
                         }
                         refereeName={getRefereeName(match.matchId)}
-                        pitchName={getPitchName(match.matchId)}
+                        pitchName={getPitchName(match.matchId) || match.ground}
                       />
                     </motion.div>
                   );
@@ -261,7 +261,7 @@ export function MatchesPage() {
                         navigate({ to: `/matchday/${match.matchId}` })
                       }
                       refereeName={getRefereeName(match.matchId)}
-                      pitchName={getPitchName(match.matchId)}
+                      pitchName={getPitchName(match.matchId) || match.ground}
                     />
                   </motion.div>
                 );

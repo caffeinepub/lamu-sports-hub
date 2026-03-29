@@ -1,14 +1,34 @@
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   type LiveStream,
   type Video,
+  addVideo,
   getLiveStreams,
   getVideos,
+  isOfficialSessionVerified,
 } from "@/utils/localStore";
 import {
   ExternalLink,
   Layers,
   PlayCircle,
+  Plus,
   Radio,
   Swords,
   Zap,
@@ -16,11 +36,26 @@ import {
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 
+function toEmbedUrl(url: string): string {
+  const ytMatch = url.match(
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/,
+  );
+  if (ytMatch) return `https://www.youtube.com/embed/${ytMatch[1]}`;
+  return url;
+}
+
 export function ExplorePage() {
   const [videos, setVideos] = useState<Video[]>(() => getVideos());
   const [liveStreams, setLiveStreams] = useState<LiveStream[]>(() =>
     getLiveStreams(),
   );
+  const [showAddVideo, setShowAddVideo] = useState(false);
+  const [newVideoTitle, setNewVideoTitle] = useState("");
+  const [newVideoUrl, setNewVideoUrl] = useState("");
+  const [newVideoCategory, setNewVideoCategory] = useState<
+    "highlights" | "tactics" | "preparation"
+  >("highlights");
+  const isOfficial = isOfficialSessionVerified();
 
   useEffect(() => {
     function refresh() {
@@ -34,6 +69,20 @@ export function ExplorePage() {
       window.removeEventListener("focus", refresh);
     };
   }, []);
+
+  function handleAddVideo() {
+    if (!newVideoTitle.trim() || !newVideoUrl.trim()) return;
+    addVideo({
+      title: newVideoTitle.trim(),
+      url: toEmbedUrl(newVideoUrl.trim()),
+      category: newVideoCategory,
+    });
+    setVideos(getVideos());
+    setNewVideoTitle("");
+    setNewVideoUrl("");
+    setNewVideoCategory("highlights");
+    setShowAddVideo(false);
+  }
 
   const tactics = videos.filter((v) => v.category === "tactics");
   const preparation = videos.filter((v) => v.category === "preparation");
@@ -107,6 +156,20 @@ export function ExplorePage() {
           />
         </TabsContent>
         <TabsContent value="highlights">
+          {isOfficial && (
+            <div className="mb-3">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs"
+                onClick={() => setShowAddVideo(true)}
+                data-ocid="explore.highlights.open_modal_button"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add Video
+              </Button>
+            </div>
+          )}
           <VideoGrid
             videos={highlights}
             emptyLabel="No highlight videos yet."
@@ -114,6 +177,76 @@ export function ExplorePage() {
           />
         </TabsContent>
       </Tabs>
+
+      {/* Add Video Dialog — Officials Only */}
+      <Dialog open={showAddVideo} onOpenChange={setShowAddVideo}>
+        <DialogContent data-ocid="explore.add_video.dialog">
+          <DialogHeader>
+            <DialogTitle>Add Video</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="video-title">Video Title</Label>
+              <Input
+                id="video-title"
+                placeholder="e.g. Manda City vs Galatasaray Highlights"
+                value={newVideoTitle}
+                onChange={(e) => setNewVideoTitle(e.target.value)}
+                data-ocid="explore.add_video.input"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="video-url">YouTube URL or Embed Link</Label>
+              <Input
+                id="video-url"
+                placeholder="YouTube URL or embed link"
+                value={newVideoUrl}
+                onChange={(e) => setNewVideoUrl(e.target.value)}
+                data-ocid="explore.add_video.url.input"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="video-category">Category</Label>
+              <Select
+                value={newVideoCategory}
+                onValueChange={(v) =>
+                  setNewVideoCategory(
+                    v as "highlights" | "tactics" | "preparation",
+                  )
+                }
+              >
+                <SelectTrigger
+                  id="video-category"
+                  data-ocid="explore.add_video.select"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="highlights">Highlights</SelectItem>
+                  <SelectItem value="tactics">Tactics</SelectItem>
+                  <SelectItem value="preparation">Training</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowAddVideo(false)}
+              data-ocid="explore.add_video.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAddVideo}
+              disabled={!newVideoTitle.trim() || !newVideoUrl.trim()}
+              data-ocid="explore.add_video.submit_button"
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

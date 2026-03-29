@@ -1390,6 +1390,168 @@ export function runMigrations(): void {
       localStorage.setItem("lsh_migration_v8", "done");
     }
   }
+
+  // v9: top-level unconditional reseed — fixes nesting bug in v7/v8 where v8
+  // was inside v7's if-block and never ran on devices that already had v7 done.
+  // Overwrites the teams list, keeping any non-FKF (admin-added) teams intact.
+  if (!localStorage.getItem("lsh_migration_v9")) {
+    const FKF_V9: LocalTeam[] = [
+      {
+        teamId: "fkf-001",
+        name: "Manda City",
+        area: "Manda",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-002",
+        name: "Galatasaray FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-003",
+        name: "Fayaz Bakers FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-004",
+        name: "Monaco FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-005",
+        name: "Amu Stars FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-006",
+        name: "Jaguar FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-007",
+        name: "Nyundo B",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-008",
+        name: "Dragon Juniors",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-009",
+        name: "Crocodile Juniors",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-010",
+        name: "Sportlight FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-011",
+        name: "Team Lawasco",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-012",
+        name: "Deepsea FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-013",
+        name: "All Brothers FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-014",
+        name: "Kashmir City",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-015",
+        name: "Boda Nations",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-016",
+        name: "Dragon Fly",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-017",
+        name: "Benfica FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-018",
+        name: "Flamingo FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-019",
+        name: "Deep Shark FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-020",
+        name: "Team Wazee",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+    ];
+    // Keep any non-FKF teams the admin added, then ensure all 20 FKF teams are present
+    const existing9 = getLocalTeams();
+    const nonFkf = existing9.filter((t) => !t.teamId.startsWith("fkf-"));
+    const fkfIds = new Set(FKF_V9.map((t) => t.teamId));
+    const mergedV9 = [
+      ...FKF_V9,
+      ...nonFkf.filter((t) => !fkfIds.has(t.teamId)),
+    ];
+    setLocalStore(LSH_LOCAL_TEAMS_KEY, mergedV9);
+    // Also wipe any remaining demo notifications
+    const notifs = getLocalNotifications();
+    const cleanNotifs = notifs.filter((n) => !isDemoNotification(n));
+    setLocalStore(LSH_LOCAL_NOTIFS_KEY, cleanNotifs);
+    localStorage.setItem("lsh_migration_v9", "done");
+  }
 }
 
 // ── News Reactions ────────────────────────────────────────────────────────────
