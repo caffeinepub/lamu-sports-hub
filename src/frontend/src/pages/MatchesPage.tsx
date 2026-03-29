@@ -24,11 +24,22 @@ export function MatchesPage() {
 
   const { seasonName, tournamentName } = getSeasonSettings();
 
-  const upcomingMatches = MOCK_MATCHES.filter((m) => m.status === "scheduled");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const upcomingMatches = MOCK_MATCHES.filter((m) => {
+    const matchDate = new Date(m.date);
+    matchDate.setHours(0, 0, 0, 0);
+    return (
+      m.status === "scheduled" || (m.status !== "live" && matchDate >= today)
+    );
+  });
   const liveMatches = MOCK_MATCHES.filter((m) => m.status === "live");
-  const playedMatches = MOCK_MATCHES.filter(
-    (m) => m.status === "played",
-  ).reverse();
+  const playedMatches = MOCK_MATCHES.filter((m) => {
+    const matchDate = new Date(m.date);
+    matchDate.setHours(0, 0, 0, 0);
+    return m.status === "played" && matchDate < today;
+  }).reverse();
 
   const defaultTab = liveMatches.length > 0 ? "live" : "upcoming";
 

@@ -34,6 +34,13 @@ import { useActor } from "@/hooks/useActor";
 import { compressImage } from "@/utils/imageUtils";
 import { isOfficialSessionVerified } from "@/utils/localStore";
 import {
+  type TeamRegistrationRequest,
+  addTeamRegistration,
+  approveTeamRegistration,
+  deleteTeamRegistration,
+  getTeamRegistrations,
+} from "@/utils/localStore";
+import {
   type Award,
   type CardEvent,
   type GoalEvent,
@@ -304,6 +311,16 @@ function AdminPanelInner() {
     (r) => r.status === "pending",
   ).length;
   const [loading, setLoading] = useState(false);
+
+  // Registrations tab state
+  const [registrations, setRegistrations] = useState<TeamRegistrationRequest[]>(
+    () => getTeamRegistrations(),
+  );
+  const [regTeamName, setRegTeamName] = useState("");
+  const [regCoachName, setRegCoachName] = useState("");
+  const [regArea, setRegArea] = useState("");
+  const [regPhone, setRegPhone] = useState("");
+  const pendingRegistrations = registrations.filter((r) => !r.approved).length;
   const [homeTeam, setHomeTeam] = useState("");
   const [awayTeam, setAwayTeam] = useState("");
   const [matchDate, setMatchDate] = useState("");
@@ -1261,8 +1278,8 @@ function AdminPanelInner() {
             Settings
           </TabsTrigger>
         </TabsList>
-        {/* Row 3 — Inbox + Admins + Recovery */}
-        <TabsList className="w-full grid grid-cols-3 mb-4">
+        {/* Row 3 — Inbox + Admins + Recovery + Registrations */}
+        <TabsList className="w-full grid grid-cols-4 mb-4">
           <TabsTrigger
             value="inbox"
             className="text-[9px] px-0.5 gap-1"
@@ -1294,6 +1311,19 @@ function AdminPanelInner() {
             {recoveryPendingCount > 0 && (
               <span className="ml-0.5 bg-accent text-accent-foreground text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none">
                 {recoveryPendingCount}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger
+            value="registrations"
+            className="text-[9px] px-0.5 gap-1"
+            data-ocid="admin.registrations.tab"
+          >
+            <UserCheck className="w-3 h-3" />
+            Reg.
+            {pendingRegistrations > 0 && (
+              <span className="ml-0.5 bg-emerald-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                {pendingRegistrations}
               </span>
             )}
           </TabsTrigger>
@@ -1746,6 +1776,177 @@ function AdminPanelInner() {
         {/* Admins Tab */}
         <TabsContent value="admins">
           <AdminsListTab />
+        </TabsContent>
+
+        {/* Registrations Tab */}
+        <TabsContent value="registrations">
+          <div className="space-y-4 pb-6">
+            {/* Registration Form */}
+            <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+              <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
+                <UserCheck className="w-4 h-4 text-primary" />
+                Register a Team
+              </h3>
+              <p className="text-[11px] text-muted-foreground">
+                Submit your team details for consideration in the league.
+              </p>
+              <Input
+                placeholder="Team Name *"
+                value={regTeamName}
+                onChange={(e) => setRegTeamName(e.target.value)}
+                className="h-9 text-sm"
+                data-ocid="admin.registrations.team_name.input"
+              />
+              <Input
+                placeholder="Coach Name *"
+                value={regCoachName}
+                onChange={(e) => setRegCoachName(e.target.value)}
+                className="h-9 text-sm"
+                data-ocid="admin.registrations.coach_name.input"
+              />
+              <Input
+                placeholder="Area / Location *"
+                value={regArea}
+                onChange={(e) => setRegArea(e.target.value)}
+                className="h-9 text-sm"
+                data-ocid="admin.registrations.area.input"
+              />
+              <Input
+                placeholder="Contact Phone *"
+                value={regPhone}
+                onChange={(e) => setRegPhone(e.target.value)}
+                className="h-9 text-sm"
+                data-ocid="admin.registrations.phone.input"
+              />
+              <Button
+                size="sm"
+                className="w-full text-xs"
+                data-ocid="admin.registrations.submit_button"
+                onClick={() => {
+                  if (
+                    !regTeamName.trim() ||
+                    !regCoachName.trim() ||
+                    !regArea.trim() ||
+                    !regPhone.trim()
+                  ) {
+                    toast.error("All fields are required");
+                    return;
+                  }
+                  addTeamRegistration({
+                    teamName: regTeamName.trim(),
+                    coachName: regCoachName.trim(),
+                    area: regArea.trim(),
+                    contactPhone: regPhone.trim(),
+                  });
+                  setRegistrations(getTeamRegistrations());
+                  setRegTeamName("");
+                  setRegCoachName("");
+                  setRegArea("");
+                  setRegPhone("");
+                  toast.success("Registration submitted!");
+                }}
+              >
+                Submit Registration
+              </Button>
+            </div>
+
+            {/* Officials-only: list of submissions */}
+            {isOfficialSessionVerified() && (
+              <div className="space-y-2">
+                <h3 className="font-bold text-sm text-foreground px-1">
+                  Submitted Registrations
+                  {pendingRegistrations > 0 && (
+                    <span className="ml-2 bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      {pendingRegistrations} pending
+                    </span>
+                  )}
+                </h3>
+                {registrations.length === 0 ? (
+                  <div
+                    className="rounded-xl border border-border bg-card p-6 text-center"
+                    data-ocid="admin.registrations.empty_state"
+                  >
+                    <p className="text-sm text-muted-foreground">
+                      No registrations yet
+                    </p>
+                  </div>
+                ) : (
+                  <div
+                    className="space-y-2"
+                    data-ocid="admin.registrations.list"
+                  >
+                    {registrations.map((reg, i) => (
+                      <div
+                        key={reg.id}
+                        className={`rounded-xl border p-3 space-y-1.5 ${reg.approved ? "border-emerald-500/30 bg-emerald-500/5" : "border-border bg-card"}`}
+                        data-ocid={`admin.registrations.item.${i + 1}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="space-y-0.5 flex-1 min-w-0">
+                            <p className="font-bold text-sm text-foreground truncate">
+                              {reg.teamName}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              Coach: {reg.coachName}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              Area: {reg.area} · 📞 {reg.contactPhone}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground/60">
+                              {new Date(reg.submittedAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                          {reg.approved ? (
+                            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-lg whitespace-nowrap">
+                              ✓ Approved
+                            </span>
+                          ) : (
+                            <div className="flex gap-1.5">
+                              <Button
+                                size="sm"
+                                className="h-7 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white"
+                                data-ocid={`admin.registrations.approve_button.${i + 1}`}
+                                onClick={() => {
+                                  approveTeamRegistration(reg.id);
+                                  // Also add to local teams list
+                                  addLocalTeam({
+                                    teamId: `reg-team-${reg.id}`,
+                                    name: reg.teamName,
+                                    area: reg.area,
+                                    coachName: reg.coachName,
+                                    createdAt: Date.now(),
+                                  });
+                                  setRegistrations(getTeamRegistrations());
+                                  toast.success(
+                                    `${reg.teamName} approved and added to Teams!`,
+                                  );
+                                }}
+                              >
+                                ✓ Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                className="h-7 text-[10px]"
+                                data-ocid={`admin.registrations.delete_button.${i + 1}`}
+                                onClick={() => {
+                                  deleteTeamRegistration(reg.id);
+                                  setRegistrations(getTeamRegistrations());
+                                  toast.success("Registration removed");
+                                }}
+                              >
+                                ✗
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </TabsContent>
 
         {/* Recovery Tab */}

@@ -261,7 +261,7 @@ export function SettingsPage() {
     const shareData = {
       title: "Lamu Sports Hub",
       text: "Track live Lamu football — scores, tables, news & more!",
-      url: window.location.origin,
+      url: window.location.href,
     };
     if (navigator.share) {
       try {
@@ -271,7 +271,7 @@ export function SettingsPage() {
       }
     } else {
       try {
-        await navigator.clipboard.writeText(window.location.origin);
+        await navigator.clipboard.writeText(window.location.href);
         toast.success("App link copied to clipboard!");
       } catch {
         toast.error("Could not copy link. Please copy manually.");
@@ -282,8 +282,13 @@ export function SettingsPage() {
   const handleInstall = async () => {
     if (installPrompt) {
       await installPrompt.prompt();
+      const choice = await installPrompt.userChoice;
+      if (choice.outcome === "accepted") {
+        toast.success("App installed! Find it on your home screen.");
+        setInstallPrompt(null);
+      }
     } else {
-      toast.info('Open in Chrome → tap ⋮ menu → "Add to Home screen"');
+      toast.info('In Chrome: tap ⋮ menu → "Add to Home screen" to install');
     }
   };
 
@@ -509,7 +514,7 @@ export function SettingsPage() {
               >
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-60 overflow-y-auto">
                 {realTeams.length === 0 ? (
                   <SelectItem
                     value="__no_teams__"
@@ -563,7 +568,7 @@ export function SettingsPage() {
               >
                 <SelectValue placeholder="Choose a player…" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-60 overflow-y-auto">
                 <SelectItem
                   value="__none__"
                   className="text-sm text-muted-foreground"
@@ -736,7 +741,10 @@ export function SettingsPage() {
                   key={opt.value}
                   type="button"
                   data-ocid={opt.ocid}
-                  onClick={() => update("theme", opt.value)}
+                  onClick={() => {
+                    update("theme", opt.value);
+                    applyTheme(opt.value as "dark" | "light" | "system");
+                  }}
                   className={`flex flex-col items-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-bold transition-all ${
                     settings.theme === opt.value
                       ? "border-primary bg-primary/15 text-primary"
@@ -801,9 +809,12 @@ export function SettingsPage() {
             </Label>
             <Select
               value={settings.language}
-              onValueChange={(v) =>
-                update("language", v as UserSettings["language"])
-              }
+              onValueChange={(v) => {
+                update("language", v as UserSettings["language"]);
+                toast.success(
+                  v === "sw" ? "Lugha imebadilishwa!" : "Language changed!",
+                );
+              }}
             >
               <SelectTrigger
                 className="h-9 text-sm"
@@ -863,7 +874,7 @@ export function SettingsPage() {
               className="flex items-center justify-center gap-2 rounded-xl border border-border bg-muted/30 hover:bg-muted/60 transition-colors px-3 py-2.5 text-xs font-bold text-foreground"
             >
               <Download className="w-3.5 h-3.5 text-muted-foreground" />
-              Install App
+              {installPrompt ? "Install App" : "Open in Browser"}
             </button>
           </div>
         </motion.section>

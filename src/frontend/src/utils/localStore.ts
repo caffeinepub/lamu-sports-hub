@@ -1629,3 +1629,52 @@ export function getMatchEvents(matchId: string): MatchEvents {
 export function setMatchEvents(matchId: string, events: MatchEvents): void {
   setLocalStore(`lsh_match_events_${matchId}`, events);
 }
+
+// ── Team Registration Requests ────────────────────────────────────────────────
+export interface TeamRegistrationRequest {
+  id: string;
+  teamName: string;
+  coachName: string;
+  area: string;
+  contactPhone: string;
+  submittedAt: number;
+  approved: boolean;
+}
+
+const LSH_TEAM_REGISTRATIONS_KEY = "lsh_team_registrations";
+
+export function getTeamRegistrations(): TeamRegistrationRequest[] {
+  return getLocalStore<TeamRegistrationRequest[]>(
+    LSH_TEAM_REGISTRATIONS_KEY,
+    [],
+  );
+}
+
+export function addTeamRegistration(
+  req: Omit<TeamRegistrationRequest, "id" | "submittedAt" | "approved">,
+): void {
+  const existing = getTeamRegistrations();
+  const newReq: TeamRegistrationRequest = {
+    ...req,
+    id: `reg-${Date.now()}`,
+    submittedAt: Date.now(),
+    approved: false,
+  };
+  setLocalStore(LSH_TEAM_REGISTRATIONS_KEY, [...existing, newReq]);
+}
+
+export function approveTeamRegistration(id: string): void {
+  const existing = getTeamRegistrations();
+  setLocalStore(
+    LSH_TEAM_REGISTRATIONS_KEY,
+    existing.map((r) => (r.id === id ? { ...r, approved: true } : r)),
+  );
+}
+
+export function deleteTeamRegistration(id: string): void {
+  const existing = getTeamRegistrations();
+  setLocalStore(
+    LSH_TEAM_REGISTRATIONS_KEY,
+    existing.filter((r) => r.id !== id),
+  );
+}

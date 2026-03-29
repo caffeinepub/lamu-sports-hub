@@ -3,7 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { InternetIdentityProvider } from "./hooks/useInternetIdentity";
 import "./index.css";
-import { runMigrations } from "./utils/localStore";
+import { runMigrations } from "@/utils/localStore";
 
 BigInt.prototype.toJSON = function () {
   return this.toString();
@@ -15,7 +15,7 @@ declare global {
   }
 }
 
-// Run migrations BEFORE the app renders — this seeds FKF teams and clears demo data
+// Run migrations before app renders — seeds FKF teams, clears demo data
 runMigrations();
 
 const queryClient = new QueryClient();
