@@ -1,286 +1,345 @@
-import { MatchCard } from "@/components/shared/MatchCard";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MOCK_MATCHES, MOCK_TEAMS } from "@/data/mockData";
 import {
   getMatchPitches,
   getMatchReferees,
   getPitches,
   getReferees,
-  getSeasonSettings,
 } from "@/utils/localStore";
 import { useNavigate } from "@tanstack/react-router";
-import { Calendar } from "lucide-react";
+import { Calendar, Shield, Star } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 
-export function MatchesPage() {
-  const navigate = useNavigate();
-  const [division, setDivision] = useState<"senior" | "u18">("senior");
+type DateTab = "yesterday" | "today" | "tomorrow";
 
-  useEffect(() => {
-    document.title =
-      "Fixtures & Results – Lamu Sports Hub | Lamu Football Matches";
-  }, []);
-
-  const { seasonName, tournamentName } = getSeasonSettings();
-
+function getDateRange(tab: DateTab): { start: Date; end: Date } {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const offset = tab === "yesterday" ? -1 : tab === "tomorrow" ? 1 : 0;
+  const d = new Date(today);
+  d.setDate(d.getDate() + offset);
+  const end = new Date(d);
+  end.setHours(23, 59, 59, 999);
+  return { start: d, end };
+}
 
-  const upcomingMatches = MOCK_MATCHES.filter((m) => {
-    const matchDate = new Date(m.date);
-    matchDate.setHours(0, 0, 0, 0);
-    return (
-      m.status === "scheduled" || (m.status !== "live" && matchDate >= today)
-    );
+function getMatchMinute(match: { date: string; status: string }): number {
+  if (match.status !== "live") return 0;
+  const kickoff = new Date(match.date);
+  const now = new Date();
+  const diff = Math.floor((now.getTime() - kickoff.getTime()) / 60000);
+  return Math.min(Math.max(diff, 1), 90);
+}
+
+function formatKickoff(dateStr: string): string {
+  const d = new Date(dateStr);
+  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+function TeamInitial({ name, color }: { name: string; color: string }) {
+  return (
+    <div
+      className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-black text-white flex-shrink-0"
+      style={{ backgroundColor: color }}
+    >
+      {name.slice(0, 2).toUpperCase()}
+    </div>
+  );
+}
+
+export function MatchesPage() {
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<DateTab>("today");
+  const [followedMatches, setFollowedMatches] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("followedMatches") ?? "[]");
+    } catch {
+      return [];
+    }
   });
-  const liveMatches = MOCK_MATCHES.filter((m) => m.status === "live");
-  const playedMatches = MOCK_MATCHES.filter((m) => {
-    const matchDate = new Date(m.date);
-    matchDate.setHours(0, 0, 0, 0);
-    return m.status === "played" && matchDate < today;
-  }).reverse();
 
-  const defaultTab = liveMatches.length > 0 ? "live" : "upcoming";
+  useEffect(() => {
+    document.title = "Matches – Lamu Sports Hub";
+  }, []);
 
-  // Referee lookup
   const allReferees = getReferees();
   const matchRefereeMap = getMatchReferees();
-  const getRefereeName = (matchId: string): string | undefined => {
-    const refId = matchRefereeMap[matchId];
-    if (!refId) return undefined;
-    return allReferees.find((r) => r.refereeId === refId)?.name;
-  };
-
-  // Pitch lookup
   const allPitches = getPitches();
   const matchPitchMap = getMatchPitches();
-  const getPitchName = (matchId: string): string | undefined => {
+
+  const getRefereeName = (matchId: string) => {
+    const refId = matchRefereeMap[matchId];
+    return refId
+      ? allReferees.find((r) => r.refereeId === refId)?.name
+      : undefined;
+  };
+
+  const getPitchName = (matchId: string) => {
     const pitchId = matchPitchMap[matchId];
-    if (!pitchId) return undefined;
-    return allPitches.find((p) => p.pitchId === pitchId)?.name;
+    return pitchId
+      ? allPitches.find((p) => p.pitchId === pitchId)?.name
+      : undefined;
+  };
+
+  const toggleFollow = (matchId: string) => {
+    setFollowedMatches((prev) => {
+      const next = prev.includes(matchId)
+        ? prev.filter((id) => id !== matchId)
+        : [...prev, matchId];
+      localStorage.setItem("followedMatches", JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const { start, end } = getDateRange(activeTab);
+
+  const filteredMatches = MOCK_MATCHES.filter((m) => {
+    const d = new Date(m.date);
+    return d >= start && d <= end;
+  });
+
+  const followedInTab = filteredMatches.filter((m) =>
+    followedMatches.includes(m.matchId),
+  );
+  const unfollowedInTab = filteredMatches.filter(
+    (m) => !followedMatches.includes(m.matchId),
+  );
+
+  // Group by league (all FKF for now)
+  const leagueGroups: { leagueName: string; matchIds: string[] }[] = [
+    {
+      leagueName: "FKF Lamu County League — Zone A Pool A",
+      matchIds: unfollowedInTab.map((m) => m.matchId),
+    },
+  ];
+
+  const tabs: { id: DateTab; label: string }[] = [
+    { id: "yesterday", label: "Yesterday" },
+    { id: "today", label: "Today" },
+    { id: "tomorrow", label: "Tomorrow" },
+  ];
+
+  const renderMatchCard = (matchId: string, index: number) => {
+    const match = MOCK_MATCHES.find((m) => m.matchId === matchId);
+    if (!match) return null;
+    const home = MOCK_TEAMS.find((t) => t.teamId === match.homeTeamId);
+    const away = MOCK_TEAMS.find((t) => t.teamId === match.awayTeamId);
+    if (!home || !away) return null;
+
+    const isLive = match.status === "live";
+    const isPlayed = match.status === "played";
+    const minute = getMatchMinute(match);
+    const isFollowed = followedMatches.includes(matchId);
+    const refName = getRefereeName(matchId);
+    const pitchName = getPitchName(matchId) ?? match.ground;
+
+    return (
+      <motion.div
+        key={matchId}
+        initial={{ y: 8, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: index * 0.04 }}
+        data-ocid={`matches.item.${index + 1}`}
+        className="rounded-2xl border border-border bg-card overflow-hidden hover:border-primary/40 transition-all cursor-pointer"
+        onClick={() =>
+          isLive || isPlayed
+            ? navigate({ to: `/matchday/${matchId}` })
+            : undefined
+        }
+      >
+        <div className="p-3">
+          {/* Header row: competition badge + status + star */}
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5">
+              {isLive && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-500/15 border border-green-500/40 text-[10px] font-black text-green-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block" />
+                  {minute}'
+                </span>
+              )}
+              {isPlayed && (
+                <span className="px-2 py-0.5 rounded-full bg-muted/40 border border-border text-[10px] font-bold text-muted-foreground">
+                  FT
+                </span>
+              )}
+              {!isLive && !isPlayed && (
+                <span className="px-2 py-0.5 rounded-full bg-primary/10 border border-primary/30 text-[10px] font-bold text-primary">
+                  {formatKickoff(match.date)}
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              data-ocid={`matches.star.toggle.${index + 1}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleFollow(matchId);
+              }}
+              className="p-1 rounded-full hover:bg-muted/40 transition-colors"
+              aria-label={isFollowed ? "Unfollow match" : "Follow match"}
+            >
+              <Star
+                className={`w-4 h-4 transition-colors ${
+                  isFollowed
+                    ? "fill-yellow-400 text-yellow-400"
+                    : "text-muted-foreground"
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Teams + score */}
+          <div className="flex items-center gap-3">
+            <div className="flex flex-col items-center gap-1.5 flex-1">
+              <TeamInitial name={home.name} color={home.color} />
+              <span className="text-xs font-bold text-foreground text-center leading-tight line-clamp-2">
+                {home.name}
+              </span>
+            </div>
+
+            <div className="flex flex-col items-center flex-shrink-0 px-2">
+              {isLive || isPlayed ? (
+                <span className="font-black font-stats text-2xl text-foreground tracking-tight">
+                  {match.homeScore} — {match.awayScore}
+                </span>
+              ) : (
+                <span className="font-bold text-sm text-muted-foreground">
+                  VS
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-col items-center gap-1.5 flex-1">
+              <TeamInitial name={away.name} color={away.color} />
+              <span className="text-xs font-bold text-foreground text-center leading-tight line-clamp-2">
+                {away.name}
+              </span>
+            </div>
+          </div>
+
+          {/* Venue/ref row */}
+          {(pitchName || refName) && (
+            <div className="mt-2 flex items-center gap-2 text-[10px] text-muted-foreground/70">
+              {pitchName && <span>📍 {pitchName}</span>}
+              {refName && <span>• Ref: {refName}</span>}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    );
   };
 
   return (
     <div data-ocid="matches.page" className="min-h-screen pb-24 pt-14">
       {/* Header */}
       <div
-        className="px-4 py-5"
+        className="px-4 py-4"
         style={{
           background:
             "linear-gradient(135deg, oklch(0.1 0.04 255) 0%, oklch(0.14 0.06 252) 100%)",
         }}
       >
-        <motion.div
-          initial={{ y: -10, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-        >
-          <h1 className="font-display font-black text-2xl text-foreground flex items-center gap-2">
-            <Calendar className="w-6 h-6 text-primary" />
-            Fixtures & Results
-          </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Season {seasonName} — {tournamentName}
-          </p>
-        </motion.div>
+        <h1 className="font-display font-black text-xl text-foreground flex items-center gap-2">
+          <Calendar className="w-5 h-5 text-primary" />
+          Matches
+        </h1>
       </div>
 
-      {/* Division Toggle */}
-      <div className="px-4 pt-4 flex gap-2" data-ocid="matches.division.toggle">
-        <button
-          type="button"
-          onClick={() => setDivision("senior")}
-          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all border ${
-            division === "senior"
-              ? "bg-primary text-primary-foreground border-primary"
-              : "bg-card border-border text-muted-foreground hover:border-primary/40"
-          }`}
-          data-ocid="matches.senior.tab"
-        >
-          Senior
-        </button>
-        <button
-          type="button"
-          onClick={() => setDivision("u18")}
-          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all border ${
-            division === "u18"
-              ? "bg-primary text-primary-foreground border-primary"
-              : "bg-card border-border text-muted-foreground hover:border-primary/40"
-          }`}
-          data-ocid="matches.u18.tab"
-        >
-          Under-18
-        </button>
-      </div>
-
-      {division === "u18" ? (
-        <div className="px-4 mt-4" data-ocid="matches.u18.panel">
-          <div className="rounded-xl border border-border bg-card p-8 text-center space-y-3">
-            <span className="text-4xl">🏃</span>
-            <h2 className="font-display font-black text-lg text-foreground">
-              Under-18 League
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Registration Open — Season {seasonName}
-            </p>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              The U18 League is open for team registrations. Contact officials
-              to register a youth team and be part of Lamu's next generation of
-              football talent.
-            </p>
-            <button
-              type="button"
-              className="mt-2 px-4 py-2 rounded-lg text-xs font-bold text-primary border border-primary/40 hover:bg-primary/10 transition-all"
-              onClick={() => navigate({ to: "/about" })}
-              data-ocid="matches.u18.contact_button"
-            >
-              Contact Officials →
-            </button>
-          </div>
-        </div>
-      ) : (
-        <Tabs defaultValue={defaultTab} className="px-4 pt-4">
-          <TabsList
-            className="w-full grid grid-cols-3 mb-4"
-            data-ocid="matches.tab"
+      {/* Date tabs */}
+      <div
+        className="flex border-b border-border bg-card sticky top-14 z-10"
+        data-ocid="matches.date.tab"
+      >
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            data-ocid={`matches.${tab.id}.tab`}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex-1 py-3 text-xs font-bold transition-all relative ${
+              activeTab === tab.id
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
           >
-            <TabsTrigger value="upcoming" className="text-xs">
-              Upcoming ({upcomingMatches.length})
-            </TabsTrigger>
-            <TabsTrigger value="live" className="text-xs">
-              {liveMatches.length > 0 && (
-                <span className="live-indicator mr-1 w-1.5 h-1.5 rounded-full bg-accent inline-block" />
-              )}
-              Live ({liveMatches.length})
-            </TabsTrigger>
-            <TabsTrigger value="results" className="text-xs">
-              Results ({playedMatches.length})
-            </TabsTrigger>
-          </TabsList>
+            {tab.label}
+            {activeTab === tab.id && (
+              <motion.div
+                layoutId="dateTabUnderline"
+                className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
+              />
+            )}
+          </button>
+        ))}
+      </div>
 
-          {/* Upcoming */}
-          <TabsContent value="upcoming">
-            <div className="space-y-3" data-ocid="matches.list">
-              {upcomingMatches.length === 0 ? (
+      <div className="px-4 pt-4 space-y-5">
+        {/* Following section */}
+        <div data-ocid="matches.following.section">
+          <h2 className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
+            <Star className="w-3.5 h-3.5 text-yellow-400" />
+            Following
+          </h2>
+          {followedInTab.length === 0 ? (
+            <div
+              className="rounded-xl border border-dashed border-border p-4 text-center"
+              data-ocid="matches.following.empty_state"
+            >
+              <p className="text-xs text-muted-foreground">
+                No followed matches. Star a match to follow it.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {followedInTab.map((m, i) => renderMatchCard(m.matchId, i))}
+            </div>
+          )}
+        </div>
+
+        {/* League groups */}
+        {leagueGroups
+          .filter((g) => g.matchIds.length > 0)
+          .map((group) => (
+            <div key={group.leagueName} data-ocid="matches.league.section">
+              <div className="flex items-center gap-2 mb-2">
+                <Shield className="w-4 h-4 text-primary" />
+                <h2 className="text-xs font-black uppercase tracking-wider text-foreground">
+                  {group.leagueName}
+                </h2>
+              </div>
+              {group.matchIds.length === 0 ? (
                 <div
-                  className="text-center py-12 text-muted-foreground"
+                  className="rounded-xl border border-dashed border-border p-4 text-center"
                   data-ocid="matches.empty_state"
                 >
-                  <Calendar className="w-10 h-10 mx-auto mb-2 opacity-40" />
-                  <p className="text-sm">No upcoming matches scheduled</p>
+                  <Calendar className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  <p className="text-xs text-muted-foreground">
+                    No matches scheduled for this day
+                  </p>
                 </div>
               ) : (
-                upcomingMatches.map((match, i) => {
-                  const home = MOCK_TEAMS.find(
-                    (t) => t.teamId === match.homeTeamId,
-                  )!;
-                  const away = MOCK_TEAMS.find(
-                    (t) => t.teamId === match.awayTeamId,
-                  )!;
-                  return (
-                    <motion.div
-                      key={match.matchId}
-                      initial={{ y: 10, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      transition={{ delay: i * 0.06 }}
-                      data-ocid={`matches.item.${i + 1}`}
-                    >
-                      <MatchCard
-                        match={match}
-                        homeTeam={home}
-                        awayTeam={away}
-                        onClick={() => navigate({ to: "/matches" })}
-                        refereeName={getRefereeName(match.matchId)}
-                        pitchName={getPitchName(match.matchId) || match.ground}
-                      />
-                    </motion.div>
-                  );
-                })
-              )}
-            </div>
-          </TabsContent>
-
-          {/* Live */}
-          <TabsContent value="live">
-            <div className="space-y-3">
-              {liveMatches.length === 0 ? (
-                <div
-                  className="text-center py-12 text-muted-foreground"
-                  data-ocid="matches.empty_state"
-                >
-                  <div className="w-10 h-10 rounded-full border-2 border-muted mx-auto mb-2 flex items-center justify-center">
-                    <span className="text-lg">⚽</span>
-                  </div>
-                  <p className="text-sm">No matches currently live</p>
+                <div className="space-y-2">
+                  {group.matchIds.map((id, i) => renderMatchCard(id, i))}
                 </div>
-              ) : (
-                liveMatches.map((match, i) => {
-                  const home = MOCK_TEAMS.find(
-                    (t) => t.teamId === match.homeTeamId,
-                  )!;
-                  const away = MOCK_TEAMS.find(
-                    (t) => t.teamId === match.awayTeamId,
-                  )!;
-                  return (
-                    <motion.div
-                      key={match.matchId}
-                      initial={{ y: 10, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      transition={{ delay: i * 0.06 }}
-                      data-ocid={`matches.item.${i + 1}`}
-                    >
-                      <MatchCard
-                        match={match}
-                        homeTeam={home}
-                        awayTeam={away}
-                        onClick={() =>
-                          navigate({ to: `/matchday/${match.matchId}` })
-                        }
-                        refereeName={getRefereeName(match.matchId)}
-                        pitchName={getPitchName(match.matchId) || match.ground}
-                      />
-                    </motion.div>
-                  );
-                })
               )}
             </div>
-          </TabsContent>
+          ))}
 
-          {/* Results */}
-          <TabsContent value="results">
-            <div className="space-y-3">
-              {playedMatches.map((match, i) => {
-                const home = MOCK_TEAMS.find(
-                  (t) => t.teamId === match.homeTeamId,
-                )!;
-                const away = MOCK_TEAMS.find(
-                  (t) => t.teamId === match.awayTeamId,
-                )!;
-                return (
-                  <motion.div
-                    key={match.matchId}
-                    initial={{ y: 10, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ delay: i * 0.06 }}
-                    data-ocid={`matches.item.${i + 1}`}
-                  >
-                    <MatchCard
-                      match={match}
-                      homeTeam={home}
-                      awayTeam={away}
-                      onClick={() =>
-                        navigate({ to: `/matchday/${match.matchId}` })
-                      }
-                      refereeName={getRefereeName(match.matchId)}
-                      pitchName={getPitchName(match.matchId) || match.ground}
-                    />
-                  </motion.div>
-                );
-              })}
-            </div>
-          </TabsContent>
-        </Tabs>
-      )}
+        {filteredMatches.length === 0 && (
+          <div
+            className="rounded-xl border border-dashed border-border p-8 text-center"
+            data-ocid="matches.empty_state"
+          >
+            <Calendar className="w-10 h-10 mx-auto mb-3 opacity-30" />
+            <p className="text-sm font-bold text-foreground mb-1">
+              No matches scheduled
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Check other dates for upcoming fixtures
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

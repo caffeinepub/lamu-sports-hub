@@ -1,12 +1,5 @@
 import type { T__1 as BackendTeam } from "@/backend";
 import { AreaBadge } from "@/components/shared/TeamBadge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useActor } from "@/hooks/useActor";
 import {
@@ -15,7 +8,7 @@ import {
   getTeamOverrides,
 } from "@/utils/localStore";
 import { useNavigate } from "@tanstack/react-router";
-import { Users } from "lucide-react";
+import { Star, Users } from "lucide-react";
 import { motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -35,20 +28,15 @@ function getTeamColor(index: number) {
   return TEAM_COLORS[index % TEAM_COLORS.length];
 }
 
-function TeamSkeleton() {
+function TeamRowSkeleton() {
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
-      <div className="h-1 w-full bg-muted/40" />
-      <div className="p-3 flex flex-col items-center gap-2">
-        <Skeleton className="w-14 h-14 rounded-full" />
-        <Skeleton className="h-4 w-24 rounded" />
-        <Skeleton className="h-3 w-16 rounded-full" />
-        <div className="flex gap-1 w-full">
-          <Skeleton className="flex-1 h-6 rounded" />
-          <Skeleton className="flex-1 h-6 rounded" />
-          <Skeleton className="flex-1 h-6 rounded" />
-        </div>
+    <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50">
+      <Skeleton className="w-10 h-10 rounded-full flex-shrink-0" />
+      <div className="flex-1 space-y-1.5">
+        <Skeleton className="h-4 w-32 rounded" />
+        <Skeleton className="h-3 w-24 rounded" />
       </div>
+      <Skeleton className="w-5 h-5 rounded" />
     </div>
   );
 }
@@ -56,16 +44,20 @@ function TeamSkeleton() {
 export function TeamsPage() {
   const navigate = useNavigate();
   const { actor, isFetching: actorFetching } = useActor();
-  const [areaFilter, setAreaFilter] = useState<string>("all");
   const [teams, setTeams] = useState<BackendTeam[]>([]);
   const [loadingData, setLoadingData] = useState(false);
+  const [favoriteTeams, setFavoriteTeams] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("favoriteTeams") ?? "[]");
+    } catch {
+      return [];
+    }
+  });
 
   useEffect(() => {
     document.title = "Teams – Lamu Sports Hub | Lamu Football Clubs";
   }, []);
 
-  // Load real teams from backend, then merge with locally stored teams,
-  // apply name/area overrides and filter out soft-deleted teams.
   const loadTeams = useCallback(() => {
     if (actorFetching) return;
     const localTeams = getLocalTeams();
@@ -79,7 +71,6 @@ export function TeamsPage() {
     };
 
     if (!actor) {
-      // No backend — show local teams only (excluding deleted)
       const merged = localTeams
         .filter((lt) => !deletedIds.has(lt.teamId))
         .map(
@@ -107,11 +98,9 @@ export function TeamsPage() {
       .getAllTeams()
       .then((rawTeams) => {
         const backendIds = new Set(rawTeams.map((t) => t.teamId));
-        // Apply overrides + filter deleted for backend teams
         const processedBackend = rawTeams
           .filter((t) => !deletedIds.has(t.teamId))
           .map(applyOverride);
-        // Append local-only teams that aren't in backend and aren't deleted
         const extraLocal = localTeams
           .filter(
             (lt) => !backendIds.has(lt.teamId) && !deletedIds.has(lt.teamId),
@@ -135,7 +124,6 @@ export function TeamsPage() {
         setTeams([...processedBackend, ...extraLocal]);
       })
       .catch(() => {
-        // Fall back to local teams on error
         const merged = localTeams
           .filter((lt) => !deletedIds.has(lt.teamId))
           .map(
@@ -167,7 +155,6 @@ export function TeamsPage() {
     loadTeams();
   }, [loadTeams, actorFetching]);
 
-  // Re-load teams when window regains focus, localStorage changes, or admin dispatches update
   useEffect(() => {
     const reload = () => loadTeams();
     window.addEventListener("focus", reload);
@@ -180,27 +167,32 @@ export function TeamsPage() {
     };
   }, [loadTeams]);
 
+  const toggleFavorite = (teamId: string) => {
+    setFavoriteTeams((prev) => {
+      const next = prev.includes(teamId)
+        ? prev.filter((id) => id !== teamId)
+        : [...prev, teamId];
+      localStorage.setItem("favoriteTeams", JSON.stringify(next));
+      return next;
+    });
+  };
+
   const isLoading = actorFetching || loadingData;
 
-  const areas = useMemo(
-    () => [
-      "all",
-      ...Array.from(new Set(teams.map((t) => t.area).filter(Boolean))),
-    ],
-    [teams],
-  );
-
-  const filtered = useMemo(
-    () =>
-      areaFilter === "all" ? teams : teams.filter((t) => t.area === areaFilter),
-    [teams, areaFilter],
-  );
+  // Sort: favorited teams float to top
+  const sortedTeams = useMemo(() => {
+    return [...teams].sort((a, b) => {
+      const aFav = favoriteTeams.includes(a.teamId) ? 0 : 1;
+      const bFav = favoriteTeams.includes(b.teamId) ? 0 : 1;
+      return aFav - bFav;
+    });
+  }, [teams, favoriteTeams]);
 
   return (
     <div data-ocid="teams.page" className="min-h-screen pb-24 pt-14">
       {/* Header */}
       <div
-        className="px-4 py-5"
+        className="px-4 py-4"
         style={{
           background:
             "linear-gradient(135deg, oklch(0.1 0.04 255) 0%, oklch(0.14 0.06 252) 100%)",
@@ -210,10 +202,18 @@ export function TeamsPage() {
           initial={{ y: -10, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
         >
-          <h1 className="font-display font-black text-2xl text-foreground flex items-center gap-2">
-            <Users className="w-6 h-6 text-primary" />
-            Teams
-          </h1>
+          <div className="flex items-center gap-3">
+            {/* TEAMS tab indicator */}
+            <div className="flex items-center">
+              <h1 className="font-display font-black text-xl text-foreground">
+                TEAMS
+              </h1>
+              <div
+                className="h-0.5 w-full mt-0.5"
+                style={{ background: "oklch(0.55 0.22 24)" }}
+              />
+            </div>
+          </div>
           <p className="text-xs text-muted-foreground mt-0.5">
             {isLoading
               ? "Loading teams…"
@@ -222,43 +222,30 @@ export function TeamsPage() {
         </motion.div>
       </div>
 
-      {/* Filter */}
+      {/* Section header */}
       <div className="px-4 pt-4 pb-2 flex items-center gap-2">
-        <Select value={areaFilter} onValueChange={setAreaFilter}>
-          <SelectTrigger
-            className="w-40 h-8 text-xs"
-            data-ocid="teams.area.select"
-          >
-            <SelectValue placeholder="Filter by area" />
-          </SelectTrigger>
-          <SelectContent>
-            {areas.map((a) => (
-              <SelectItem key={a} value={a} className="text-xs">
-                {a === "all" ? "All Areas" : a}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <span className="text-base">⚽</span>
+        <h2 className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+          FOOTBALL
+        </h2>
+        <div className="flex-1 h-px bg-border/50" />
         {!isLoading && (
-          <span className="text-xs text-muted-foreground">
-            {filtered.length} team{filtered.length !== 1 ? "s" : ""}
+          <span className="text-[10px] text-muted-foreground">
+            {sortedTeams.length} teams
           </span>
         )}
       </div>
 
-      {/* Grid */}
-      <div
-        className="px-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3"
-        data-ocid="teams.list"
-      >
+      {/* Vertical list */}
+      <div className="divide-y divide-border/30" data-ocid="teams.list">
         {isLoading ? (
-          Array.from({ length: 6 }).map((_, i) => (
+          Array.from({ length: 8 }).map((_, i) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: skeleton placeholders
-            <TeamSkeleton key={`team-skeleton-${i}`} />
+            <TeamRowSkeleton key={`team-skeleton-${i}`} />
           ))
-        ) : filtered.length === 0 ? (
+        ) : sortedTeams.length === 0 ? (
           <div
-            className="col-span-2 sm:col-span-3 md:col-span-4 flex flex-col items-center justify-center py-16 text-center"
+            className="flex flex-col items-center justify-center py-16 text-center px-6"
             data-ocid="teams.empty_state"
           >
             <div
@@ -275,66 +262,68 @@ export function TeamsPage() {
             </p>
           </div>
         ) : (
-          filtered.map((team, i) => {
+          sortedTeams.map((team, i) => {
             const color = getTeamColor(i);
-            const wins = Number(team.wins ?? 0);
-            const draws = Number(team.draws ?? 0);
-            const losses = Number(team.losses ?? 0);
-            const pts = wins * 3 + draws;
+            const isFav = favoriteTeams.includes(team.teamId);
 
             return (
               <motion.div
                 key={team.teamId}
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: Math.min(i * 0.05, 0.4) }}
+                initial={{ x: -10, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                transition={{ delay: Math.min(i * 0.03, 0.3) }}
                 data-ocid={`teams.item.${i + 1}`}
               >
-                <button
-                  type="button"
-                  className="w-full rounded-xl border border-border bg-card hover:border-primary/50 hover:shadow-card transition-all text-left overflow-hidden"
-                  onClick={() => navigate({ to: `/teams/${team.teamId}` })}
-                >
-                  {/* Color top bar */}
-                  <div className="h-1" style={{ backgroundColor: color }} />
-
-                  <div className="p-3 flex flex-col items-center gap-2">
-                    {/* Team initial badge */}
+                <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors">
+                  {/* Team crest / initial circle */}
+                  <button
+                    type="button"
+                    className="flex items-center gap-3 flex-1 min-w-0"
+                    onClick={() => navigate({ to: `/teams/${team.teamId}` })}
+                  >
                     <div
-                      className="w-14 h-14 rounded-full flex items-center justify-center text-2xl font-black text-white border-2"
+                      className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-black text-white flex-shrink-0 border-2"
                       style={{
                         backgroundColor: `${color}33`,
                         borderColor: `${color}66`,
                         color,
                       }}
                     >
-                      {team.name.charAt(0).toUpperCase()}
+                      {team.name.slice(0, 2).toUpperCase()}
                     </div>
-                    <div className="text-center">
-                      <div className="font-bold text-xs text-foreground leading-tight">
+                    {/* Team info */}
+                    <div className="flex-1 min-w-0 text-left">
+                      <p className="font-bold text-sm text-foreground truncate">
                         {team.name}
-                      </div>
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        FKF Lamu County League
+                      </p>
                       {team.area && (
-                        <AreaBadge area={team.area} className="mt-1.5" />
+                        <AreaBadge area={team.area} className="mt-0.5" />
                       )}
                     </div>
-                    {/* Record */}
-                    <div className="flex gap-1 text-xs w-full justify-center">
-                      <span className="flex-1 text-center py-1 rounded bg-green-500/10 text-green-400 font-bold">
-                        {wins}W
-                      </span>
-                      <span className="flex-1 text-center py-1 rounded bg-yellow-500/10 text-yellow-400 font-bold">
-                        {draws}D
-                      </span>
-                      <span className="flex-1 text-center py-1 rounded bg-red-500/10 text-red-400 font-bold">
-                        {losses}L
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-muted-foreground">
-                      {pts} pts
-                    </div>
-                  </div>
-                </button>
+                  </button>
+
+                  {/* Star favorite */}
+                  <button
+                    type="button"
+                    data-ocid={`teams.star.toggle.${i + 1}`}
+                    onClick={() => toggleFavorite(team.teamId)}
+                    className="p-2 rounded-full hover:bg-muted/40 transition-colors flex-shrink-0"
+                    aria-label={
+                      isFav ? "Remove from favorites" : "Add to favorites"
+                    }
+                  >
+                    <Star
+                      className={`w-5 h-5 transition-colors ${
+                        isFav
+                          ? "fill-yellow-400 text-yellow-400"
+                          : "text-muted-foreground"
+                      }`}
+                    />
+                  </button>
+                </div>
               </motion.div>
             );
           })

@@ -35,6 +35,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
   LSH_USER_SETTINGS_KEY,
   type UserSettings,
@@ -83,6 +84,7 @@ import {
   User,
   UserX,
   Users,
+  Volume2,
   Zap,
 } from "lucide-react";
 import { motion } from "motion/react";
@@ -192,6 +194,46 @@ export function SettingsPage() {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [installPrompt, setInstallPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
+  const [notifSound, setNotifSound] = useState<boolean>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("notifSound") ?? "true");
+    } catch {
+      return true;
+    }
+  });
+  const [matchStartAlert, setMatchStartAlert] = useState<boolean>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("matchStartAlert") ?? "true");
+    } catch {
+      return true;
+    }
+  });
+  const [goalAlertSound, setGoalAlertSound] = useState<boolean>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("goalAlertSound") ?? "true");
+    } catch {
+      return true;
+    }
+  });
+  const [newsAlertSound, setNewsAlertSound] = useState<boolean>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("newsAlertSound") ?? "false");
+    } catch {
+      return false;
+    }
+  });
+  const [appRating, setAppRating] = useState<number>(() => {
+    try {
+      return Number.parseInt(localStorage.getItem("appRating") ?? "0", 10);
+    } catch {
+      return 0;
+    }
+  });
+  const [ratingComment, setRatingComment] = useState("");
+  const [ratingSubmitted, setRatingSubmitted] = useState<boolean>(() => {
+    return !!localStorage.getItem("appRating");
+  });
+  const [hoverRating, setHoverRating] = useState(0);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -294,6 +336,40 @@ export function SettingsPage() {
 
   const goTo = (path: string) => {
     navigate({ to: path as "/" });
+  };
+
+  const playBeep = () => {
+    try {
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 440;
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.2);
+    } catch {
+      /* audio not available */
+    }
+  };
+
+  const handleNotifToggle = (
+    key: string,
+    setter: (v: boolean) => void,
+    value: boolean,
+  ) => {
+    setter(value);
+    localStorage.setItem(key, JSON.stringify(value));
+    if (value && notifSound) playBeep();
+  };
+
+  const handleRatingSubmit = () => {
+    if (appRating === 0) return;
+    localStorage.setItem("appRating", String(appRating));
+    setRatingSubmitted(true);
+    toast.success("Thanks for your rating! ⭐");
   };
 
   const sectionClass = "rounded-2xl border border-border bg-card p-4 space-y-1";
@@ -667,6 +743,86 @@ export function SettingsPage() {
                 <Switch
                   checked={settings[item.key]}
                   onCheckedChange={(v) => update(item.key, v)}
+                  data-ocid={item.ocid}
+                />
+              </div>
+            ))}
+          </div>
+        </motion.section>
+
+        {/* ── Notification Sounds ───────────────────────────────────────────── */}
+        <motion.section
+          initial={{ y: 12, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.21 }}
+          className={`${sectionClass} !space-y-0`}
+          data-ocid="settings.notif_sounds.section"
+        >
+          <SectionHeader
+            icon={Volume2}
+            label="Notification Sounds"
+            accent="oklch(0.35 0.18 200 / 0.4)"
+          />
+          <p className="text-[11px] text-muted-foreground pb-2">
+            Configure sound alerts for match events.
+          </p>
+          <div className="space-y-0 divide-y divide-border/40">
+            {[
+              {
+                label: "Sound Alerts",
+                desc: "Enable all notification sounds",
+                key: "notifSound",
+                value: notifSound,
+                setter: (v: boolean) =>
+                  handleNotifToggle("notifSound", setNotifSound, v),
+                ocid: "settings.sound_alerts.switch",
+              },
+              {
+                label: "Match Start Alert",
+                desc: "Play sound when a match kicks off",
+                key: "matchStartAlert",
+                value: matchStartAlert,
+                setter: (v: boolean) =>
+                  handleNotifToggle("matchStartAlert", setMatchStartAlert, v),
+                ocid: "settings.match_start.switch",
+              },
+              {
+                label: "Goal Alerts",
+                desc: "Sound when a goal is scored",
+                key: "goalAlertSound",
+                value: goalAlertSound,
+                setter: (v: boolean) =>
+                  handleNotifToggle("goalAlertSound", setGoalAlertSound, v),
+                ocid: "settings.goal_sound.switch",
+              },
+              {
+                label: "News Alerts",
+                desc: "Sound for new official announcements",
+                key: "newsAlertSound",
+                value: newsAlertSound,
+                setter: (v: boolean) =>
+                  handleNotifToggle("newsAlertSound", setNewsAlertSound, v),
+                ocid: "settings.news_sound.switch",
+              },
+            ].map((item) => (
+              <div
+                key={item.key}
+                className="flex items-start justify-between gap-3 py-3 first:pt-0"
+              >
+                <div className="flex items-start gap-2.5 flex-1">
+                  <Volume2 className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      {item.label}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      {item.desc}
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  checked={item.value}
+                  onCheckedChange={item.setter}
                   data-ocid={item.ocid}
                 />
               </div>
@@ -1325,6 +1481,138 @@ export function SettingsPage() {
               <ChevronRight className="w-4 h-4 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
             </button>
           </div>
+        </motion.section>
+
+        {/* ── Rate the App ──────────────────────────────────────────────────── */}
+        <motion.section
+          initial={{ y: 12, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.48 }}
+          className={sectionClass}
+          data-ocid="settings.rate_app.section"
+        >
+          <SectionHeader
+            icon={Star}
+            label="Rate Lamu Sports Hub"
+            accent="oklch(0.55 0.22 85 / 0.4)"
+          />
+          {ratingSubmitted ? (
+            <div className="text-center py-4">
+              <div className="flex items-center justify-center gap-1 mb-2">
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <Star
+                    key={s}
+                    className={`w-6 h-6 ${s <= appRating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"}`}
+                  />
+                ))}
+              </div>
+              <p className="text-sm font-bold text-foreground">
+                You rated us {appRating}/5 stars. Thank you!
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3 pt-1">
+              <div className="flex items-center justify-center gap-2">
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    data-ocid={`settings.rating_star.${s}`}
+                    onMouseEnter={() => setHoverRating(s)}
+                    onMouseLeave={() => setHoverRating(0)}
+                    onClick={() => setAppRating(s)}
+                    className="p-1 rounded transition-transform hover:scale-110"
+                    aria-label={`Rate ${s} star${s > 1 ? "s" : ""}`}
+                  >
+                    <Star
+                      className={`w-8 h-8 transition-colors ${s <= (hoverRating || appRating) ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"}`}
+                    />
+                  </button>
+                ))}
+              </div>
+              <Textarea
+                placeholder="Tell us what you think... (optional)"
+                value={ratingComment}
+                onChange={(e) => setRatingComment(e.target.value)}
+                className="text-xs resize-none h-20"
+                data-ocid="settings.rating_comment.textarea"
+              />
+              <Button
+                onClick={handleRatingSubmit}
+                disabled={appRating === 0}
+                className="w-full text-sm font-bold"
+                data-ocid="settings.rating_submit.button"
+                style={{
+                  background:
+                    appRating > 0
+                      ? "linear-gradient(135deg, oklch(0.6 0.22 85) 0%, oklch(0.55 0.22 70) 100%)"
+                      : undefined,
+                }}
+              >
+                Submit Rating
+              </Button>
+            </div>
+          )}
+        </motion.section>
+
+        {/* ── FAQ ────────────────────────────────────────────────────────────── */}
+        <motion.section
+          initial={{ y: 12, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.5 }}
+          className={sectionClass}
+          data-ocid="settings.faq.section"
+        >
+          <SectionHeader
+            icon={HelpCircle}
+            label="Frequently Asked Questions"
+            accent="oklch(0.3 0.14 180 / 0.4)"
+          />
+          <Accordion type="single" collapsible className="w-full">
+            {[
+              {
+                q: "How do I add my team?",
+                a: "Enter Official mode using code LSH2026, then go to Admin Panel → Teams → Add Team.",
+              },
+              {
+                q: "Who can edit match scores?",
+                a: "Only officials in Official mode can edit live scores and match events.",
+              },
+              {
+                q: "How do I follow a match?",
+                a: "On the Matches page, tap the star icon next to any match to follow it.",
+              },
+              {
+                q: "Is the app free?",
+                a: "Yes, Lamu Sports Hub is completely free to use for all fans, players, and officials.",
+              },
+              {
+                q: "How do I install the app on my phone?",
+                a: "Open the app in Chrome on Android, tap the menu (3 dots), and select 'Add to Home Screen'.",
+              },
+              {
+                q: "Why is my data not saving?",
+                a: "Data is only permanently saved in Official mode. Simple PIN login saves data locally on your device only.",
+              },
+              {
+                q: "How do I contact support?",
+                a: "WhatsApp us at 0705434375 or visit the About page for all contact options.",
+              },
+            ].map((item, idx) => (
+              <AccordionItem
+                key={item.q}
+                value={`faq-main-${idx}`}
+                data-ocid={`settings.faq.panel.${idx + 1}`}
+              >
+                <AccordionTrigger className="text-sm font-semibold text-foreground text-left hover:no-underline py-3">
+                  {item.q}
+                </AccordionTrigger>
+                <AccordionContent className="text-[13px] text-muted-foreground leading-relaxed pb-3">
+                  {item.a}
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
         </motion.section>
 
         {/* ── App Version Footer ────────────────────────────────────────────── */}

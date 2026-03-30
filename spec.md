@@ -1,40 +1,70 @@
 # Lamu Sports Hub
 
 ## Current State
-Full-stack app with Motoko backend and React/TypeScript frontend. Features: Dashboard, Standings (auto-calculated from matches via standingsUtils.ts), Teams, Players, Matches, News, Leaderboard, Notifications, Admin Panel, Profile, Settings, and more. Local storage fallback for PIN-session users. Known persistent issues: demo notifications, team name edits not always reflecting, news not showing on dashboard.
+The app has Matches page (list of scheduled FKF fixtures), PlayerProfilePage (basic stats), TeamsPage (grid of teams), SettingsPage (8 sections), MatchdayPage (live score editing). The app has EPL, Stats, Notifications, and Explore tabs.
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Matchday countdown alert banner** on Dashboard: when a match is scheduled within 2 hours, show a dismissible banner with team names, time, and venue
-- **Fan comments/reactions** on news posts: heart, fire, clap emoji reactions (stored locally per newsId); comment thread stored locally
-- **Season summary stats** widget on Dashboard: top scorer, most assists, most clean sheets, total goals this season — computed from real match/player data
-- **Global search** component: search bar in TopNav (mobile: search icon, opens overlay); searches teams, players, and news, shows results live
-- **Bulk player import** in Admin Panel > Players tab: paste or upload CSV with columns name,position,jerseyNumber,teamId; preview and confirm before importing
-- **Match result entry with event tracking** in Admin Panel > Matches: when marking a match as played, a modal to enter goal scorers (player + minute), assists (player + minute), and yellow/red cards — saves locally and auto-increments player stats
+1. **Live Match Interface** on MatchesPage:
+   - Top date tabs: Yesterday | Today | Tomorrow (filters matches)
+   - "Following" section at top (user-curated tracked matches, starred by user)
+   - Leagues section below, matches grouped by league/competition
+   - Live indicators: green pill/circle showing current match minute (e.g. "82'" in green) for in-progress matches
+   - Match cards show: home team, score, away team, status (upcoming/live/finished)
+
+2. **Player Ratings & Lineups tab** on MatchdayPage:
+   - Formation visual (e.g. 4-2-3-1) showing players on a pitch graphic
+   - Each player icon has a color-coded rating badge (1–10 scale: red=low, yellow=mid, green=high)
+   - Event icons next to player name/icon: ⚽ goal, 🟨 yellow card, 🔴 red card, ↕ substitution (red out, green in)
+
+3. **Momentum Graph & Match Facts tab** on MatchdayPage:
+   - Dual-colored area chart over 90 minutes (home team color above center, away team below)
+   - Goal icons placed at the minute they occurred on the chart
+   - Match stats section: Possession %, xG (Expected Goals), Total Shots
+
+4. **Shot Map tab** on MatchdayPage:
+   - Top-down pitch view with dot markers for shot attempts
+   - Red dots = home team shots, grey = away team shots
+   - Clicking a shot shows: xG value, xGOT value, foot used, situation (regular/set piece/counter), result (goal/saved/off target)
+
+5. **Enhanced Player Profile** (PlayerProfilePage):
+   - Biometrics row: height, age, nationality, preferred foot
+   - Market value display (e.g. €190M)
+   - Season stats card: matches, goals, assists, average rating
+   - Radar/spider chart for player traits (Pace, Shooting, Passing, Dribbling, Defending, Physical)
+
+6. **Notification Settings** in SettingsPage:
+   - Toggle for notification sound on/off
+   - Toggle per notification type (match start, goal alerts, news, admin messages)
+
+7. **Rate the App** section in SettingsPage:
+   - Star rating UI (1–5 stars)
+   - Optional comment box
+   - Submit button (saves rating locally, shows thank you message)
+
+8. **FAQ Section** in SettingsPage or About page:
+   - Accordion list of common questions and answers about the app
+
+9. **Teams Tab Redesign** (TeamsPage):
+   - Tab header highlighted in red when active (already styled but ensure red active state)
+   - Teams displayed in a vertical list (not grid)
+   - Each team row has: logo, team name, star icon to toggle favorite
+   - Favorite teams shown at top with filled star
+   - Teams grouped under "FOOTBALL" category header
 
 ### Modify
-- **Notifications page**: hard remove any remaining demo data; `runMigrations()` must run on app startup in main.tsx
-- **Team name edits**: after edit, also force-refresh all consumers via a custom event (`lsh:teams-updated`) that TeamsPage, PlayersPage, SettingsPage, and DashboardPage listen to
-- **Dashboard news section**: fallback to `getLocalNews()` if backend returns empty; also add auto-poll every 30s
-- **Leaderboard page**: compute top scorers from real local players (combining backend + local players) sorted by goals desc
-- **Standings page**: already uses computeBackendStandings; add form guide column (last 5 results dots)
-- **Player profile page**: add a Comments/Reactions tab below stats
-- **Team profile page**: add recent match results section (last 5 matches with scores)
+- MatchdayPage: Add tabs for Lineups, Momentum, Shot Map (alongside existing Live tab)
+- PlayerProfilePage: Add biometrics, market value, radar chart
+- SettingsPage: Add notification sound toggles, rate app section, FAQ section
+- TeamsPage: Switch from grid to vertical list with star favorites
 
 ### Remove
-- Any remaining hardcoded demo player/team/referee names in initial render
+- Nothing removed
 
 ## Implementation Plan
-1. Add `runMigrations()` call in main.tsx before React render
-2. Add `lsh:teams-updated` custom event dispatching in Admin Panel team CRUD; add window event listeners in TeamsPage, PlayersPage, SettingsPage
-3. Fix Dashboard news: merge backend news + local news, sort by timestamp, auto-poll
-4. Add matchday alert banner component to DashboardPage (check matches within 2h window)
-5. Add global search overlay to TopNav with results from backend teams/players and local news
-6. Add emoji reactions + comments to NewsPage individual post view (local storage)
-7. Add season summary stats widget to DashboardPage
-8. Add bulk import dialog to AdminPanelPage Players tab
-9. Add match event entry modal to AdminPanelPage Matches tab
-10. Update LeaderboardPage to compute from real data
-11. Add form guide dots to StandingsPage
-12. Add recent matches to TeamProfilePage
+1. Update MatchesPage: add date tab filter (Yesterday/Today/Tomorrow), Following section (uses localStorage for starred matches), live minute indicator badges, group matches by league
+2. Update MatchdayPage: add Lineups tab (formation visual + player rating cards), Momentum tab (recharts AreaChart), Shot Map tab (SVG pitch with dot markers)
+3. Update PlayerProfilePage: add biometrics row, market value badge, radar chart (recharts RadarChart)
+4. Update TeamsPage: vertical list layout, star toggle favorite per team, red active tab styling, "FOOTBALL" category header
+5. Update SettingsPage: notification sound toggle section, rate-the-app star UI, FAQ accordion

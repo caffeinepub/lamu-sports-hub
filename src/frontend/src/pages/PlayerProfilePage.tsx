@@ -25,6 +25,13 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
+import {
+  PolarAngleAxis,
+  PolarGrid,
+  Radar,
+  RadarChart,
+  ResponsiveContainer,
+} from "recharts";
 
 function getPositionLabel(pos: string): string {
   const map: Record<string, string> = {
@@ -46,6 +53,66 @@ function getPositionColor(pos: string): string {
   return map[pos.toLowerCase()] || "oklch(0.62 0 0)";
 }
 
+type RadarAttribute = { attribute: string; value: number };
+
+function getRadarAttributes(
+  pos: string,
+  goals: number,
+  assists: number,
+): RadarAttribute[] {
+  const posLower = pos.toLowerCase();
+  if (posLower === "forward") {
+    return [
+      { attribute: "Pace", value: 85 + Math.min(goals * 2, 12) },
+      { attribute: "Shooting", value: 80 + Math.min(goals * 3, 18) },
+      { attribute: "Passing", value: 65 + Math.min(assists * 3, 15) },
+      { attribute: "Dribbling", value: 78 },
+      { attribute: "Defending", value: 35 },
+      { attribute: "Physical", value: 72 },
+    ];
+  }
+  if (posLower === "midfielder") {
+    return [
+      { attribute: "Pace", value: 75 },
+      { attribute: "Shooting", value: 65 + Math.min(goals * 2, 15) },
+      { attribute: "Passing", value: 82 + Math.min(assists * 2, 14) },
+      { attribute: "Dribbling", value: 76 },
+      { attribute: "Defending", value: 62 },
+      { attribute: "Physical", value: 70 },
+    ];
+  }
+  if (posLower === "defender") {
+    return [
+      { attribute: "Pace", value: 72 },
+      { attribute: "Shooting", value: 45 },
+      { attribute: "Passing", value: 68 },
+      { attribute: "Dribbling", value: 55 },
+      { attribute: "Defending", value: 85 },
+      { attribute: "Physical", value: 80 },
+    ];
+  }
+  // Goalkeeper
+  return [
+    { attribute: "Pace", value: 55 },
+    { attribute: "Shooting", value: 30 },
+    { attribute: "Passing", value: 65 },
+    { attribute: "Dribbling", value: 40 },
+    { attribute: "Defending", value: 82 },
+    { attribute: "Physical", value: 75 },
+  ];
+}
+
+function estimateMarketValue(
+  goals: number,
+  assists: number,
+  apps: number,
+): string {
+  const base = 500_000;
+  const value = base + goals * 300_000 + assists * 150_000 + apps * 20_000;
+  if (value >= 1_000_000) return `€${(value / 1_000_000).toFixed(1)}M`;
+  return `€${Math.round(value / 1_000)}K`;
+}
+
 export function PlayerProfilePage() {
   const { playerId } = useParams({ strict: false }) as { playerId: string };
   const navigate = useNavigate();
@@ -59,7 +126,6 @@ export function PlayerProfilePage() {
   useEffect(() => {
     if (!playerId) return;
     if (!actor) {
-      // Fallback to local store when actor is unavailable
       const localPlayers = getLocalPlayers();
       const found = localPlayers.find((p) => p.playerId === playerId);
       if (found) {
@@ -81,7 +147,6 @@ export function PlayerProfilePage() {
           isApproved: false,
           isActive: true,
         } as unknown as BackendPlayer);
-        // Try to resolve team from local store
         if (found.teamId) {
           const localTeams = getLocalTeams();
           const t = localTeams.find((lt) => lt.teamId === found.teamId);
@@ -155,6 +220,13 @@ export function PlayerProfilePage() {
   const redCards = Number(player.redCards);
   const jerseyNumber = Number(player.jerseyNumber);
 
+  const radarData = getRadarAttributes(posStr, goals, assists);
+  const marketValue = estimateMarketValue(goals, assists, matchesPlayed);
+  const avgRating =
+    matchesPlayed > 0
+      ? Math.min(10, 6.5 + goals * 0.1 + assists * 0.07).toFixed(2)
+      : "—";
+
   return (
     <div data-ocid="player_profile.page" className="min-h-screen pb-24 pt-14">
       {/* Back */}
@@ -179,20 +251,17 @@ export function PlayerProfilePage() {
           background: `linear-gradient(135deg, ${teamColor}55 0%, oklch(0.12 0.04 252) 70%)`,
         }}
       >
-        {/* Big jersey number watermark */}
         <div
           className="absolute -bottom-4 -right-2 text-[120px] font-black font-stats opacity-8 leading-none pointer-events-none select-none"
           style={{ color: teamColor }}
         >
           {jerseyNumber}
         </div>
-
         <motion.div
           initial={{ y: 10, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
         >
           <div className="flex items-start gap-4">
-            {/* Avatar */}
             {playerPhoto ? (
               <div
                 className="w-20 h-20 rounded-full border-4 flex-shrink-0 overflow-hidden"
@@ -216,7 +285,6 @@ export function PlayerProfilePage() {
                 {jerseyNumber}
               </div>
             )}
-
             <div className="flex-1 pt-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <span
@@ -259,97 +327,193 @@ export function PlayerProfilePage() {
         </motion.div>
       </div>
 
-      {/* Stats */}
-      <div className="px-4 mt-5" data-ocid="player_profile.stats.card">
-        <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide mb-3">
-          Season Stats
-        </h2>
-
-        {/* Main stats grid */}
-        <div className="grid grid-cols-2 gap-3 mb-3">
-          <StatCard
-            icon={<Target className="w-5 h-5" />}
-            value={goals}
-            label="Goals"
-            color="#22C55E"
-          />
-          <StatCard
-            icon={<Zap className="w-5 h-5" />}
-            value={assists}
-            label="Assists"
-            color="#3B82F6"
-          />
+      <div className="px-4 mt-5 space-y-4">
+        {/* Biometrics row */}
+        <div
+          className="flex flex-wrap gap-2"
+          data-ocid="player_profile.biometrics.card"
+        >
+          {[
+            { label: "Height", value: "—" },
+            { label: "Age", value: "—" },
+            { label: "Country", value: "🇰🇪 Kenya" },
+            { label: "Foot", value: "Right" },
+          ].map((b) => (
+            <div
+              key={b.label}
+              className="rounded-full px-3 py-1 border border-border bg-card text-xs flex items-center gap-1"
+            >
+              <span className="text-muted-foreground">{b.label}:</span>
+              <span className="font-bold text-foreground">{b.value}</span>
+            </div>
+          ))}
         </div>
 
-        <div className="grid grid-cols-3 gap-3 mb-3">
-          <StatCard
-            icon={<Trophy className="w-4 h-4" />}
-            value={matchesPlayed}
-            label="Apps"
-            color="oklch(0.82 0.08 82)"
-            small
-          />
-          <StatCard
-            icon={<AlertTriangle className="w-4 h-4" />}
-            value={yellowCards}
-            label="Yellow"
-            color="#EAB308"
-            small
-          />
-          <StatCard
-            icon={<Square className="w-4 h-4" />}
-            value={redCards}
-            label="Red"
-            color="#EF4444"
-            small
-          />
+        {/* Market Value */}
+        <div
+          className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 flex items-center gap-3"
+          data-ocid="player_profile.market_value.card"
+        >
+          <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+            <Star className="w-5 h-5 text-amber-400" />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-amber-400/70">
+              Market Value
+            </p>
+            <p className="font-black font-stats text-2xl text-amber-400">
+              {marketValue}
+            </p>
+          </div>
         </div>
 
-        {/* Per game stats */}
-        <div className="rounded-xl border border-border bg-card p-4 mt-3">
-          <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-3">
-            Per Game
-          </h3>
-          <div className="space-y-3">
+        {/* Season Stats card */}
+        <div
+          className="rounded-xl border border-border bg-card p-4"
+          data-ocid="player_profile.season_stats.card"
+        >
+          <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide mb-3">
+            2024/2025 Season Stats
+          </h2>
+          <div className="grid grid-cols-4 gap-2">
             {[
-              {
-                label: "Goals per game",
-                value:
-                  matchesPlayed > 0
-                    ? (goals / matchesPlayed).toFixed(2)
-                    : "0.00",
-                color: "#22C55E",
-              },
-              {
-                label: "Assists per game",
-                value:
-                  matchesPlayed > 0
-                    ? (assists / matchesPlayed).toFixed(2)
-                    : "0.00",
-                color: "#3B82F6",
-              },
-              {
-                label: "Goal contributions",
-                value: goals + assists,
-                color: "oklch(0.82 0.08 82)",
-              },
-            ].map((row) => (
+              { label: "Matches", value: matchesPlayed },
+              { label: "Goals", value: goals },
+              { label: "Assists", value: assists },
+              { label: "Rating", value: avgRating },
+            ].map((s) => (
               <div
-                key={row.label}
-                className="flex items-center justify-between"
+                key={s.label}
+                className="text-center rounded-lg bg-muted/30 py-2"
               >
-                <span className="text-sm text-muted-foreground">
-                  {row.label}
-                </span>
-                <span
-                  className="font-black font-stats text-lg"
-                  style={{ color: row.color }}
-                >
-                  {row.value}
-                </span>
+                <p className="font-black font-stats text-xl text-foreground">
+                  {s.value}
+                </p>
+                <p className="text-[9px] text-muted-foreground mt-0.5">
+                  {s.label}
+                </p>
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Stats grid */}
+        <div data-ocid="player_profile.stats.card">
+          <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide mb-3">
+            Season Stats
+          </h2>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <StatCard
+              icon={<Target className="w-5 h-5" />}
+              value={goals}
+              label="Goals"
+              color="#22C55E"
+            />
+            <StatCard
+              icon={<Zap className="w-5 h-5" />}
+              value={assists}
+              label="Assists"
+              color="#3B82F6"
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-3 mb-3">
+            <StatCard
+              icon={<Trophy className="w-4 h-4" />}
+              value={matchesPlayed}
+              label="Apps"
+              color="oklch(0.82 0.08 82)"
+              small
+            />
+            <StatCard
+              icon={<AlertTriangle className="w-4 h-4" />}
+              value={yellowCards}
+              label="Yellow"
+              color="#EAB308"
+              small
+            />
+            <StatCard
+              icon={<Square className="w-4 h-4" />}
+              value={redCards}
+              label="Red"
+              color="#EF4444"
+              small
+            />
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 mt-3">
+            <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-3">
+              Per Game
+            </h3>
+            <div className="space-y-3">
+              {[
+                {
+                  label: "Goals per game",
+                  value:
+                    matchesPlayed > 0
+                      ? (goals / matchesPlayed).toFixed(2)
+                      : "0.00",
+                  color: "#22C55E",
+                },
+                {
+                  label: "Assists per game",
+                  value:
+                    matchesPlayed > 0
+                      ? (assists / matchesPlayed).toFixed(2)
+                      : "0.00",
+                  color: "#3B82F6",
+                },
+                {
+                  label: "Goal contributions",
+                  value: goals + assists,
+                  color: "oklch(0.82 0.08 82)",
+                },
+              ].map((row) => (
+                <div
+                  key={row.label}
+                  className="flex items-center justify-between"
+                >
+                  <span className="text-sm text-muted-foreground">
+                    {row.label}
+                  </span>
+                  <span
+                    className="font-black font-stats text-lg"
+                    style={{ color: row.color }}
+                  >
+                    {row.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Radar Chart */}
+        <div
+          className="rounded-xl border border-border bg-card p-4"
+          data-ocid="player_profile.radar.card"
+        >
+          <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide mb-1">
+            Player Traits
+          </h2>
+          <p className="text-[10px] text-muted-foreground mb-3">
+            Skill comparison vs. position peers
+          </p>
+          <ResponsiveContainer width="100%" height={220}>
+            <RadarChart data={radarData}>
+              <PolarGrid stroke="rgba(255,255,255,0.1)" />
+              <PolarAngleAxis
+                dataKey="attribute"
+                tick={{ fontSize: 10, fill: "#888" }}
+              />
+              <Radar
+                name={player.name}
+                dataKey="value"
+                stroke={teamColor}
+                fill={teamColor}
+                fillOpacity={0.4}
+                strokeWidth={2}
+              />
+            </RadarChart>
+          </ResponsiveContainer>
         </div>
       </div>
     </div>
