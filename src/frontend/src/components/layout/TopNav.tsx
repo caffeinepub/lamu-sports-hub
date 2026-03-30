@@ -65,7 +65,7 @@ export function TopNav({ onNotificationsClick }: TopNavProps) {
       .then((allNotifs) => {
         if (cancelled) return;
         const unread = allNotifs.filter((n) => !n.isRead).length;
-        setUnreadCount((prev) => Math.max(prev, unread));
+        setUnreadCount(unread);
       })
       .catch(() => {});
     return () => {

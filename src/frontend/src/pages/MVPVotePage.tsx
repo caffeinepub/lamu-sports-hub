@@ -10,6 +10,7 @@ import { useActor } from "@/hooks/useActor";
 import {
   getLocalPlayers,
   getLocalStore,
+  getLocalTeams,
   setLocalStore,
 } from "@/utils/localStore";
 import { useNavigate, useParams } from "@tanstack/react-router";
@@ -111,6 +112,70 @@ export function MVPVotePage() {
       .catch((err) => console.error("Failed to load MVP vote data:", err))
       .finally(() => setLoading(false));
   }, [actor, matchId, userId]);
+
+  // Fallback for PIN users without actor
+  useEffect(() => {
+    if (actor || !loading) return;
+    const localPlayers = getLocalPlayers();
+    const localTeams = getLocalTeams();
+    if (localPlayers.length === 0 && localTeams.length === 0) {
+      setLoading(false);
+      return;
+    }
+    const fakeHomeTeamId = localTeams[0]?.teamId ?? "home";
+    const fakeAwayTeamId = localTeams[1]?.teamId ?? "away";
+    const allLocalPlayers = localPlayers.map((lp) => ({
+      playerId: lp.playerId,
+      userId: "",
+      name: lp.name,
+      nickname: lp.nickname,
+      teamId: lp.teamId,
+      position: lp.position as any,
+      jerseyNumber: BigInt(lp.jerseyNumber),
+      goals: BigInt(0),
+      assists: BigInt(0),
+      yellowCards: BigInt(0),
+      redCards: BigInt(0),
+      matchesPlayed: BigInt(0),
+      isVerified: false,
+      bio: "",
+      photoUrl: "",
+    })) as unknown as BackendPlayer[];
+    const fakeMatch: BackendMatch = {
+      matchId: "local-mvp",
+      homeTeam: fakeHomeTeamId,
+      awayTeam: fakeAwayTeamId,
+      date: BigInt(Date.now()) * 1_000_000n,
+      homeScore: BigInt(0),
+      awayScore: BigInt(0),
+      status: { played: null } as any,
+      commentary: [],
+      kickoffTime: "16:30",
+    };
+    setMatch(fakeMatch);
+    setTeams(
+      localTeams.map((lt) => ({
+        teamId: lt.teamId,
+        name: lt.name,
+        area: lt.area,
+        coachId: "",
+        logoUrl: "",
+        wins: BigInt(0),
+        losses: BigInt(0),
+        draws: BigInt(0),
+        goalsFor: BigInt(0),
+        goalsAgainst: BigInt(0),
+        isApproved: false,
+      })),
+    );
+    setHomePlayers(
+      allLocalPlayers.filter((p) => p.teamId === fakeHomeTeamId).slice(0, 5),
+    );
+    setAwayPlayers(
+      allLocalPlayers.filter((p) => p.teamId === fakeAwayTeamId).slice(0, 5),
+    );
+    setLoading(false);
+  }, [actor, loading]);
 
   const allPlayers = [...homePlayers, ...awayPlayers];
 

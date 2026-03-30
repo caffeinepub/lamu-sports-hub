@@ -539,8 +539,53 @@ function AdminPanelInner() {
         setBackendTeamsForMatchLoading(true);
         actor
           .getAllTeams()
-          .then((teams) => setBackendTeamsForMatch(teams))
-          .catch((err) => console.error("Failed to load teams:", err))
+          .then((backendTeamsResult) => {
+            const localTeamsAll = getLocalTeams();
+            const overridesAll = getTeamOverrides();
+            const deletedAll = new Set(getDeletedTeamIds());
+            const localMapped = localTeamsAll
+              .filter(
+                (lt) =>
+                  !deletedAll.has(lt.teamId) &&
+                  !backendTeamsResult.some((bt) => bt.teamId === lt.teamId),
+              )
+              .map((lt) => ({
+                teamId: lt.teamId,
+                name: overridesAll[lt.teamId]?.name ?? lt.name,
+                area: lt.area,
+                coachId: "",
+                logoUrl: "",
+                wins: BigInt(0),
+                losses: BigInt(0),
+                draws: BigInt(0),
+                goalsFor: BigInt(0),
+                goalsAgainst: BigInt(0),
+                isApproved: false,
+              }));
+            setBackendTeamsForMatch([...backendTeamsResult, ...localMapped]);
+          })
+          .catch(() => {
+            const localTeamsAll = getLocalTeams();
+            const overridesAll = getTeamOverrides();
+            const deletedAll = new Set(getDeletedTeamIds());
+            setBackendTeamsForMatch(
+              localTeamsAll
+                .filter((lt) => !deletedAll.has(lt.teamId))
+                .map((lt) => ({
+                  teamId: lt.teamId,
+                  name: overridesAll[lt.teamId]?.name ?? lt.name,
+                  area: lt.area,
+                  coachId: "",
+                  logoUrl: "",
+                  wins: BigInt(0),
+                  losses: BigInt(0),
+                  draws: BigInt(0),
+                  goalsFor: BigInt(0),
+                  goalsAgainst: BigInt(0),
+                  isApproved: false,
+                })),
+            );
+          })
           .finally(() => setBackendTeamsForMatchLoading(false));
       }
     }
@@ -741,7 +786,37 @@ function AdminPanelInner() {
       setEditingMatch(null);
       await fetchMatches();
     } catch {
-      toast.error("Failed to update match. Please try again.");
+      // Local fallback for PIN users who cannot reach the backend
+      const localScores = getLocalStore<
+        Record<string, { homeScore: number; awayScore: number; status: string }>
+      >("lsh_local_match_scores", {});
+      if (editingMatch) {
+        localScores[editingMatch.matchId] = {
+          homeScore: Number.parseInt(editHomeScore) || 0,
+          awayScore: Number.parseInt(editAwayScore) || 0,
+          status: editMatchStatus,
+        };
+        setLocalStore("lsh_local_match_scores", localScores);
+        setBackendMatches((prev: any[]) =>
+          prev.map((m: any) =>
+            m.matchId === editingMatch.matchId
+              ? {
+                  ...m,
+                  homeScore: BigInt(Number.parseInt(editHomeScore) || 0),
+                  awayScore: BigInt(Number.parseInt(editAwayScore) || 0),
+                }
+              : m,
+          ),
+        );
+        setMatchReferee(editingMatch.matchId, editMatchRefereeId || null);
+        setMatchRefereesState(getMatchReferees());
+        setMatchPitch(editingMatch.matchId, editMatchPitchId || null);
+        setMatchPitchesState(getMatchPitches());
+        setEditingMatch(null);
+        toast.success("Match result saved locally!");
+        setLoading(false);
+        return;
+      }
     } finally {
       setLoading(false);
     }

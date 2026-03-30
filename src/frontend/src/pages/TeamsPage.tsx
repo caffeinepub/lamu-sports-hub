@@ -3,9 +3,14 @@ import { AreaBadge } from "@/components/shared/TeamBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useActor } from "@/hooks/useActor";
 import {
+  addLocalTeam,
+  approveTeamRegistration,
+  deleteTeamRegistration,
   getDeletedTeamIds,
   getLocalTeams,
   getTeamOverrides,
+  getTeamRegistrations,
+  isOfficialSessionVerified,
 } from "@/utils/localStore";
 import { useNavigate } from "@tanstack/react-router";
 import { Star, Users } from "lucide-react";
@@ -46,6 +51,10 @@ export function TeamsPage() {
   const { actor, isFetching: actorFetching } = useActor();
   const [teams, setTeams] = useState<BackendTeam[]>([]);
   const [loadingData, setLoadingData] = useState(false);
+  const isOfficial = isOfficialSessionVerified();
+  const [pendingRegs, setPendingRegs] = useState(() =>
+    getTeamRegistrations().filter((r) => !r.approved),
+  );
   const [favoriteTeams, setFavoriteTeams] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem("favoriteTeams") ?? "[]");
@@ -167,6 +176,28 @@ export function TeamsPage() {
     };
   }, [loadTeams]);
 
+  const handleApproveReg = (
+    reg: ReturnType<typeof getTeamRegistrations>[0],
+  ) => {
+    const newTeam = {
+      teamId: `reg-team-${reg.id}`,
+      name: reg.teamName,
+      area: reg.area,
+      coachName: reg.coachName,
+      createdAt: Date.now(),
+    };
+    addLocalTeam(newTeam);
+    approveTeamRegistration(reg.id);
+    setPendingRegs((prev) => prev.filter((r) => r.id !== reg.id));
+    loadTeams();
+    window.dispatchEvent(new Event("lsh:teams-updated"));
+  };
+
+  const handleRejectReg = (id: string) => {
+    deleteTeamRegistration(id);
+    setPendingRegs((prev) => prev.filter((r) => r.id !== id));
+  };
+
   const toggleFavorite = (teamId: string) => {
     setFavoriteTeams((prev) => {
       const next = prev.includes(teamId)
@@ -221,6 +252,69 @@ export function TeamsPage() {
           </p>
         </motion.div>
       </div>
+
+      {/* Pending Team Registrations — Officials only */}
+      {isOfficial && pendingRegs.length > 0 && (
+        <div
+          className="mx-4 mt-4 rounded-xl border border-yellow-500/30 bg-yellow-500/5 overflow-hidden"
+          data-ocid="teams.pending_regs.panel"
+        >
+          <div className="px-4 py-2.5 border-b border-yellow-500/20 flex items-center gap-2">
+            <span className="text-xs font-black uppercase tracking-wider text-yellow-400">
+              Pending Registrations
+            </span>
+            <span className="ml-auto inline-flex items-center justify-center w-5 h-5 rounded-full bg-yellow-500/20 text-yellow-400 text-[10px] font-bold">
+              {pendingRegs.length}
+            </span>
+          </div>
+          <div className="divide-y divide-border/30">
+            {pendingRegs.map((reg, i) => (
+              <div
+                key={reg.id}
+                className="px-4 py-3 flex items-start gap-3"
+                data-ocid={`teams.pending_reg.item.${i + 1}`}
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-sm text-foreground">
+                    {reg.teamName}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Coach: {reg.coachName}
+                  </p>
+                  {reg.area && (
+                    <p className="text-xs text-muted-foreground">{reg.area}</p>
+                  )}
+                  {reg.contactPhone && (
+                    <p className="text-xs text-muted-foreground">
+                      {reg.contactPhone}
+                    </p>
+                  )}
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                  <button
+                    type="button"
+                    data-ocid={`teams.pending_reg.approve_button.${i + 1}`}
+                    onClick={() => handleApproveReg(reg)}
+                    className="w-8 h-8 rounded-full bg-green-500/20 hover:bg-green-500/40 flex items-center justify-center transition-colors"
+                    aria-label="Approve registration"
+                  >
+                    <span className="text-green-400 text-sm font-bold">✓</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-ocid={`teams.pending_reg.delete_button.${i + 1}`}
+                    onClick={() => handleRejectReg(reg.id)}
+                    className="w-8 h-8 rounded-full bg-red-500/20 hover:bg-red-500/40 flex items-center justify-center transition-colors"
+                    aria-label="Reject registration"
+                  >
+                    <span className="text-red-400 text-sm font-bold">✗</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Section header */}
       <div className="px-4 pt-4 pb-2 flex items-center gap-2">

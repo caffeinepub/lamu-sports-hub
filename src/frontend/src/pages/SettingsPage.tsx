@@ -267,7 +267,11 @@ export function SettingsPage() {
     key: K,
     value: UserSettings[K],
   ) => {
-    setSettings((prev) => ({ ...prev, [key]: value }));
+    setSettings((prev) => {
+      const next = { ...prev, [key]: value };
+      setLocalStore(LSH_USER_SETTINGS_KEY, next);
+      return next;
+    });
   };
 
   const toggleInterest = (interest: string) => {
@@ -276,7 +280,9 @@ export function SettingsPage() {
       const next = current.includes(interest)
         ? current.filter((i) => i !== interest)
         : [...current, interest];
-      return { ...prev, interests: next };
+      const newSettings = { ...prev, interests: next };
+      setLocalStore(LSH_USER_SETTINGS_KEY, newSettings);
+      return newSettings;
     });
   };
 
