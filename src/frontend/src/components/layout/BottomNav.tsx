@@ -131,6 +131,12 @@ const MORE_ITEMS = [
     ocid: "nav.leaderboard.link",
   },
   {
+    path: "/mvp-vote/latest",
+    label: "MVP Vote",
+    icon: <Trophy className="w-5 h-5" />,
+    ocid: "nav.mvp_vote.link",
+  },
+  {
     path: "/referees",
     label: "Referees",
     icon: <Shield className="w-5 h-5" />,

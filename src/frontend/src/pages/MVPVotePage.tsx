@@ -60,9 +60,15 @@ export function MVPVotePage() {
       actor.getAllPlayers(),
     ])
       .then(([matches, t, allPlayers]) => {
-        const target = matchId
-          ? (matches.find((m) => m.matchId === matchId) ?? matches[0])
-          : matches[0];
+        const targetMatchId = matchId === "latest" ? undefined : matchId;
+        const target = targetMatchId
+          ? (matches.find((m) => m.matchId === targetMatchId) ?? matches[0])
+          : (matches.find((m) => {
+              const s = m.status;
+              if (typeof s === "object" && s !== null)
+                return Object.keys(s)[0] === "played";
+              return String(s) === "played";
+            }) ?? matches[0]);
         setMatch(target ?? null);
         setTeams(t);
         if (target) {

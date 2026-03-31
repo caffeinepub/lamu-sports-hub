@@ -244,14 +244,38 @@ export function DashboardPage({
     ? teams.find((t) => t.teamId === matchOfWeek.awayTeam)
     : null;
 
-  // System status banner
-  const systemStatus = getLocalStore<SystemStatus>(LSH_SYSTEM_STATUS_KEY, {
-    isActive: false,
-    message: "",
-  });
-  const [showBanner, setShowBanner] = useState(
-    systemStatus.isActive && !!systemStatus.message,
+  // System status banner — reactive to admin saves
+  const [systemStatus, setSystemStatus] = useState<SystemStatus>(() =>
+    getLocalStore<SystemStatus>(LSH_SYSTEM_STATUS_KEY, {
+      isActive: false,
+      message: "",
+    }),
   );
+  useEffect(() => {
+    const refresh = () =>
+      setSystemStatus(
+        getLocalStore<SystemStatus>(LSH_SYSTEM_STATUS_KEY, {
+          isActive: false,
+          message: "",
+        }),
+      );
+    window.addEventListener("storage", refresh);
+    window.addEventListener("lsh:banner-updated", refresh);
+    return () => {
+      window.removeEventListener("storage", refresh);
+      window.removeEventListener("lsh:banner-updated", refresh);
+    };
+  }, []);
+  const [showBanner, setShowBanner] = useState(() => {
+    const s = getLocalStore<SystemStatus>(LSH_SYSTEM_STATUS_KEY, {
+      isActive: false,
+      message: "",
+    });
+    return s.isActive && !!s.message;
+  });
+  useEffect(() => {
+    if (systemStatus.isActive && systemStatus.message) setShowBanner(true);
+  }, [systemStatus]);
 
   // Matchday alert — show when a match is starting within 2 hours
   const [matchdayAlertDismissed, setMatchdayAlertDismissed] = useState(

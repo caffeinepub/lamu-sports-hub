@@ -1,7 +1,9 @@
 import type { T__5 as BackendMatch } from "@/backend";
+import { Status } from "@/backend";
 import { useActor } from "@/hooks/useActor";
 import {
   getDeletedTeamIds,
+  getLocalStore,
   getLocalTeams,
   getMatchPitches,
   getMatchReferees,
@@ -98,7 +100,44 @@ export function MatchesPage() {
     setLoading(true);
     actor
       .getAllMatches()
-      .then((m) => setMatches(m))
+      .then((m) => {
+        const localScores = getLocalStore<
+          Record<
+            string,
+            { homeScore: number; awayScore: number; status: string }
+          >
+        >("lsh_local_match_scores", {});
+        const now = Date.now();
+        const merged = m.map((match) => {
+          const ov = localScores[match.matchId];
+          const kickoffMs = Number(match.date) / 1_000_000;
+          const statusStr = getStatusStr(match.status);
+          const autoPlayed =
+            (statusStr === "scheduled" || statusStr === "live") &&
+            now - kickoffMs > 95 * 60 * 1000;
+          if (ov) {
+            return {
+              ...match,
+              homeScore: BigInt(ov.homeScore),
+              awayScore: BigInt(ov.awayScore),
+              status:
+                ov.status === "played" || autoPlayed
+                  ? Status.played
+                  : ov.status === "live"
+                    ? Status.live
+                    : match.status,
+            };
+          }
+          if (autoPlayed) {
+            return {
+              ...match,
+              status: Status.played,
+            };
+          }
+          return match;
+        });
+        setMatches(merged);
+      })
       .catch(() => setMatches([]))
       .finally(() => setLoading(false));
   }, [actor, actorFetching]);

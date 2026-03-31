@@ -16,6 +16,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Star, Users } from "lucide-react";
 import { motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 // Deterministic color palette for teams
 const TEAM_COLORS = [
@@ -190,7 +191,11 @@ export function TeamsPage() {
     approveTeamRegistration(reg.id);
     setPendingRegs((prev) => prev.filter((r) => r.id !== reg.id));
     loadTeams();
+    window.dispatchEvent(
+      new StorageEvent("storage", { key: "lsh_local_teams" }),
+    );
     window.dispatchEvent(new Event("lsh:teams-updated"));
+    toast.success(`${reg.teamName} approved and added to teams!`);
   };
 
   const handleRejectReg = (id: string) => {

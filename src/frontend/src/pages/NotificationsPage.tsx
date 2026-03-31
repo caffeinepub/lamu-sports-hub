@@ -75,12 +75,14 @@ export function NotificationsPage({ onClose }: NotificationsPageProps) {
     const allIds = notifications.map((n) => n.notificationId);
     markAllNotifsRead(allIds);
     reload();
+    window.dispatchEvent(new Event("lsh:notifications-updated"));
     toast.success("All notifications marked as read");
   };
 
   const markOneRead = (notifId: string) => {
     markNotifRead(notifId);
     reload();
+    window.dispatchEvent(new Event("lsh:notifications-updated"));
   };
 
   const handleDelete = (notifId: string) => {

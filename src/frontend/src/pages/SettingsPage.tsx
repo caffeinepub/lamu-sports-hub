@@ -272,6 +272,7 @@ export function SettingsPage() {
       setLocalStore(LSH_USER_SETTINGS_KEY, next);
       return next;
     });
+    toast.success("Preference saved", { duration: 1200 });
   };
 
   const toggleInterest = (interest: string) => {
@@ -284,6 +285,7 @@ export function SettingsPage() {
       setLocalStore(LSH_USER_SETTINGS_KEY, newSettings);
       return newSettings;
     });
+    toast.success("Interest updated", { duration: 1200 });
   };
 
   const handleSave = async () => {
@@ -1038,6 +1040,21 @@ export function SettingsPage() {
               <Download className="w-3.5 h-3.5 text-muted-foreground" />
               {installPrompt ? "Install App" : "Open in Browser"}
             </button>
+          </div>
+          <div className="mt-3 p-3 rounded-xl bg-muted/30 border border-border/40">
+            <p className="text-xs font-bold text-foreground mb-1">
+              📱 Add to Home Screen (Android)
+            </p>
+            <ol className="text-[11px] text-muted-foreground space-y-0.5 list-decimal list-inside">
+              <li>Tap "Install App" above, OR open Chrome menu (⋮)</li>
+              <li>Tap "Add to Home screen"</li>
+              <li>
+                Tap "Add" to confirm — the app icon appears on your home screen
+              </li>
+              <li>
+                Open from your home screen for a full-screen app experience
+              </li>
+            </ol>
           </div>
         </motion.section>
 

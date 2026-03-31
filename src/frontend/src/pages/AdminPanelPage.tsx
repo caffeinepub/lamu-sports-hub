@@ -504,25 +504,90 @@ function AdminPanelInner() {
   const [newsPhotos, setNewsPhotosState] =
     useState<Record<string, string>>(getNewsPhotos);
 
-  // Load real backend teams whenever the matches tab is active or create-match dialog opens
+  // Load teams for match creation — always pre-populate from local teams, then merge backend
   useEffect(() => {
-    if (!actor) return;
     if (activeTab !== "matches" && !showCreateMatch) return;
-    setBackendTeamsForMatchLoading(true);
-    actor
-      .getAllTeams()
-      .then((teams) => setBackendTeamsForMatch(teams))
-      .catch((err) => console.error("Failed to load teams for match:", err))
-      .finally(() => setBackendTeamsForMatchLoading(false));
+    const overrides = getTeamOverrides();
+    const deleted = new Set(getDeletedTeamIds());
+    const localMapped = getLocalTeams()
+      .filter((lt) => !deleted.has(lt.teamId))
+      .map((lt) => ({
+        teamId: lt.teamId,
+        name: overrides[lt.teamId]?.name ?? lt.name,
+        area: lt.area,
+        coachId: "",
+        logoUrl: "",
+        wins: BigInt(0),
+        losses: BigInt(0),
+        draws: BigInt(0),
+        goalsFor: BigInt(0),
+        goalsAgainst: BigInt(0),
+        isApproved: false,
+      }));
+    setBackendTeamsForMatch(localMapped);
+    if (actor) {
+      setBackendTeamsForMatchLoading(true);
+      actor
+        .getAllTeams()
+        .then((backendResult) => {
+          const ids = new Set(backendResult.map((t) => t.teamId));
+          const extra = localMapped.filter((lt) => !ids.has(lt.teamId));
+          setBackendTeamsForMatch([...backendResult, ...extra]);
+        })
+        .catch((err) => console.error("Failed to load teams for match:", err))
+        .finally(() => setBackendTeamsForMatchLoading(false));
+    }
   }, [actor, activeTab, showCreateMatch]);
 
   // Load real backend matches when matches tab is active
   const fetchMatches = async () => {
-    if (!actor) return;
+    if (!actor) {
+      // No actor — apply local score overrides to existing state
+      const localScores = getLocalStore<
+        Record<string, { homeScore: number; awayScore: number; status: string }>
+      >("lsh_local_match_scores", {});
+      setBackendMatches((prev: any[]) =>
+        prev.map((m: any) => {
+          const ov = localScores[m.matchId];
+          if (!ov) return m;
+          return {
+            ...m,
+            homeScore: BigInt(ov.homeScore),
+            awayScore: BigInt(ov.awayScore),
+            status:
+              ov.status === "played"
+                ? { played: null }
+                : ov.status === "live"
+                  ? { live: null }
+                  : { scheduled: null },
+          };
+        }),
+      );
+      return;
+    }
     setBackendMatchesLoading(true);
     try {
       const m = await actor.getAllMatches();
-      setBackendMatches(m);
+      // Merge local score overrides
+      const localScores = getLocalStore<
+        Record<string, { homeScore: number; awayScore: number; status: string }>
+      >("lsh_local_match_scores", {});
+      const merged = m.map((match: any) => {
+        const ov = localScores[match.matchId];
+        if (!ov) return match;
+        return {
+          ...match,
+          homeScore: BigInt(ov.homeScore),
+          awayScore: BigInt(ov.awayScore),
+          status:
+            ov.status === "played"
+              ? { played: null }
+              : ov.status === "live"
+                ? { live: null }
+                : { scheduled: null },
+        };
+      });
+      setBackendMatches(merged);
     } catch (err) {
       console.error("Failed to load matches:", err);
     } finally {
@@ -765,13 +830,57 @@ function AdminPanelInner() {
   const handleSaveMatch = async () => {
     if (!editingMatch) return;
     setLoading(true);
+
+    // Helper: save result to localStorage and update UI state
+    const saveLocally = () => {
+      const localScores = getLocalStore<
+        Record<string, { homeScore: number; awayScore: number; status: string }>
+      >("lsh_local_match_scores", {});
+      localScores[editingMatch.matchId] = {
+        homeScore: Number.parseInt(editHomeScore) || 0,
+        awayScore: Number.parseInt(editAwayScore) || 0,
+        status: editMatchStatus,
+      };
+      setLocalStore("lsh_local_match_scores", localScores);
+      setBackendMatches((prev: any[]) =>
+        prev.map((m: any) =>
+          m.matchId === editingMatch.matchId
+            ? {
+                ...m,
+                homeScore: BigInt(Number.parseInt(editHomeScore) || 0),
+                awayScore: BigInt(Number.parseInt(editAwayScore) || 0),
+                status:
+                  editMatchStatus === "played"
+                    ? { played: null }
+                    : editMatchStatus === "live"
+                      ? { live: null }
+                      : { scheduled: null },
+              }
+            : m,
+        ),
+      );
+      setMatchReferee(editingMatch.matchId, editMatchRefereeId || null);
+      setMatchRefereesState(getMatchReferees());
+      setMatchPitch(editingMatch.matchId, editMatchPitchId || null);
+      setMatchPitchesState(getMatchPitches());
+    };
+
+    // If no actor (PIN user), save locally immediately
+    if (!actor) {
+      saveLocally();
+      setEditingMatch(null);
+      toast.success("Match result saved!");
+      setLoading(false);
+      return;
+    }
+
     try {
       const statusMap: Record<string, Status> = {
         scheduled: Status.scheduled,
         live: Status.live,
         played: Status.played,
       };
-      await actor?.updateMatchScore(
+      await actor.updateMatchScore(
         editingMatch.matchId,
         BigInt(Number.parseInt(editHomeScore) || 0),
         BigInt(Number.parseInt(editAwayScore) || 0),
@@ -786,37 +895,10 @@ function AdminPanelInner() {
       setEditingMatch(null);
       await fetchMatches();
     } catch {
-      // Local fallback for PIN users who cannot reach the backend
-      const localScores = getLocalStore<
-        Record<string, { homeScore: number; awayScore: number; status: string }>
-      >("lsh_local_match_scores", {});
-      if (editingMatch) {
-        localScores[editingMatch.matchId] = {
-          homeScore: Number.parseInt(editHomeScore) || 0,
-          awayScore: Number.parseInt(editAwayScore) || 0,
-          status: editMatchStatus,
-        };
-        setLocalStore("lsh_local_match_scores", localScores);
-        setBackendMatches((prev: any[]) =>
-          prev.map((m: any) =>
-            m.matchId === editingMatch.matchId
-              ? {
-                  ...m,
-                  homeScore: BigInt(Number.parseInt(editHomeScore) || 0),
-                  awayScore: BigInt(Number.parseInt(editAwayScore) || 0),
-                }
-              : m,
-          ),
-        );
-        setMatchReferee(editingMatch.matchId, editMatchRefereeId || null);
-        setMatchRefereesState(getMatchReferees());
-        setMatchPitch(editingMatch.matchId, editMatchPitchId || null);
-        setMatchPitchesState(getMatchPitches());
-        setEditingMatch(null);
-        toast.success("Match result saved locally!");
-        setLoading(false);
-        return;
-      }
+      // Local fallback when backend call fails
+      saveLocally();
+      setEditingMatch(null);
+      toast.success("Match result saved locally!");
     } finally {
       setLoading(false);
     }
@@ -5896,6 +5978,7 @@ function AdminSettingsTab() {
     const updated = { ...systemStatus, message: statusMessage };
     setSystemStatusState(updated);
     setLocalStore(LSH_SYSTEM_STATUS_KEY, updated);
+    window.dispatchEvent(new Event("lsh:banner-updated"));
     toast.success("System status updated!");
   };
 
@@ -6047,6 +6130,7 @@ function AdminSettingsTab() {
               const updated = { ...systemStatus, isActive: v };
               setSystemStatusState(updated);
               setLocalStore(LSH_SYSTEM_STATUS_KEY, updated);
+              window.dispatchEvent(new Event("lsh:banner-updated"));
             }}
             data-ocid="admin.system_status.switch"
           />
