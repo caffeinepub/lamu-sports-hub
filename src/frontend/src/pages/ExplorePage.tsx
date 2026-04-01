@@ -56,6 +56,8 @@ export function ExplorePage() {
     "highlights" | "tactics" | "preparation"
   >("highlights");
   const isOfficial = isOfficialSessionVerified();
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadMode, setUploadMode] = useState<"url" | "file">("url");
 
   useEffect(() => {
     function refresh() {
@@ -69,6 +71,31 @@ export function ExplorePage() {
       window.removeEventListener("focus", refresh);
     };
   }, []);
+
+  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 50 * 1024 * 1024) {
+      // 50MB limit
+      import("sonner").then(({ toast }) =>
+        toast.error("Video too large. Max 50MB."),
+      );
+      return;
+    }
+    setUploadProgress(0);
+    const reader = new FileReader();
+    reader.onprogress = (ev) => {
+      if (ev.lengthComputable)
+        setUploadProgress(Math.round((ev.loaded / ev.total) * 90));
+    };
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      setNewVideoUrl(dataUrl);
+      setUploadProgress(100);
+      setTimeout(() => setUploadProgress(null), 800);
+    };
+    reader.readAsDataURL(file);
+  }
 
   function handleAddVideo() {
     if (!newVideoTitle.trim() || !newVideoUrl.trim()) return;
@@ -195,16 +222,70 @@ export function ExplorePage() {
                 data-ocid="explore.add_video.input"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="video-url">YouTube URL or Embed Link</Label>
-              <Input
-                id="video-url"
-                placeholder="YouTube URL or embed link"
-                value={newVideoUrl}
-                onChange={(e) => setNewVideoUrl(e.target.value)}
-                data-ocid="explore.add_video.url.input"
-              />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setUploadMode("url");
+                  setNewVideoUrl("");
+                }}
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg border transition-all ${uploadMode === "url" ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border text-muted-foreground"}`}
+                data-ocid="explore.add_video.url.tab"
+              >
+                YouTube URL
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setUploadMode("file");
+                  setNewVideoUrl("");
+                }}
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg border transition-all ${uploadMode === "file" ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border text-muted-foreground"}`}
+                data-ocid="explore.add_video.file.tab"
+              >
+                Upload File
+              </button>
             </div>
+            {uploadMode === "url" ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="video-url">YouTube URL or Embed Link</Label>
+                <Input
+                  id="video-url"
+                  placeholder="YouTube URL or embed link"
+                  value={newVideoUrl}
+                  onChange={(e) => setNewVideoUrl(e.target.value)}
+                  data-ocid="explore.add_video.url.input"
+                />
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label htmlFor="video-file">Video File (max 50MB)</Label>
+                <input
+                  id="video-file"
+                  type="file"
+                  accept="video/*"
+                  onChange={handleFileUpload}
+                  className="block w-full text-xs text-muted-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 transition-all"
+                  data-ocid="explore.add_video.upload_button"
+                />
+                {uploadProgress !== null && (
+                  <div
+                    className="w-full bg-muted rounded-full h-1.5 mt-1"
+                    data-ocid="explore.upload.loading_state"
+                  >
+                    <div
+                      className="bg-primary h-1.5 rounded-full transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                )}
+                {newVideoUrl.startsWith("data:") && (
+                  <p className="text-xs text-green-400">
+                    ✓ Video ready to save
+                  </p>
+                )}
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="video-category">Category</Label>
               <Select
@@ -423,6 +504,7 @@ function VideoCard({
   ocidScope: string;
 }) {
   const isYoutubeEmbed = video.url.includes("youtube.com/embed/");
+  const isLocalFile = video.url.startsWith("data:");
 
   return (
     <motion.div
@@ -432,8 +514,17 @@ function VideoCard({
       data-ocid={`${ocidScope}.item.${index + 1}`}
       className="rounded-xl border border-border bg-card overflow-hidden"
     >
-      {/* Video Embed or gradient thumbnail */}
-      {isYoutubeEmbed ? (
+      {/* Video Embed or file player */}
+      {isLocalFile ? (
+        // biome-ignore lint/a11y/useMediaCaption: short match clip, no captions available
+        <video
+          src={video.url}
+          controls
+          className="w-full"
+          style={{ maxHeight: 300 }}
+          playsInline
+        />
+      ) : isYoutubeEmbed ? (
         <div className="relative w-full" style={{ paddingTop: "56.25%" }}>
           <iframe
             src={video.url}

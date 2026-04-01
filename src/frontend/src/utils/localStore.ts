@@ -1678,3 +1678,112 @@ export function deleteTeamRegistration(id: string): void {
     existing.filter((r) => r.id !== id),
   );
 }
+
+// ── Activity Feed ─────────────────────────────────────────────────────────────
+export type ActivityEntry = {
+  id: string;
+  type: "join_match" | "player_joined" | "news" | "match_live" | "match_result";
+  text: string;
+  icon: string; // emoji
+  userName?: string;
+  timestamp: number;
+};
+
+export const LSH_ACTIVITY_FEED_KEY = "lsh_activity_feed";
+
+export function getActivityFeed(): ActivityEntry[] {
+  return getLocalStore<ActivityEntry[]>(LSH_ACTIVITY_FEED_KEY, []);
+}
+
+export function addActivityEntry(
+  entry: Omit<ActivityEntry, "id" | "timestamp">,
+): void {
+  const feed = getActivityFeed();
+  const newEntry: ActivityEntry = {
+    ...entry,
+    id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+    timestamp: Date.now(),
+  };
+  // Keep only last 50 entries
+  const updated = [newEntry, ...feed].slice(0, 50);
+  setLocalStore(LSH_ACTIVITY_FEED_KEY, updated);
+}
+
+// ── Match Joiners ─────────────────────────────────────────────────────────────
+export type MatchJoiner = {
+  userId: string;
+  userName: string;
+  role: string;
+  joinedAt: number;
+};
+
+export const LSH_MATCH_JOINERS_KEY = "lsh_match_joiners";
+
+export function getMatchJoiners(matchId: string): MatchJoiner[] {
+  const all = getLocalStore<Record<string, MatchJoiner[]>>(
+    LSH_MATCH_JOINERS_KEY,
+    {},
+  );
+  return all[matchId] ?? [];
+}
+
+export function joinMatch(
+  matchId: string,
+  joiner: Omit<MatchJoiner, "joinedAt">,
+): void {
+  const all = getLocalStore<Record<string, MatchJoiner[]>>(
+    LSH_MATCH_JOINERS_KEY,
+    {},
+  );
+  const existing = all[matchId] ?? [];
+  if (existing.some((j) => j.userId === joiner.userId)) return;
+  all[matchId] = [...existing, { ...joiner, joinedAt: Date.now() }];
+  setLocalStore(LSH_MATCH_JOINERS_KEY, all);
+}
+
+export function leaveMatch(matchId: string, userId: string): void {
+  const all = getLocalStore<Record<string, MatchJoiner[]>>(
+    LSH_MATCH_JOINERS_KEY,
+    {},
+  );
+  all[matchId] = (all[matchId] ?? []).filter((j) => j.userId !== userId);
+  setLocalStore(LSH_MATCH_JOINERS_KEY, all);
+}
+
+export function hasJoinedMatch(matchId: string, userId: string): boolean {
+  return getMatchJoiners(matchId).some((j) => j.userId === userId);
+}
+
+// ── Player Followers ──────────────────────────────────────────────────────────
+export const LSH_PLAYER_FOLLOWERS_KEY = "playerFollowers";
+
+export function getPlayerFollowers(playerId: string): string[] {
+  const data = JSON.parse(
+    localStorage.getItem(LSH_PLAYER_FOLLOWERS_KEY) || "{}",
+  );
+  return data[playerId] || [];
+}
+
+export function getFollowerCount(playerId: string): number {
+  return getPlayerFollowers(playerId).length;
+}
+
+export function isFollowingPlayer(playerId: string, userId: string): boolean {
+  return getPlayerFollowers(playerId).includes(userId);
+}
+
+export function togglePlayerFollow(playerId: string, userId: string): boolean {
+  const data = JSON.parse(
+    localStorage.getItem(LSH_PLAYER_FOLLOWERS_KEY) || "{}",
+  );
+  const followers: string[] = data[playerId] || [];
+  const idx = followers.indexOf(userId);
+  if (idx >= 0) {
+    followers.splice(idx, 1);
+  } else {
+    followers.push(userId);
+  }
+  data[playerId] = followers;
+  localStorage.setItem(LSH_PLAYER_FOLLOWERS_KEY, JSON.stringify(data));
+  return idx < 0;
+}

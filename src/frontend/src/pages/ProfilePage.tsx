@@ -20,8 +20,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useActor } from "@/hooks/useActor";
 import { useInternetIdentity } from "@/hooks/useInternetIdentity";
 import {
+  LSH_MATCH_JOINERS_KEY,
   LSH_PROFILE_PHOTO_KEY,
   LSH_USER_SETTINGS_KEY,
+  getLocalStore,
   getProfilePhoto,
   getUserSettings,
   setLocalStore,
@@ -397,6 +399,78 @@ export function ProfilePage({
 
         <div className="px-4 mt-4 space-y-4">
           {/* Personal Details */}
+          {/* Activity Stats Row */}
+          <motion.div
+            initial={{ y: 10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.03 }}
+            data-ocid="profile.stats.card"
+          >
+            {(() => {
+              const joinersAll = getLocalStore<
+                Record<string, { userId: string }[]>
+              >(LSH_MATCH_JOINERS_KEY, {});
+              const matchesJoined = Object.values(joinersAll).filter(
+                (arr) =>
+                  simpleProfile &&
+                  arr.some((j) => j.userId === simpleProfile.id),
+              ).length;
+              return (
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  <div
+                    className="rounded-xl p-3 border border-border text-center"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, oklch(0.6 0.22 24 / 0.12) 0%, oklch(0.14 0.04 255) 100%)",
+                    }}
+                  >
+                    <div
+                      className="text-2xl font-black font-stats"
+                      style={{ color: "oklch(0.6 0.22 24)" }}
+                    >
+                      {matchesJoined}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">
+                      Matches Joined
+                    </div>
+                  </div>
+                  <div
+                    className="rounded-xl p-3 border border-border text-center"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, oklch(0.55 0.18 252 / 0.12) 0%, oklch(0.14 0.04 255) 100%)",
+                    }}
+                  >
+                    <div
+                      className="text-lg font-black capitalize px-2 py-0.5 rounded-full inline-block mt-0.5"
+                      style={{
+                        background:
+                          simpleProfile?.role === "player"
+                            ? "oklch(0.6 0.22 24 / 0.15)"
+                            : "oklch(0.55 0.18 252 / 0.15)",
+                        color:
+                          simpleProfile?.role === "player"
+                            ? "oklch(0.6 0.22 24)"
+                            : "oklch(0.65 0.18 252)",
+                        border: `1px solid ${simpleProfile?.role === "player" ? "oklch(0.6 0.22 24 / 0.3)" : "oklch(0.55 0.18 252 / 0.3)"}`,
+                        fontSize: "0.75rem",
+                      }}
+                    >
+                      {simpleProfile?.role === "player"
+                        ? "⚽ Player"
+                        : simpleProfile?.role === "coach"
+                          ? "🎯 Coach"
+                          : "👥 Fan"}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-1">
+                      Your Role
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </motion.div>
+
           <motion.div
             initial={{ y: 10, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}

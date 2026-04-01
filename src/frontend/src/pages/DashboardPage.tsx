@@ -11,6 +11,10 @@ import {
   TeamBadge,
   getTeamColor,
 } from "@/components/shared/TeamBadge";
+import {
+  ActivityFeedSection,
+  TodayMatchesSection,
+} from "@/components/shared/TodayMatchesSection";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -43,10 +47,15 @@ import {
   type SystemStatus,
   getLocalNews,
   getLocalStore,
+  getLocalTeams,
+  getMatchPitches,
   getNewsConfirmations,
   getNewsPhotos,
+  getPitches,
   getUserSettings,
+  getVideos,
 } from "@/utils/localStore";
+import { getActiveSimpleSession } from "@/utils/simpleAuth";
 import { computeBackendStandings } from "@/utils/standingsUtils";
 
 import { useNavigate } from "@tanstack/react-router";
@@ -62,6 +71,7 @@ import {
   FilePlus,
   Loader2,
   Newspaper,
+  PlayCircle,
   RefreshCw,
   Shield,
   Star,
@@ -175,6 +185,7 @@ export function DashboardPage({
   const navigate = useNavigate();
   const { actor } = useActor();
   const isAdmin = role === "admin";
+  const [currentSimpleUser] = useState(() => getActiveSimpleSession());
 
   useEffect(() => {
     document.title = "Lamu Sports Hub | Football League Tables & Teams";
@@ -204,8 +215,30 @@ export function DashboardPage({
       .finally(() => setBackendLoading(false));
   }, [actor]);
 
+  // Merge backend + local teams for standings
+  const mergedTeamsForStandings = (() => {
+    const localT = getLocalTeams();
+    const backendIds = new Set(teams.map((t) => t.teamId));
+    const extraLocal: typeof teams = localT
+      .filter((lt) => !backendIds.has(lt.teamId))
+      .map((lt) => ({
+        teamId: lt.teamId,
+        name: lt.name,
+        area: lt.area,
+        coachId: lt.coachName ?? "",
+        logoUrl: "",
+        wins: BigInt(0),
+        losses: BigInt(0),
+        draws: BigInt(0),
+        goalsFor: BigInt(0),
+        goalsAgainst: BigInt(0),
+        isApproved: false,
+      }));
+    return [...teams, ...extraLocal];
+  })();
+
   // Derive standings, live/upcoming matches, top scorer from real data
-  const standings = computeBackendStandings(teams, matches);
+  const standings = computeBackendStandings(mergedTeamsForStandings, matches);
   const liveMatches = matches.filter(
     (m) => m.status?.toString().includes("live") || String(m.status) === "live",
   );
@@ -216,6 +249,39 @@ export function DashboardPage({
         String(m.status) === "scheduled",
     )
     .slice(0, 3);
+  // Today's matches for the engagement section
+  const todayMatchCards = (() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const end = new Date(today);
+    end.setHours(23, 59, 59, 999);
+    const pitchMap = getMatchPitches();
+    const pitches = getPitches();
+    return matches
+      .filter((m) => {
+        const d = new Date(Number(m.date / 1_000_000n));
+        return d >= today && d <= end;
+      })
+      .map((m) => {
+        const pitchId = pitchMap[m.matchId];
+        const venue = pitchId
+          ? pitches.find((p) => p.pitchId === pitchId)?.name
+          : undefined;
+        const statusStr = String(m.status);
+        return {
+          matchId: m.matchId,
+          homeName:
+            teams.find((t) => t.teamId === m.homeTeam)?.name ?? m.homeTeam,
+          awayName:
+            teams.find((t) => t.teamId === m.awayTeam)?.name ?? m.awayTeam,
+          kickoffMs: Number(m.date) / 1_000_000,
+          isLive: statusStr.includes("live"),
+          isPlayed: statusStr.includes("played"),
+          venue,
+        };
+      });
+  })();
+
   const topScorer = [...players].sort(
     (a, b) => Number(b.goals) - Number(a.goals),
   )[0];
@@ -545,9 +611,9 @@ export function DashboardPage({
         </motion.div>
       )}
 
-      {/* Hero banner */}
+      {/* ── HERO SECTION ── */}
       <div
-        className="px-4 py-6"
+        className="px-4 pt-5 pb-4"
         style={{
           background:
             "linear-gradient(135deg, oklch(0.1 0.04 255) 0%, oklch(0.14 0.06 252) 60%, oklch(0.12 0.05 248) 100%)",
@@ -565,16 +631,175 @@ export function DashboardPage({
             <span style={{ color: "oklch(0.82 0.08 82)" }}>Sports Hub</span>
           </h1>
           <p
-            className="text-xs mt-1 font-medium"
+            className="text-xs mt-0.5 font-medium"
             style={{ color: "oklch(0.6 0.22 24)" }}
           >
             🏝️ Island Pride. Island Football.
           </p>
         </motion.div>
+
+        {/* Hero match card — today's match OR latest result */}
+        {(() => {
+          const today = new Date();
+          const todayStr = today.toDateString();
+          const todayMatch = matches.find((m) => {
+            const matchDate = new Date(Number(m.date) / 1_000_000);
+            return matchDate.toDateString() === todayStr;
+          });
+          const latestPlayed = [...matches]
+            .filter((m) => String(m.status).includes("played"))
+            .sort((a, b) => Number(b.date) - Number(a.date))[0];
+          const heroMatch = todayMatch ?? latestPlayed;
+          if (!heroMatch) return null;
+          const home = mergedTeamsForStandings.find(
+            (t) => t.teamId === heroMatch.homeTeam,
+          );
+          const away = mergedTeamsForStandings.find(
+            (t) => t.teamId === heroMatch.awayTeam,
+          );
+          if (!home || !away) return null;
+          const isToday = heroMatch === todayMatch;
+          const isLive = String(heroMatch.status).includes("live");
+          const isPlayed = String(heroMatch.status).includes("played");
+          const matchMs = Number(heroMatch.date) / 1_000_000;
+          const matchTime = new Date(matchMs).toLocaleTimeString("en-GB", {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+          return (
+            <motion.button
+              type="button"
+              initial={{ scale: 0.97, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.1 }}
+              className="w-full mt-4 rounded-2xl p-4 border text-left transition-all hover:brightness-110"
+              style={{
+                background: isLive
+                  ? "linear-gradient(135deg, oklch(0.4 0.18 24 / 0.3) 0%, oklch(0.18 0.05 255) 100%)"
+                  : "linear-gradient(135deg, oklch(0.22 0.07 252 / 0.6) 0%, oklch(0.16 0.04 255) 100%)",
+                borderColor: isLive
+                  ? "oklch(0.6 0.22 24 / 0.5)"
+                  : "oklch(0.35 0.08 252 / 0.4)",
+              }}
+              onClick={() => navigate({ to: `/matchday/${heroMatch.matchId}` })}
+              data-ocid="dashboard.hero_match.card"
+            >
+              <div className="flex items-center gap-2 mb-3">
+                {isLive ? (
+                  <span className="flex items-center gap-1.5 text-xs font-bold text-red-400">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                    LIVE
+                  </span>
+                ) : isToday ? (
+                  <span className="text-xs font-bold text-yellow-400">
+                    🔴 Today • {matchTime}
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    Latest Result
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black text-white flex-shrink-0"
+                      style={{ backgroundColor: getTeamColor(home.teamId) }}
+                    >
+                      {home.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <span className="font-bold text-sm text-foreground truncate">
+                      {home.name}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black text-white flex-shrink-0"
+                      style={{ backgroundColor: getTeamColor(away.teamId) }}
+                    >
+                      {away.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <span className="font-bold text-sm text-foreground truncate">
+                      {away.name}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-center flex-shrink-0 px-3">
+                  {isPlayed || isLive ? (
+                    <span className="font-black font-stats text-3xl text-foreground">
+                      {Number(heroMatch.homeScore)} —{" "}
+                      {Number(heroMatch.awayScore)}
+                    </span>
+                  ) : (
+                    <span className="font-black text-2xl text-muted-foreground">
+                      vs
+                    </span>
+                  )}
+                </div>
+              </div>
+            </motion.button>
+          );
+        })()}
       </div>
 
-      {/* Quick Links Bar */}
-      <div className="overflow-x-auto scrollbar-hide mt-3 mb-1">
+      {/* ── QUICK ACCESS CARDS ── */}
+      <div
+        className="px-4 pt-4 pb-2"
+        data-ocid="dashboard.quick_access.section"
+      >
+        <div className="grid grid-cols-4 gap-2.5">
+          {(
+            [
+              {
+                label: "Teams",
+                icon: "⚽",
+                to: "/teams",
+                color: "oklch(0.3 0.1 252 / 0.4)",
+                border: "oklch(0.45 0.12 252 / 0.4)",
+              },
+              {
+                label: "Players",
+                icon: "👤",
+                to: "/players",
+                color: "oklch(0.28 0.1 145 / 0.4)",
+                border: "oklch(0.45 0.14 145 / 0.4)",
+              },
+              {
+                label: "Fixtures",
+                icon: "📅",
+                to: "/matches",
+                color: "oklch(0.3 0.1 24 / 0.3)",
+                border: "oklch(0.45 0.12 24 / 0.4)",
+              },
+              {
+                label: "News",
+                icon: "📰",
+                to: "/news",
+                color: "oklch(0.28 0.1 55 / 0.3)",
+                border: "oklch(0.45 0.12 55 / 0.4)",
+              },
+            ] as const
+          ).map((card) => (
+            <button
+              key={card.to}
+              type="button"
+              onClick={() => navigate({ to: card.to })}
+              className="flex flex-col items-center justify-center py-3 px-1 rounded-xl border transition-all hover:scale-105 hover:brightness-110"
+              style={{ background: card.color, borderColor: card.border }}
+              data-ocid={`dashboard.quick_access.${card.label.toLowerCase()}.button`}
+            >
+              <span className="text-2xl mb-1">{card.icon}</span>
+              <span className="text-[10px] font-bold text-foreground">
+                {card.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── SECONDARY QUICK LINKS ── */}
+      <div className="overflow-x-auto scrollbar-hide mb-1">
         <div className="flex gap-2 px-4 pb-1 min-w-max">
           {[
             {
@@ -583,24 +808,19 @@ export function DashboardPage({
               to: "/standings",
             },
             {
-              label: "Matches",
-              icon: <Calendar className="w-4 h-4" />,
-              to: "/matches",
-            },
-            {
               label: "Leaderboard",
               icon: <Trophy className="w-4 h-4" />,
               to: "/leaderboard",
             },
             {
-              label: "Awards",
-              icon: <Award className="w-4 h-4" />,
-              to: "/awards",
-            },
-            {
               label: "Explore",
               icon: <Compass className="w-4 h-4" />,
               to: "/explore",
+            },
+            {
+              label: "Awards",
+              icon: <Award className="w-4 h-4" />,
+              to: "/awards",
             },
             {
               label: "Officials",
@@ -613,7 +833,7 @@ export function DashboardPage({
               type="button"
               onClick={() => navigate({ to: item.to })}
               className="flex items-center gap-1.5 px-3 py-2 rounded-full border border-border bg-card text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all whitespace-nowrap flex-shrink-0"
-              data-ocid={"dashboard.quicklink.button"}
+              data-ocid="dashboard.quicklink.button"
             >
               {item.icon}
               {item.label}
@@ -1123,6 +1343,17 @@ export function DashboardPage({
           </motion.div>
         )}
 
+        {/* Today's Matches — engagement section */}
+        {todayMatchCards.length > 0 && (
+          <TodayMatchesSection
+            todayMatches={todayMatchCards}
+            currentUser={currentSimpleUser}
+          />
+        )}
+
+        {/* Activity Feed */}
+        <ActivityFeedSection currentUser={currentSimpleUser} />
+
         {/* Latest News */}
         <motion.div
           initial={{ y: 10, opacity: 0 }}
@@ -1273,6 +1504,72 @@ export function DashboardPage({
           ) : null}
         </motion.div>
 
+        {/* ── EXPLORE VIDEOS ── */}
+        {(() => {
+          const exploreVideos = getVideos().slice(0, 3);
+          if (exploreVideos.length === 0) return null;
+          return (
+            <motion.div
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.38 }}
+              data-ocid="dashboard.explore.section"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide flex items-center gap-1.5">
+                  <Compass className="w-4 h-4 text-primary" />
+                  Explore
+                </h2>
+                <button
+                  type="button"
+                  className="text-xs text-primary font-medium flex items-center gap-1"
+                  onClick={() => navigate({ to: "/explore" })}
+                  data-ocid="dashboard.explore.link"
+                >
+                  All videos <ChevronRight className="w-3 h-3" />
+                </button>
+              </div>
+              <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
+                {exploreVideos.map((video, i) => (
+                  <button
+                    key={video.videoId}
+                    type="button"
+                    onClick={() => navigate({ to: "/explore" })}
+                    className="flex-shrink-0 w-48 rounded-xl border border-border bg-card overflow-hidden text-left hover:border-primary/40 transition-all"
+                    data-ocid={`dashboard.explore.item.${i + 1}`}
+                  >
+                    <div
+                      className="w-full h-24 flex items-center justify-center"
+                      style={{
+                        background:
+                          "linear-gradient(135deg, oklch(0.18 0.06 252) 0%, oklch(0.12 0.04 255) 100%)",
+                      }}
+                    >
+                      {video.url.startsWith("data:") ? (
+                        // biome-ignore lint/a11y/useMediaCaption: short video clip, no transcript available
+                        <video
+                          src={video.url}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <PlayCircle className="w-10 h-10 text-white/40" />
+                      )}
+                    </div>
+                    <div className="px-2.5 py-2">
+                      <p className="text-xs font-semibold text-foreground line-clamp-2 leading-tight">
+                        {video.title}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground capitalize mt-0.5">
+                        {video.category}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          );
+        })()}
+
         {/* Upcoming Matches */}
         {upcomingMatches.length > 0 && (
           <motion.div
@@ -1370,6 +1667,64 @@ export function DashboardPage({
             </div>
           </div>
         </motion.div>
+
+        {/* ── FEATURED TEAM / TEAM OF THE WEEK ── */}
+        {standings.length > 0 &&
+          (() => {
+            const top = standings[0];
+            const featuredTeam = mergedTeamsForStandings.find(
+              (t) => t.teamId === top.team.teamId,
+            );
+            if (!featuredTeam) return null;
+            return (
+              <motion.div
+                initial={{ y: 10, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.55 }}
+                data-ocid="dashboard.featured_team.card"
+              >
+                <button
+                  type="button"
+                  className="w-full rounded-xl p-4 border text-left hover:brightness-110 transition-all"
+                  style={{
+                    background: `linear-gradient(135deg, ${getTeamColor(featuredTeam.teamId)}33 0%, oklch(0.16 0.04 255) 70%)`,
+                    borderColor: `${getTeamColor(featuredTeam.teamId)}55`,
+                  }}
+                  onClick={() =>
+                    navigate({ to: `/teams/${featuredTeam.teamId}` })
+                  }
+                >
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <span className="text-yellow-400 text-sm">🔥</span>
+                    <span className="text-xs font-bold text-yellow-400 uppercase tracking-wide">
+                      Team of the Week
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-black text-white border-2"
+                      style={{
+                        backgroundColor: getTeamColor(featuredTeam.teamId),
+                        borderColor: "oklch(0.95 0.02 82 / 0.4)",
+                      }}
+                    >
+                      {featuredTeam.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-display font-black text-base text-foreground">
+                        {featuredTeam.name}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        #1 in League · {top.points} pts · {top.wins}W{" "}
+                        {top.draws}D {top.losses}L
+                      </div>
+                    </div>
+                    <Trophy className="w-5 h-5 text-yellow-400" />
+                  </div>
+                </button>
+              </motion.div>
+            );
+          })()}
       </div>
 
       {/* News detail Sheet */}

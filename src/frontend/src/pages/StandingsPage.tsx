@@ -1,7 +1,7 @@
 import type { T__5 as BackendMatch, T__1 as BackendTeam } from "@/backend";
 import { TeamBadge } from "@/components/shared/TeamBadge";
 import { useActor } from "@/hooks/useActor";
-import { getSeasonSettings } from "@/utils/localStore";
+import { getLocalTeams, getSeasonSettings } from "@/utils/localStore";
 import { computeBackendStandings } from "@/utils/standingsUtils";
 import { useNavigate } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
@@ -41,14 +41,41 @@ export function StandingsPage() {
   }, []);
 
   useEffect(() => {
-    if (!actor) return;
+    // Always seed from localStore first so all FKF teams appear
+    const localTeams = getLocalTeams();
+    const localBackendTeams: BackendTeam[] = localTeams.map((lt) => ({
+      teamId: lt.teamId,
+      name: lt.name,
+      area: lt.area,
+      coachId: lt.coachName ?? "",
+      logoUrl: "",
+      wins: BigInt(0),
+      losses: BigInt(0),
+      draws: BigInt(0),
+      goalsFor: BigInt(0),
+      goalsAgainst: BigInt(0),
+      isApproved: false,
+    }));
+
+    if (!actor) {
+      setTeams(localBackendTeams);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     Promise.all([actor.getAllTeams(), actor.getAllMatches()])
-      .then(([t, m]) => {
-        setTeams(t);
+      .then(([backendT, m]) => {
+        const backendIds = new Set(backendT.map((t) => t.teamId));
+        const extraLocal = localBackendTeams.filter(
+          (lt) => !backendIds.has(lt.teamId),
+        );
+        setTeams([...backendT, ...extraLocal]);
         setMatches(m);
       })
-      .catch((err) => console.error("Failed to load standings data:", err))
+      .catch((err) => {
+        console.error("Failed to load standings data:", err);
+        setTeams(localBackendTeams);
+      })
       .finally(() => setLoading(false));
   }, [actor]);
 

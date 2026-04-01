@@ -2,15 +2,21 @@ import type { T__5 as BackendMatch } from "@/backend";
 import { Status } from "@/backend";
 import { useActor } from "@/hooks/useActor";
 import {
+  addActivityEntry,
   getDeletedTeamIds,
   getLocalStore,
   getLocalTeams,
+  getMatchJoiners,
   getMatchPitches,
   getMatchReferees,
   getPitches,
   getReferees,
   getTeamOverrides,
+  hasJoinedMatch,
+  joinMatch,
+  leaveMatch,
 } from "@/utils/localStore";
+import { getActiveSimpleSession } from "@/utils/simpleAuth";
 import { useNavigate } from "@tanstack/react-router";
 import { Calendar, Shield, Star } from "lucide-react";
 import { motion } from "motion/react";
@@ -76,6 +82,8 @@ export function MatchesPage() {
   const [activeTab, setActiveTab] = useState<DateTab>("today");
   const [matches, setMatches] = useState<BackendMatch[]>([]);
   const [loading, setLoading] = useState(false);
+  const [currentUser] = useState(() => getActiveSimpleSession());
+  const [_joinerTick, setJoinerTick] = useState(0);
   const [followedMatches, setFollowedMatches] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem("followedMatches") ?? "[]");
@@ -321,6 +329,84 @@ export function MatchesPage() {
               {refName && <span>• Ref: {refName}</span>}
             </div>
           )}
+
+          {/* Join Match engagement button */}
+          {(() => {
+            const joiners = getMatchJoiners(matchId);
+            const userId = currentUser?.id ?? "";
+            const joined = userId ? hasJoinedMatch(matchId, userId) : false;
+            const handleJoin = (e: React.MouseEvent) => {
+              e.stopPropagation();
+              if (!currentUser) return;
+              if (joined) {
+                leaveMatch(matchId, currentUser.id);
+              } else {
+                joinMatch(matchId, {
+                  userId: currentUser.id,
+                  userName: currentUser.name,
+                  role: currentUser.role,
+                });
+                addActivityEntry({
+                  type: "join_match",
+                  text: `${currentUser.name} is playing: ${homeName} vs ${awayName}`,
+                  icon: "⚽",
+                  userName: currentUser.name,
+                });
+              }
+              setJoinerTick((t) => t + 1);
+              window.dispatchEvent(new CustomEvent("lsh:activity-updated"));
+            };
+            const shownJoiners = joiners.slice(0, 3);
+            return (
+              <div className="mt-2.5 flex items-center gap-2 pt-2.5 border-t border-border/40">
+                <button
+                  type="button"
+                  data-ocid={`matches.join_button.${index + 1}`}
+                  onClick={handleJoin}
+                  className="flex-1 py-1.5 rounded-lg text-[11px] font-black transition-all"
+                  style={{
+                    background: joined
+                      ? "oklch(0.55 0.18 145 / 0.15)"
+                      : "linear-gradient(135deg, oklch(0.6 0.22 24), oklch(0.55 0.2 30))",
+                    color: joined ? "oklch(0.65 0.18 145)" : "white",
+                    border: joined
+                      ? "1px solid oklch(0.55 0.18 145 / 0.3)"
+                      : "none",
+                  }}
+                >
+                  {!currentUser
+                    ? "Login to join"
+                    : joined
+                      ? "✓ I'm Playing"
+                      : "Join Match"}
+                </button>
+                {shownJoiners.length > 0 && (
+                  <div className="flex items-center gap-1">
+                    <div className="flex">
+                      {shownJoiners.map((j, ji) => (
+                        <div
+                          key={j.userId}
+                          className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-black text-white border border-card"
+                          style={{
+                            background: `oklch(${0.5 + ji * 0.05} 0.18 ${(ji * 80 + 24) % 360})`,
+                            marginLeft: ji > 0 ? "-4px" : undefined,
+                            zIndex: 3 - ji,
+                            position: "relative",
+                          }}
+                          title={j.userName}
+                        >
+                          {j.userName.charAt(0).toUpperCase()}
+                        </div>
+                      ))}
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">
+                      👥 {joiners.length}
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </motion.div>
     );

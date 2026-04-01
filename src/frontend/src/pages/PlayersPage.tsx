@@ -15,13 +15,21 @@ import {
   getPositionLabel,
 } from "@/data/mockData";
 import { useActor } from "@/hooks/useActor";
-import { getLocalPlayers, getLocalTeams } from "@/utils/localStore";
+import {
+  getFollowerCount,
+  getLocalPlayers,
+  getLocalTeams,
+  isFollowingPlayer,
+  togglePlayerFollow,
+} from "@/utils/localStore";
 import { useNavigate } from "@tanstack/react-router";
 import {
+  Heart,
   Search,
   ShieldCheck,
   Target,
   UserCheck,
+  UserPlus,
   Users,
   Zap,
 } from "lucide-react";
@@ -99,15 +107,30 @@ function PlayerCard({
   index,
   teamsMap,
   onClick,
+  userId,
 }: {
   player: MockPlayer;
   index: number;
   teamsMap: Map<string, ResolvedTeam>;
   onClick: () => void;
+  userId: string;
 }) {
   const team = teamsMap.get(player.teamId);
   const posColor = getPositionColor(player.position);
   const posLabel = getPositionLabel(player.position);
+  const [isFollowing, setIsFollowing] = useState(() =>
+    isFollowingPlayer(player.playerId, userId),
+  );
+  const [followerCount, setFollowerCount] = useState(() =>
+    getFollowerCount(player.playerId),
+  );
+
+  function handleFollow(e: React.MouseEvent) {
+    e.stopPropagation();
+    const nowFollowing = togglePlayerFollow(player.playerId, userId);
+    setIsFollowing(nowFollowing);
+    setFollowerCount(getFollowerCount(player.playerId));
+  }
 
   return (
     <motion.button
@@ -183,6 +206,21 @@ function PlayerCard({
           <div className="text-[10px] text-muted-foreground font-medium">
             {player.matchesPlayed} apps
           </div>
+          <button
+            type="button"
+            onClick={handleFollow}
+            className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-all ${
+              isFollowing
+                ? "bg-pink-500/20 text-pink-400 border border-pink-500/40"
+                : "bg-muted/40 text-muted-foreground border border-border hover:border-pink-400/40"
+            }`}
+            data-ocid={`players.follow.toggle.${index + 1}`}
+          >
+            <Heart
+              className={`w-2.5 h-2.5 ${isFollowing ? "fill-pink-400" : ""}`}
+            />
+            {followerCount > 0 ? followerCount : isFollowing ? "1" : "Follow"}
+          </button>
         </div>
       </div>
     </motion.button>
@@ -215,6 +253,14 @@ function PlayerSkeleton() {
 export function PlayersPage() {
   const navigate = useNavigate();
   const { actor, isFetching: actorFetching } = useActor();
+  const [userId] = useState<string>(() => {
+    let guestId = localStorage.getItem("guestId");
+    if (!guestId) {
+      guestId = Math.random().toString(36).slice(2);
+      localStorage.setItem("guestId", guestId);
+    }
+    return `guest-${guestId}`;
+  });
 
   useEffect(() => {
     document.title = "Players – Lamu Sports Hub | Lamu County Football Players";
@@ -599,6 +645,7 @@ export function PlayersPage() {
                 index={i}
                 teamsMap={teamsMap}
                 onClick={() => navigate({ to: `/players/${player.playerId}` })}
+                userId={userId}
               />
             ))}
           </AnimatePresence>
