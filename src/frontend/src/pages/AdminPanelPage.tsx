@@ -868,6 +868,7 @@ function AdminPanelInner() {
     // If no actor (PIN user), save locally immediately
     if (!actor) {
       saveLocally();
+      window.dispatchEvent(new Event("lsh:matches-updated"));
       setEditingMatch(null);
       toast.success("Match result saved!");
       setLoading(false);
@@ -891,12 +892,14 @@ function AdminPanelInner() {
       setMatchRefereesState(getMatchReferees());
       setMatchPitch(editingMatch.matchId, editMatchPitchId || null);
       setMatchPitchesState(getMatchPitches());
+      window.dispatchEvent(new Event("lsh:matches-updated"));
       toast.success("Match updated successfully!");
       setEditingMatch(null);
       await fetchMatches();
     } catch {
       // Local fallback when backend call fails
       saveLocally();
+      window.dispatchEvent(new Event("lsh:matches-updated"));
       setEditingMatch(null);
       toast.success("Match result saved locally!");
     } finally {

@@ -8,17 +8,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { useActor } from "@/hooks/useActor";
 import {
-  getFollowerCount,
   getLocalPlayers,
   getLocalTeams,
   getPlayerPhotos,
-  isFollowingPlayer,
-  togglePlayerFollow,
 } from "@/utils/localStore";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   AlertTriangle,
-  Heart,
   Loader2,
   Square,
   Star,
@@ -121,26 +117,6 @@ export function PlayerProfilePage() {
   const { playerId } = useParams({ strict: false }) as { playerId: string };
   const navigate = useNavigate();
   const { actor } = useActor();
-  const [userId] = useState<string>(() => {
-    let guestId = localStorage.getItem("guestId");
-    if (!guestId) {
-      guestId = Math.random().toString(36).slice(2);
-      localStorage.setItem("guestId", guestId);
-    }
-    return `guest-${guestId}`;
-  });
-  const [isFollowing, setIsFollowing] = useState(() =>
-    isFollowingPlayer(playerId ?? "", userId),
-  );
-  const [followerCount, setFollowerCount] = useState(() =>
-    getFollowerCount(playerId ?? ""),
-  );
-
-  function handleFollow() {
-    const nowFollowing = togglePlayerFollow(playerId ?? "", userId);
-    setIsFollowing(nowFollowing);
-    setFollowerCount(getFollowerCount(playerId ?? ""));
-  }
 
   const [player, setPlayer] = useState<BackendPlayer | null>(null);
   const [team, setTeam] = useState<BackendTeam | null>(null);
@@ -331,27 +307,6 @@ export function PlayerProfilePage() {
                   "{player.nickname}"
                 </p>
               )}
-              <div className="flex items-center gap-2 mt-2">
-                <button
-                  type="button"
-                  onClick={handleFollow}
-                  className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full transition-all ${
-                    isFollowing
-                      ? "bg-pink-500/20 text-pink-400 border border-pink-500/40"
-                      : "bg-muted/30 text-muted-foreground border border-border hover:border-pink-400/50"
-                  }`}
-                  data-ocid="player_profile.follow.toggle"
-                >
-                  <Heart
-                    className={`w-3.5 h-3.5 ${isFollowing ? "fill-pink-400" : ""}`}
-                  />
-                  {isFollowing ? "Following" : "Follow"}
-                </button>
-                <span className="text-xs text-muted-foreground">
-                  {followerCount}{" "}
-                  {followerCount === 1 ? "follower" : "followers"}
-                </span>
-              </div>
               {team && (
                 <div className="flex items-center gap-2 mt-2 flex-wrap">
                   <TeamBadge

@@ -1,4 +1,4 @@
-import type { T__5 as BackendMatch, T__1 as BackendTeam } from "@/backend";
+import type { T__1 as BackendTeam } from "@/backend";
 import { AreaBadge } from "@/components/shared/TeamBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useActor } from "@/hooks/useActor";
@@ -12,17 +12,8 @@ import {
   getTeamRegistrations,
   isOfficialSessionVerified,
 } from "@/utils/localStore";
-import { computeBackendStandings } from "@/utils/standingsUtils";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  ChevronDown,
-  ChevronRight,
-  Shield,
-  Star,
-  Target,
-  TrendingUp,
-  Users,
-} from "lucide-react";
+import { Star, Users } from "lucide-react";
 import { motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -60,9 +51,7 @@ export function TeamsPage() {
   const navigate = useNavigate();
   const { actor, isFetching: actorFetching } = useActor();
   const [teams, setTeams] = useState<BackendTeam[]>([]);
-  const [matches, setMatches] = useState<BackendMatch[]>([]);
   const [loadingData, setLoadingData] = useState(false);
-  const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
   const isOfficial = isOfficialSessionVerified();
   const [pendingRegs, setPendingRegs] = useState(() =>
     getTeamRegistrations().filter((r) => !r.approved),
@@ -115,9 +104,9 @@ export function TeamsPage() {
       return;
     }
     setLoadingData(true);
-    Promise.all([actor.getAllTeams(), actor.getAllMatches()])
-      .then(([rawTeams, rawMatches]) => {
-        setMatches(rawMatches);
+    actor
+      .getAllTeams()
+      .then((rawTeams) => {
         const backendIds = new Set(rawTeams.map((t) => t.teamId));
         const processedBackend = rawTeams
           .filter((t) => !deletedIds.has(t.teamId))
@@ -376,12 +365,6 @@ export function TeamsPage() {
             const color = getTeamColor(i);
             const isFav = favoriteTeams.includes(team.teamId);
 
-            const isExpanded = expandedTeamId === team.teamId;
-            const teamStandings = computeBackendStandings(sortedTeams, matches);
-            const standing = teamStandings.find(
-              (s) => s.team.teamId === team.teamId,
-            );
-
             return (
               <motion.div
                 key={team.teamId}
@@ -439,118 +422,7 @@ export function TeamsPage() {
                       }`}
                     />
                   </button>
-                  {/* Overview toggle */}
-                  <button
-                    type="button"
-                    data-ocid={`teams.overview.toggle.${i + 1}`}
-                    onClick={() =>
-                      setExpandedTeamId(isExpanded ? null : team.teamId)
-                    }
-                    className="p-2 rounded-full hover:bg-muted/40 transition-colors flex-shrink-0"
-                    aria-label="Toggle team overview"
-                  >
-                    <ChevronDown
-                      className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
-                    />
-                  </button>
                 </div>
-                {/* Inline Overview */}
-                {isExpanded && (
-                  <div className="px-4 pb-3 pt-1 bg-muted/10 border-t border-border/30">
-                    <div className="grid grid-cols-4 gap-2 mb-3">
-                      {[
-                        {
-                          label: "P",
-                          value: standing?.played ?? 0,
-                          color: "text-foreground",
-                        },
-                        {
-                          label: "W",
-                          value: standing?.wins ?? 0,
-                          color: "text-green-400",
-                        },
-                        {
-                          label: "D",
-                          value: standing?.draws ?? 0,
-                          color: "text-yellow-400",
-                        },
-                        {
-                          label: "L",
-                          value: standing?.losses ?? 0,
-                          color: "text-red-400",
-                        },
-                        {
-                          label: "GF",
-                          value: standing?.goalsFor ?? 0,
-                          color: "text-emerald-400",
-                        },
-                        {
-                          label: "GA",
-                          value: standing?.goalsAgainst ?? 0,
-                          color: "text-red-400",
-                        },
-                        {
-                          label: "GD",
-                          value: standing
-                            ? standing.goalDiff >= 0
-                              ? `+${standing.goalDiff}`
-                              : standing.goalDiff
-                            : 0,
-                          color:
-                            standing && standing.goalDiff > 0
-                              ? "text-emerald-400"
-                              : "text-muted-foreground",
-                        },
-                        {
-                          label: "Pts",
-                          value: standing?.points ?? 0,
-                          color: "text-primary font-black",
-                        },
-                      ].map((stat) => (
-                        <div key={stat.label} className="text-center">
-                          <div
-                            className={`font-black text-base font-stats ${stat.color}`}
-                          >
-                            {stat.value}
-                          </div>
-                          <div className="text-[10px] text-muted-foreground">
-                            {stat.label}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    {standing && standing.form.length > 0 && (
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-muted-foreground mr-1">
-                          Form:
-                        </span>
-                        {standing.form.map((r, fi) => (
-                          <span
-                            // biome-ignore lint/suspicious/noArrayIndexKey: form badges are positional
-                            key={fi}
-                            className={`w-5 h-5 rounded-sm text-[9px] font-black flex items-center justify-center ${
-                              r === "W"
-                                ? "bg-green-500/80 text-white"
-                                : r === "D"
-                                  ? "bg-yellow-500/80 text-white"
-                                  : "bg-red-500/80 text-white"
-                            }`}
-                          >
-                            {r}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => navigate({ to: `/teams/${team.teamId}` })}
-                      className="mt-2 text-xs text-primary font-semibold flex items-center gap-1"
-                      data-ocid={`teams.view_profile.button.${i + 1}`}
-                    >
-                      Full Profile <ChevronRight className="w-3 h-3" />
-                    </button>
-                  </div>
-                )}
               </motion.div>
             );
           })

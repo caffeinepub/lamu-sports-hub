@@ -1,12 +1,19 @@
 import type { T__5 as BackendMatch, T__1 as BackendTeam } from "@/backend";
 import { TeamBadge } from "@/components/shared/TeamBadge";
 import { useActor } from "@/hooks/useActor";
-import { getLocalTeams, getSeasonSettings } from "@/utils/localStore";
+import {
+  getDeletedTeamIds,
+  getLocalFixtures,
+  getLocalStore,
+  getLocalTeams,
+  getSeasonSettings,
+  getTeamOverrides,
+} from "@/utils/localStore";
 import { computeBackendStandings } from "@/utils/standingsUtils";
 import { useNavigate } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 import { motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type FormBadge = "W" | "D" | "L";
 
@@ -37,47 +44,108 @@ export function StandingsPage() {
 
   useEffect(() => {
     document.title =
-      "League Standings – Lamu Sports Hub | Lamu Football Tables";
+      "League Standings \u2013 Lamu Sports Hub | Lamu Football Tables";
   }, []);
 
-  useEffect(() => {
-    // Always seed from localStore first so all FKF teams appear
-    const localTeams = getLocalTeams();
-    const localBackendTeams: BackendTeam[] = localTeams.map((lt) => ({
-      teamId: lt.teamId,
-      name: lt.name,
-      area: lt.area,
-      coachId: lt.coachName ?? "",
-      logoUrl: "",
-      wins: BigInt(0),
-      losses: BigInt(0),
-      draws: BigInt(0),
-      goalsFor: BigInt(0),
-      goalsAgainst: BigInt(0),
-      isApproved: false,
-    }));
+  const loadFromLocal = useCallback(() => {
+    const localScores = getLocalStore<
+      Record<string, { homeScore: number; awayScore: number; status: string }>
+    >("lsh_local_match_scores", {});
+    const fixtures = getLocalFixtures();
+    const overrides = getTeamOverrides();
+    const deleted = new Set(getDeletedTeamIds());
+    const fakeMatches = fixtures.map((f) => {
+      const ov = localScores[f.matchId];
+      const statusStr = ov?.status ?? f.status;
+      return {
+        matchId: f.matchId,
+        homeTeam: f.homeTeam,
+        awayTeam: f.awayTeam,
+        date: BigInt(Math.floor(f.date)),
+        homeScore: BigInt(ov?.homeScore ?? f.homeScore),
+        awayScore: BigInt(ov?.awayScore ?? f.awayScore),
+        status:
+          statusStr === "played"
+            ? { played: null }
+            : statusStr === "live"
+              ? { live: null }
+              : { scheduled: null },
+        referee: [],
+        events: [],
+      } as unknown as BackendMatch;
+    });
+    const fakeTeams = getLocalTeams()
+      .filter((lt) => !deleted.has(lt.teamId))
+      .map(
+        (lt) =>
+          ({
+            teamId: lt.teamId,
+            name: overrides[lt.teamId]?.name ?? lt.name,
+            area: lt.area,
+            coachId: lt.coachName ?? "",
+            logoUrl: "",
+            wins: BigInt(0),
+            losses: BigInt(0),
+            draws: BigInt(0),
+            goalsFor: BigInt(0),
+            goalsAgainst: BigInt(0),
+            isApproved: false,
+          }) as unknown as BackendTeam,
+      );
+    setTeams(fakeTeams);
+    setMatches(fakeMatches);
+  }, []);
 
-    if (!actor) {
-      setTeams(localBackendTeams);
-      setLoading(false);
-      return;
-    }
+  const loadStandingsData = useCallback(() => {
     setLoading(true);
-    Promise.all([actor.getAllTeams(), actor.getAllMatches()])
-      .then(([backendT, m]) => {
-        const backendIds = new Set(backendT.map((t) => t.teamId));
-        const extraLocal = localBackendTeams.filter(
-          (lt) => !backendIds.has(lt.teamId),
-        );
-        setTeams([...backendT, ...extraLocal]);
-        setMatches(m);
-      })
-      .catch((err) => {
-        console.error("Failed to load standings data:", err);
-        setTeams(localBackendTeams);
-      })
-      .finally(() => setLoading(false));
-  }, [actor]);
+    if (actor) {
+      Promise.all([actor.getAllTeams(), actor.getAllMatches()])
+        .then(([t, m]) => {
+          const localScores = getLocalStore<
+            Record<
+              string,
+              { homeScore: number; awayScore: number; status: string }
+            >
+          >("lsh_local_match_scores", {});
+          const merged = m.map((match: BackendMatch) => {
+            const ov = localScores[match.matchId];
+            if (!ov) return match;
+            return {
+              ...match,
+              homeScore: BigInt(ov.homeScore),
+              awayScore: BigInt(ov.awayScore),
+              status:
+                ov.status === "played"
+                  ? { played: null }
+                  : ov.status === "live"
+                    ? { live: null }
+                    : { scheduled: null },
+            };
+          });
+          setTeams(t);
+          setMatches(merged as BackendMatch[]);
+        })
+        .catch(() => loadFromLocal())
+        .finally(() => setLoading(false));
+    } else {
+      loadFromLocal();
+      setLoading(false);
+    }
+  }, [actor, loadFromLocal]);
+
+  useEffect(() => {
+    loadStandingsData();
+  }, [loadStandingsData]);
+
+  useEffect(() => {
+    const handler = () => loadStandingsData();
+    window.addEventListener("lsh:matches-updated", handler);
+    window.addEventListener("storage", handler);
+    return () => {
+      window.removeEventListener("lsh:matches-updated", handler);
+      window.removeEventListener("storage", handler);
+    };
+  }, [loadStandingsData]);
 
   const standings = computeBackendStandings(teams, matches);
 
@@ -352,17 +420,17 @@ export function StandingsPage() {
               {[
                 {
                   label: "Most Goals",
-                  value: topGoalsTeam?.team.name ?? "—",
+                  value: topGoalsTeam?.team.name ?? "\u2014",
                   sub: topGoalsTeam ? `${topGoalsTeam.goalsFor} scored` : "",
                 },
                 {
                   label: "Top Points",
-                  value: topPointsTeam?.team.name ?? "—",
+                  value: topPointsTeam?.team.name ?? "\u2014",
                   sub: topPointsTeam ? `${topPointsTeam.points} pts` : "",
                 },
                 {
                   label: "Best Defence",
-                  value: bestDefenceTeam?.team.name ?? "—",
+                  value: bestDefenceTeam?.team.name ?? "\u2014",
                   sub: bestDefenceTeam
                     ? `${bestDefenceTeam.goalsAgainst} conceded`
                     : "",

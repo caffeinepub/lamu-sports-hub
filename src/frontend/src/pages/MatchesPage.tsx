@@ -4,6 +4,7 @@ import { useActor } from "@/hooks/useActor";
 import {
   addActivityEntry,
   getDeletedTeamIds,
+  getLocalFixtures,
   getLocalStore,
   getLocalTeams,
   getMatchJoiners,
@@ -22,9 +23,12 @@ import { Calendar, Shield, Star } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 
-type DateTab = "yesterday" | "today" | "tomorrow";
+type DateTab = "yesterday" | "today" | "tomorrow" | "all";
 
 function getDateRange(tab: DateTab): { start: Date; end: Date } {
+  if (tab === "all") {
+    return { start: new Date(0), end: new Date(8_640_000_000_000_000) };
+  }
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const offset = tab === "yesterday" ? -1 : tab === "tomorrow" ? 1 : 0;
@@ -45,6 +49,14 @@ function getMatchMinuteLive(dateNs: bigint): number {
 function formatKickoff(dateNs: bigint): string {
   const d = new Date(Number(dateNs / 1_000_000n));
   return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatMatchDate(dateNs: bigint): string {
+  const d = new Date(Number(dateNs / 1_000_000n));
+  return d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+  });
 }
 
 function TeamInitial({ name, color }: { name: string; color: string }) {
@@ -96,12 +108,44 @@ export function MatchesPage() {
     document.title = "Matches \u2013 Lamu Sports Hub";
   }, []);
 
+  const buildLocalMatches = () => {
+    const localScores = getLocalStore<
+      Record<string, { homeScore: number; awayScore: number; status: string }>
+    >("lsh_local_match_scores", {});
+    const fixtures = getLocalFixtures();
+    const now = Date.now();
+    return fixtures.map((f) => {
+      const ov = localScores[f.matchId];
+      const kickoffMs = Math.floor(f.date / 1_000_000);
+      const autoPlayed = now - kickoffMs > 95 * 60 * 1000;
+      const statusStr = ov?.status ?? (autoPlayed ? "played" : f.status);
+      return {
+        matchId: f.matchId,
+        homeTeam: f.homeTeam,
+        awayTeam: f.awayTeam,
+        date: BigInt(Math.floor(f.date)),
+        homeScore: BigInt(ov?.homeScore ?? f.homeScore),
+        awayScore: BigInt(ov?.awayScore ?? f.awayScore),
+        status:
+          statusStr === "played"
+            ? { played: null }
+            : statusStr === "live"
+              ? { live: null }
+              : { scheduled: null },
+        referee: [],
+        events: [],
+      };
+    });
+  };
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: buildLocalMatches is a stable local function
   useEffect(() => {
     if (actorFetching) {
       const t = setTimeout(() => setLoading(false), 8000);
       return () => clearTimeout(t);
     }
     if (!actor) {
+      setMatches(buildLocalMatches() as any);
       setLoading(false);
       return;
     }
@@ -137,20 +181,36 @@ export function MatchesPage() {
             };
           }
           if (autoPlayed) {
-            return {
-              ...match,
-              status: Status.played,
-            };
+            return { ...match, status: Status.played };
           }
           return match;
         });
-        setMatches(merged);
+        // Merge any local-only fixtures that aren't in the backend
+        const backendIds = new Set(merged.map((m) => m.matchId));
+        const localOnly = buildLocalMatches().filter(
+          (lm) => !backendIds.has(lm.matchId),
+        );
+        setMatches([...merged, ...(localOnly as any)]);
       })
-      .catch(() => setMatches([]))
+      .catch(() => setMatches(buildLocalMatches() as any))
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actor, actorFetching]);
 
-  // Build merged team name map: teamId -> name
+  // Re-load local matches when officials update match data
+  // biome-ignore lint/correctness/useExhaustiveDependencies: buildLocalMatches is a stable local function
+  useEffect(() => {
+    const reload = () => {
+      if (!actor) {
+        setMatches(buildLocalMatches() as any);
+      }
+    };
+    window.addEventListener("lsh:matches-updated", reload);
+    return () => window.removeEventListener("lsh:matches-updated", reload);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actor]);
+
+  // Build merged team name map
   const teamNameMap = useMemo(() => {
     const overrides = getTeamOverrides();
     const deleted = new Set(getDeletedTeamIds());
@@ -194,7 +254,13 @@ export function MatchesPage() {
 
   const { start, end } = getDateRange(activeTab);
 
-  const filteredMatches = matches.filter((m) => {
+  // Sort matches by date for the "All" tab
+  const sortedMatches = useMemo(
+    () => [...matches].sort((a, b) => Number(a.date) - Number(b.date)),
+    [matches],
+  );
+
+  const filteredMatches = sortedMatches.filter((m) => {
     const d = new Date(Number(m.date / 1_000_000n));
     return d >= start && d <= end;
   });
@@ -217,6 +283,7 @@ export function MatchesPage() {
     { id: "yesterday", label: "Yesterday" },
     { id: "today", label: "Today" },
     { id: "tomorrow", label: "Tomorrow" },
+    { id: "all", label: "All" },
   ];
 
   const getStatusStr = (status: BackendMatch["status"]): string => {
@@ -228,7 +295,7 @@ export function MatchesPage() {
   };
 
   const renderMatchCard = (matchId: string, index: number) => {
-    const match = matches.find((m) => m.matchId === matchId);
+    const match = sortedMatches.find((m) => m.matchId === matchId);
     if (!match) return null;
 
     const homeName = teamNameMap[match.homeTeam] ?? match.homeTeam;
@@ -246,7 +313,7 @@ export function MatchesPage() {
         key={matchId}
         initial={{ y: 8, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: index * 0.04 }}
+        transition={{ delay: Math.min(index * 0.04, 0.4) }}
         data-ocid={`matches.item.${index + 1}`}
         className="rounded-2xl border border-border bg-card overflow-hidden hover:border-primary/40 transition-all cursor-pointer"
         onClick={() =>
@@ -271,7 +338,9 @@ export function MatchesPage() {
               )}
               {!isLive && !isPlayed && (
                 <span className="px-2 py-0.5 rounded-full bg-primary/10 border border-primary/30 text-[10px] font-bold text-primary">
-                  {formatKickoff(match.date)}
+                  {activeTab === "all"
+                    ? formatMatchDate(match.date)
+                    : formatKickoff(match.date)}
                 </span>
               )}
             </div>
@@ -326,7 +395,7 @@ export function MatchesPage() {
           {(pitchName || refName) && (
             <div className="mt-2 flex items-center gap-2 text-[10px] text-muted-foreground/70">
               {pitchName && <span>\uD83D\uDCCD {pitchName}</span>}
-              {refName && <span>• Ref: {refName}</span>}
+              {refName && <span>\u2022 Ref: {refName}</span>}
             </div>
           )}
 
@@ -349,7 +418,7 @@ export function MatchesPage() {
                 addActivityEntry({
                   type: "join_match",
                   text: `${currentUser.name} is playing: ${homeName} vs ${awayName}`,
-                  icon: "⚽",
+                  icon: "\u26BD",
                   userName: currentUser.name,
                 });
               }
@@ -377,7 +446,7 @@ export function MatchesPage() {
                   {!currentUser
                     ? "Login to join"
                     : joined
-                      ? "✓ I'm Playing"
+                      ? "\u2713 I'm Playing"
                       : "Join Match"}
                 </button>
                 {shownJoiners.length > 0 && (
@@ -388,7 +457,9 @@ export function MatchesPage() {
                           key={j.userId}
                           className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-black text-white border border-card"
                           style={{
-                            background: `oklch(${0.5 + ji * 0.05} 0.18 ${(ji * 80 + 24) % 360})`,
+                            background: `oklch(${0.5 + ji * 0.05} 0.18 ${
+                              (ji * 80 + 24) % 360
+                            })`,
                             marginLeft: ji > 0 ? "-4px" : undefined,
                             zIndex: 3 - ji,
                             position: "relative",
@@ -400,7 +471,7 @@ export function MatchesPage() {
                       ))}
                     </div>
                     <span className="text-[10px] text-muted-foreground">
-                      👥 {joiners.length}
+                      \uD83D\uDC65 {joiners.length}
                     </span>
                   </div>
                 )}
@@ -461,26 +532,29 @@ export function MatchesPage() {
           </div>
         ) : (
           <>
-            <div data-ocid="matches.following.section">
-              <h2 className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
-                <Star className="w-3.5 h-3.5 text-yellow-400" />
-                Following
-              </h2>
-              {followedInTab.length === 0 ? (
-                <div
-                  className="rounded-xl border border-dashed border-border p-4 text-center"
-                  data-ocid="matches.following.empty_state"
-                >
-                  <p className="text-xs text-muted-foreground">
-                    No followed matches. Star a match to follow it.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {followedInTab.map((m, i) => renderMatchCard(m.matchId, i))}
-                </div>
-              )}
-            </div>
+            {/* Only show Following section on non-All tabs */}
+            {activeTab !== "all" && (
+              <div data-ocid="matches.following.section">
+                <h2 className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
+                  <Star className="w-3.5 h-3.5 text-yellow-400" />
+                  Following
+                </h2>
+                {followedInTab.length === 0 ? (
+                  <div
+                    className="rounded-xl border border-dashed border-border p-4 text-center"
+                    data-ocid="matches.following.empty_state"
+                  >
+                    <p className="text-xs text-muted-foreground">
+                      No followed matches. Star a match to follow it.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {followedInTab.map((m, i) => renderMatchCard(m.matchId, i))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {leagueGroups
               .filter((g) => g.matchIds.length > 0)
@@ -505,10 +579,10 @@ export function MatchesPage() {
               >
                 <Calendar className="w-10 h-10 mx-auto mb-3 opacity-30" />
                 <p className="text-sm font-bold text-foreground mb-1">
-                  No matches scheduled
+                  No matches for this date
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Check other dates for upcoming fixtures
+                  Tap "All" to see the full fixture list
                 </p>
               </div>
             )}

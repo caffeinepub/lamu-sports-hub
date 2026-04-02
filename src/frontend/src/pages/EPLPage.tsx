@@ -57,13 +57,13 @@ function useEPLData() {
       try {
         const [sRes, rRes, fRes] = await Promise.all([
           fetch(
-            "https://www.thesportsdb.com/api/v1/json/3/lookuptable.php?l=4328&s=2024-2025",
+            "https://www.thesportsdb.com/api/v1/json/1/lookuptable.php?l=4328&s=2024-2025",
           ),
           fetch(
-            "https://www.thesportsdb.com/api/v1/json/3/eventspastleague.php?id=4328",
+            "https://www.thesportsdb.com/api/v1/json/1/eventspastleague.php?id=4328",
           ),
           fetch(
-            "https://www.thesportsdb.com/api/v1/json/3/eventsnextleague.php?id=4328",
+            "https://www.thesportsdb.com/api/v1/json/1/eventsnextleague.php?id=4328",
           ),
         ]);
         const [sData, rData, fData] = await Promise.all([

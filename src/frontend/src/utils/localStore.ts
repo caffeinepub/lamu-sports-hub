@@ -1552,6 +1552,368 @@ export function runMigrations(): void {
     setLocalStore(LSH_LOCAL_NOTIFS_KEY, cleanNotifs);
     localStorage.setItem("lsh_migration_v9", "done");
   }
+  // v10: seed FKF fixtures for local-first mode
+  if (!localStorage.getItem("lsh_migration_v10")) {
+    localStorage.setItem("lsh_local_notifications", JSON.stringify([]));
+    const FKF_FIXTURES_V10 = [
+      {
+        matchId: "fkf-m-01",
+        homeTeam: "fkf-001",
+        awayTeam: "fkf-010",
+        date: new Date("2026-03-28T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Manda Ground",
+      },
+      {
+        matchId: "fkf-m-02",
+        homeTeam: "fkf-002",
+        awayTeam: "fkf-020",
+        date: new Date("2026-03-29T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-03",
+        homeTeam: "fkf-003",
+        awayTeam: "fkf-012",
+        date: new Date("2026-03-30T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-04",
+        homeTeam: "fkf-004",
+        awayTeam: "fkf-014",
+        date: new Date("2026-03-31T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-05",
+        homeTeam: "fkf-005",
+        awayTeam: "fkf-013",
+        date: new Date("2026-04-01T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-06",
+        homeTeam: "fkf-006",
+        awayTeam: "fkf-015",
+        date: new Date("2026-04-02T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-07",
+        homeTeam: "fkf-007",
+        awayTeam: "fkf-016",
+        date: new Date("2026-04-03T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-08",
+        homeTeam: "fkf-008",
+        awayTeam: "fkf-017",
+        date: new Date("2026-04-04T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-09",
+        homeTeam: "fkf-009",
+        awayTeam: "fkf-019",
+        date: new Date("2026-04-05T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-10",
+        homeTeam: "fkf-010",
+        awayTeam: "fkf-018",
+        date: new Date("2026-04-06T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-11",
+        homeTeam: "fkf-011",
+        awayTeam: "fkf-020",
+        date: new Date("2026-04-07T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-12",
+        homeTeam: "fkf-012",
+        awayTeam: "fkf-001",
+        date: new Date("2026-04-08T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-13",
+        homeTeam: "fkf-002",
+        awayTeam: "fkf-014",
+        date: new Date("2026-04-09T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-14",
+        homeTeam: "fkf-013",
+        awayTeam: "fkf-003",
+        date: new Date("2026-04-10T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-15",
+        homeTeam: "fkf-004",
+        awayTeam: "fkf-015",
+        date: new Date("2026-04-11T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-16",
+        homeTeam: "fkf-016",
+        awayTeam: "fkf-005",
+        date: new Date("2026-04-12T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-17",
+        homeTeam: "fkf-006",
+        awayTeam: "fkf-017",
+        date: new Date("2026-04-13T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-18",
+        homeTeam: "fkf-019",
+        awayTeam: "fkf-007",
+        date: new Date("2026-04-14T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-19",
+        homeTeam: "fkf-008",
+        awayTeam: "fkf-009",
+        date: new Date("2026-04-15T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-20",
+        homeTeam: "fkf-018",
+        awayTeam: "fkf-020",
+        date: new Date("2026-04-16T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-21",
+        homeTeam: "fkf-010",
+        awayTeam: "fkf-012",
+        date: new Date("2026-04-17T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-22",
+        homeTeam: "fkf-011",
+        awayTeam: "fkf-014",
+        date: new Date("2026-04-18T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-23",
+        homeTeam: "fkf-001",
+        awayTeam: "fkf-013",
+        date: new Date("2026-04-19T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Manda Ground",
+      },
+      {
+        matchId: "fkf-m-24",
+        homeTeam: "fkf-002",
+        awayTeam: "fkf-015",
+        date: new Date("2026-04-19T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-25",
+        homeTeam: "fkf-003",
+        awayTeam: "fkf-016",
+        date: new Date("2026-04-20T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-26",
+        homeTeam: "fkf-004",
+        awayTeam: "fkf-017",
+        date: new Date("2026-04-21T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-27",
+        homeTeam: "fkf-005",
+        awayTeam: "fkf-019",
+        date: new Date("2026-04-22T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-28",
+        homeTeam: "fkf-006",
+        awayTeam: "fkf-009",
+        date: new Date("2026-04-23T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-29",
+        homeTeam: "fkf-007",
+        awayTeam: "fkf-008",
+        date: new Date("2026-04-24T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+      {
+        matchId: "fkf-m-30",
+        homeTeam: "fkf-012",
+        awayTeam: "fkf-018",
+        date: new Date("2026-04-25T16:30:00+03:00").getTime() * 1_000_000,
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        ground: "Sports Ground",
+      },
+    ];
+    localStorage.setItem(
+      "lsh_local_fixtures",
+      JSON.stringify(FKF_FIXTURES_V10),
+    );
+    localStorage.setItem("lsh_migration_v10", "done");
+  }
+
+  // v11: auto-mark past fixtures as "played" based on current date.
+  // This runs every startup (no localStorage gate) so the status stays current.
+  // We use a daily-keyed gate so it only re-runs once per day.
+  const todayKey = `lsh_migration_v11_${new Date().toISOString().slice(0, 10)}`;
+  if (!localStorage.getItem(todayKey)) {
+    const now = Date.now();
+    const storedFixtures = getLocalStore<LocalFixture[]>(
+      "lsh_local_fixtures",
+      [],
+    );
+    if (storedFixtures.length > 0) {
+      let changed = false;
+      const updated = storedFixtures.map((f) => {
+        const kickoffMs = Math.floor(f.date / 1_000_000);
+        const isInPast = now - kickoffMs > 95 * 60 * 1000; // 95 min past kickoff
+        if (isInPast && f.status === "scheduled") {
+          changed = true;
+          return { ...f, status: "played" };
+        }
+        return f;
+      });
+      if (changed) {
+        setLocalStore("lsh_local_fixtures", updated);
+      }
+    }
+    // Clean up old daily gates (keep only today's)
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k?.startsWith("lsh_migration_v11_") && k !== todayKey) {
+        localStorage.removeItem(k);
+        i--;
+      }
+    }
+    localStorage.setItem(todayKey, "done");
+  }
+}
+
+export type LocalFixture = {
+  matchId: string;
+  homeTeam: string;
+  awayTeam: string;
+  date: number;
+  homeScore: number;
+  awayScore: number;
+  status: string;
+  ground?: string;
+};
+
+export function getLocalFixtures(): LocalFixture[] {
+  return getLocalStore<LocalFixture[]>("lsh_local_fixtures", []);
 }
 
 // ── News Reactions ────────────────────────────────────────────────────────────
@@ -1752,38 +2114,4 @@ export function leaveMatch(matchId: string, userId: string): void {
 
 export function hasJoinedMatch(matchId: string, userId: string): boolean {
   return getMatchJoiners(matchId).some((j) => j.userId === userId);
-}
-
-// ── Player Followers ──────────────────────────────────────────────────────────
-export const LSH_PLAYER_FOLLOWERS_KEY = "playerFollowers";
-
-export function getPlayerFollowers(playerId: string): string[] {
-  const data = JSON.parse(
-    localStorage.getItem(LSH_PLAYER_FOLLOWERS_KEY) || "{}",
-  );
-  return data[playerId] || [];
-}
-
-export function getFollowerCount(playerId: string): number {
-  return getPlayerFollowers(playerId).length;
-}
-
-export function isFollowingPlayer(playerId: string, userId: string): boolean {
-  return getPlayerFollowers(playerId).includes(userId);
-}
-
-export function togglePlayerFollow(playerId: string, userId: string): boolean {
-  const data = JSON.parse(
-    localStorage.getItem(LSH_PLAYER_FOLLOWERS_KEY) || "{}",
-  );
-  const followers: string[] = data[playerId] || [];
-  const idx = followers.indexOf(userId);
-  if (idx >= 0) {
-    followers.splice(idx, 1);
-  } else {
-    followers.push(userId);
-  }
-  data[playerId] = followers;
-  localStorage.setItem(LSH_PLAYER_FOLLOWERS_KEY, JSON.stringify(data));
-  return idx < 0;
 }

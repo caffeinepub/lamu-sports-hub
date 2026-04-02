@@ -1,10 +1,6 @@
 import { Position } from "@/backend";
 import { PlayerCard } from "@/components/shared/PlayerCard";
-import {
-  AreaBadge,
-  IslandPrideBadge,
-  TeamBadge,
-} from "@/components/shared/TeamBadge";
+import { AreaBadge, IslandPrideBadge } from "@/components/shared/TeamBadge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -24,17 +20,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  MOCK_MATCHES,
-  MOCK_PLAYERS,
-  MOCK_TEAMS,
-  type MockPlayer,
-} from "@/data/mockData";
 import { useActor } from "@/hooks/useActor";
 import {
   LSH_PLAYER_CONFIRMATIONS_KEY,
+  getLocalFixtures,
+  getLocalPlayers,
+  getLocalTeams,
+  getMatchReferees,
   getPlayerConfirmations,
   getPlayerPhotos,
+  getTeamOverrides,
   setLocalStore,
 } from "@/utils/localStore";
 import {
@@ -49,7 +44,7 @@ import {
   Users,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 const coachPositionMap: Record<string, Position> = {
@@ -61,20 +56,83 @@ const coachPositionMap: Record<string, Position> = {
 
 const POSITIONS = ["goalkeeper", "defender", "midfielder", "forward"];
 
+type LocalPlayerEntry = {
+  playerId: string;
+  name: string;
+  nickname?: string;
+  teamId: string;
+  position: string;
+  jerseyNumber: number;
+  goals: number;
+  assists: number;
+  appearances: number;
+  yellowCards: number;
+  redCards: number;
+  isVerified?: boolean;
+};
+
 export function CoachDashboardPage() {
   const { actor } = useActor();
-  // Assume coach manages team-001 (Shela United)
-  const team = MOCK_TEAMS[0];
-  const players = MOCK_PLAYERS.filter((p) => p.teamId === team.teamId);
-  const teamMatches = MOCK_MATCHES.filter(
-    (m) => m.homeTeamId === team.teamId || m.awayTeamId === team.teamId,
+
+  // Load real local data
+  const allTeams = useMemo(() => {
+    const local = getLocalTeams();
+    const overrides = getTeamOverrides();
+    return local.map((t) => ({
+      ...t,
+      name: overrides[t.teamId]?.name ?? t.name,
+      area: overrides[t.teamId]?.area ?? t.area,
+      color: "#1A3A6B",
+      secondaryColor: "#C0A060",
+    }));
+  }, []);
+
+  // Coach sees all teams; no hardcoded team assignment
+  const [selectedTeamId, setSelectedTeamId] = useState<string>(
+    allTeams[0]?.teamId ?? "",
   );
+
+  const team = useMemo(
+    () => allTeams.find((t) => t.teamId === selectedTeamId) ?? allTeams[0],
+    [allTeams, selectedTeamId],
+  );
+
+  const allLocalPlayers = useMemo(() => getLocalPlayers(), []);
+  const players = useMemo<LocalPlayerEntry[]>(() => {
+    if (!team) return [];
+    return allLocalPlayers
+      .filter((p) => p.teamId === team.teamId)
+      .map((p) => ({
+        playerId: p.playerId,
+        name: p.name,
+        nickname: p.nickname,
+        teamId: p.teamId,
+        position: p.position,
+        jerseyNumber: Number(p.jerseyNumber),
+        goals: 0,
+        assists: 0,
+        appearances: 0,
+        yellowCards: 0,
+        redCards: 0,
+        isVerified: false,
+      }));
+  }, [allLocalPlayers, team]);
+
+  const teamMatches = useMemo(() => {
+    if (!team) return [];
+    const refs = getMatchReferees();
+    return getLocalFixtures()
+      .filter((m) => m.homeTeam === team.teamId || m.awayTeam === team.teamId)
+      .map((m) => ({ ...m, refereeName: refs[m.matchId] ?? "" }));
+  }, [team]);
 
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [showMatchStats, setShowMatchStats] = useState(false);
   const [showBulkRegister, setShowBulkRegister] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [viewCardPlayer, setViewCardPlayer] = useState<MockPlayer | null>(null);
+  const [viewCardPlayer, setViewCardPlayer] = useState<LocalPlayerEntry | null>(
+    null,
+  );
 
   const [nickname, setNickname] = useState("");
   const [position, setPosition] = useState("forward");
@@ -86,7 +144,6 @@ export function CoachDashboardPage() {
 
   const [bulkText, setBulkText] = useState("");
 
-  // Player confirmations
   const [confirmations, setConfirmations] = useState<Record<string, boolean>>(
     getPlayerConfirmations,
   );
@@ -122,6 +179,10 @@ export function CoachDashboardPage() {
   const handleAddPlayer = async () => {
     if (!nickname || !jerseyNumber) {
       toast.error("Please fill all required fields");
+      return;
+    }
+    if (!team) {
+      toast.error("No team selected");
       return;
     }
     const positionEnum = coachPositionMap[position];
@@ -161,7 +222,6 @@ export function CoachDashboardPage() {
     toast.success("Match stats submitted!");
   };
 
-  // Inject print styles
   useEffect(() => {
     const style = document.createElement("style");
     style.id = "lsh-player-card-print";
@@ -177,6 +237,21 @@ export function CoachDashboardPage() {
       document.getElementById("lsh-player-card-print")?.remove();
     };
   }, []);
+
+  if (allTeams.length === 0) {
+    return (
+      <div
+        data-ocid="coach.page"
+        className="min-h-screen pb-24 pt-14 flex flex-col items-center justify-center gap-4 px-6"
+      >
+        <Users className="w-12 h-12 opacity-30" />
+        <p className="text-sm font-bold text-foreground">No teams registered</p>
+        <p className="text-xs text-muted-foreground text-center">
+          Enter Official mode (LSH2026) and add teams in Admin Panel first.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div data-ocid="coach.page" className="min-h-screen pb-24 pt-14">
@@ -219,177 +294,208 @@ export function CoachDashboardPage() {
       </div>
 
       <div className="px-4 mt-4 space-y-5">
-        {/* My Team Card */}
-        <motion.div
-          initial={{ y: 10, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          data-ocid="coach.team.card"
-        >
-          <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
-            <Users className="w-4 h-4" />
-            My Team
-          </h2>
-          <div
-            className="rounded-xl p-4 border border-border relative overflow-hidden"
-            style={{
-              background: `linear-gradient(135deg, ${team.color}33 0%, oklch(0.16 0.04 255) 70%)`,
-            }}
-          >
-            <div className="flex items-center gap-4">
-              <TeamBadge team={team} size="xl" />
-              <div className="flex-1">
-                <h3 className="font-display font-black text-lg text-foreground">
-                  {team.name}
-                </h3>
-                <AreaBadge area={team.area} />
-                <div className="flex gap-3 mt-2">
-                  <div className="text-center">
-                    <div className="font-black font-stats text-xl text-green-400">
-                      {team.wins}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground">
-                      Wins
-                    </div>
+        {/* Team selector */}
+        {allTeams.length > 1 && (
+          <div>
+            <Label className="text-xs mb-1 block text-muted-foreground">
+              Select Team
+            </Label>
+            <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {allTeams.map((t) => (
+                  <SelectItem
+                    key={t.teamId}
+                    value={t.teamId}
+                    className="text-sm"
+                  >
+                    {t.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {team && (
+          <>
+            {/* My Team Card */}
+            <motion.div
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              data-ocid="coach.team.card"
+            >
+              <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                <Users className="w-4 h-4" />
+                My Team
+              </h2>
+              <div
+                className="rounded-xl p-4 border border-border relative overflow-hidden"
+                style={{
+                  background: `linear-gradient(135deg, ${team.color}33 0%, oklch(0.16 0.04 255) 70%)`,
+                }}
+              >
+                <div className="flex items-center gap-4">
+                  <div
+                    className="w-14 h-14 rounded-full flex items-center justify-center text-2xl font-black border-2 flex-shrink-0"
+                    style={{
+                      background: team.color,
+                      borderColor: team.secondaryColor,
+                      color: team.secondaryColor,
+                    }}
+                  >
+                    {team.name.charAt(0)}
                   </div>
-                  <div className="text-center">
-                    <div className="font-black font-stats text-xl text-yellow-400">
-                      {team.draws}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground">
-                      Draws
-                    </div>
-                  </div>
-                  <div className="text-center">
-                    <div className="font-black font-stats text-xl text-red-400">
-                      {team.losses}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground">
-                      Losses
-                    </div>
-                  </div>
-                  <div className="text-center">
-                    <div className="font-black font-stats text-xl text-foreground">
-                      {players.length}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground">
-                      Players
+                  <div className="flex-1">
+                    <h3 className="font-display font-black text-lg text-foreground">
+                      {team.name}
+                    </h3>
+                    <AreaBadge area={team.area} />
+                    <div className="flex gap-3 mt-2">
+                      <div className="text-center">
+                        <div className="font-black font-stats text-xl text-foreground">
+                          {players.length}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          Players
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <div className="font-black font-stats text-xl text-foreground">
+                          {teamMatches.length}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          Fixtures
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
+            </motion.div>
+
+            {/* Action buttons */}
+            <div className="grid grid-cols-3 gap-2">
+              <Button
+                variant="outline"
+                className="h-16 flex-col gap-1.5 text-xs font-semibold border-primary/40 hover:border-primary text-primary"
+                onClick={() => setShowAddPlayer(true)}
+                data-ocid="coach.add_player.button"
+              >
+                <Plus className="w-5 h-5" />
+                Add Player
+              </Button>
+              <Button
+                variant="outline"
+                className="h-16 flex-col gap-1.5 text-xs font-semibold border-green-400/40 hover:border-green-400 text-green-400"
+                onClick={() => setShowBulkRegister(true)}
+                data-ocid="coach.bulk_register.button"
+              >
+                <UserPlus className="w-5 h-5" />
+                Bulk Register
+              </Button>
+              <Button
+                variant="outline"
+                className="h-16 flex-col gap-1.5 text-xs font-semibold border-accent/40 hover:border-accent text-accent"
+                onClick={() => setShowMatchStats(true)}
+                data-ocid="coach.match_stats.button"
+              >
+                <BarChart2 className="w-5 h-5" />
+                Match Stats
+              </Button>
             </div>
-          </div>
-        </motion.div>
 
-        {/* Action buttons */}
-        <div className="grid grid-cols-3 gap-2">
-          <Button
-            variant="outline"
-            className="h-16 flex-col gap-1.5 text-xs font-semibold border-primary/40 hover:border-primary text-primary"
-            onClick={() => setShowAddPlayer(true)}
-            data-ocid="coach.add_player.button"
-          >
-            <Plus className="w-5 h-5" />
-            Add Player
-          </Button>
-          <Button
-            variant="outline"
-            className="h-16 flex-col gap-1.5 text-xs font-semibold border-green-400/40 hover:border-green-400 text-green-400"
-            onClick={() => setShowBulkRegister(true)}
-            data-ocid="coach.bulk_register.button"
-          >
-            <UserPlus className="w-5 h-5" />
-            Bulk Register
-          </Button>
-          <Button
-            variant="outline"
-            className="h-16 flex-col gap-1.5 text-xs font-semibold border-accent/40 hover:border-accent text-accent"
-            onClick={() => setShowMatchStats(true)}
-            data-ocid="coach.match_stats.button"
-          >
-            <BarChart2 className="w-5 h-5" />
-            Match Stats
-          </Button>
-        </div>
-
-        {/* Squad with confirmation */}
-        <div>
-          <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide mb-1 flex items-center gap-1.5">
-            <CheckSquare className="w-4 h-4 text-green-400" />
-            Squad — Confirm Players
-          </h2>
-          <p className="text-[11px] text-muted-foreground mb-3">
-            Tick to confirm player registration. Confirmed players receive their
-            registration card.
-          </p>
-          <div className="space-y-2">
-            {players.map((player, i) => {
-              const isConfirmed = confirmations[player.playerId] ?? false;
-              return (
-                <motion.div
-                  key={player.playerId}
-                  initial={{ y: 10, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: i * 0.05 }}
-                  className="rounded-xl border bg-card px-4 py-3 flex items-center gap-3"
-                  style={{
-                    borderColor: isConfirmed
-                      ? "oklch(0.55 0.18 145 / 0.4)"
-                      : "oklch(0.3 0.02 252)",
-                    background: isConfirmed
-                      ? "oklch(0.16 0.04 145 / 0.2)"
-                      : undefined,
-                  }}
-                  data-ocid={`coach.player.item.${i + 1}`}
-                >
-                  {/* Jersey badge */}
-                  <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-black font-stats flex-shrink-0"
-                    style={{
-                      backgroundColor: team.color,
-                      color: team.secondaryColor,
-                    }}
-                  >
-                    {player.jerseyNumber}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-xs text-foreground">
-                      {player.name}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground capitalize">
-                      {player.position} · #{player.jerseyNumber}
-                    </p>
-                  </div>
-                  {/* Confirm + View Card */}
-                  <div className="flex items-center gap-2">
-                    {isConfirmed && (
-                      <span className="text-[9px] font-bold text-green-400 px-1.5 py-0.5 rounded-full bg-green-500/10">
-                        Confirmed
-                      </span>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="w-6 h-6 text-primary hover:text-primary/80"
-                      onClick={() => setViewCardPlayer(player)}
-                      data-ocid={`coach.player.card.${i + 1}`}
-                      title="View Player Card"
-                    >
-                      <CreditCard className="w-3.5 h-3.5" />
-                    </Button>
-                    <Checkbox
-                      checked={isConfirmed}
-                      onCheckedChange={(v) =>
-                        toggleConfirmation(player.playerId, !!v)
-                      }
-                      data-ocid={`coach.player.checkbox.${i + 1}`}
-                    />
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
-        </div>
+            {/* Squad with confirmation */}
+            <div>
+              <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide mb-1 flex items-center gap-1.5">
+                <CheckSquare className="w-4 h-4 text-green-400" />
+                Squad — Confirm Players
+              </h2>
+              <p className="text-[11px] text-muted-foreground mb-3">
+                Tick to confirm player registration. Confirmed players receive
+                their registration card.
+              </p>
+              {players.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border p-6 text-center">
+                  <p className="text-xs text-muted-foreground">
+                    No players registered for {team.name} yet.
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Add players via Official mode → Admin Panel → Players.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {players.map((player, i) => {
+                    const isConfirmed = confirmations[player.playerId] ?? false;
+                    return (
+                      <motion.div
+                        key={player.playerId}
+                        initial={{ y: 10, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: i * 0.05 }}
+                        className="rounded-xl border bg-card px-4 py-3 flex items-center gap-3"
+                        style={{
+                          borderColor: isConfirmed
+                            ? "oklch(0.55 0.18 145 / 0.4)"
+                            : "oklch(0.3 0.02 252)",
+                          background: isConfirmed
+                            ? "oklch(0.16 0.04 145 / 0.2)"
+                            : undefined,
+                        }}
+                        data-ocid={`coach.player.item.${i + 1}`}
+                      >
+                        <div
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-black font-stats flex-shrink-0"
+                          style={{
+                            backgroundColor: team.color,
+                            color: team.secondaryColor,
+                          }}
+                        >
+                          {player.jerseyNumber}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-xs text-foreground">
+                            {player.name}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground capitalize">
+                            {player.position} · #{player.jerseyNumber}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {isConfirmed && (
+                            <span className="text-[9px] font-bold text-green-400 px-1.5 py-0.5 rounded-full bg-green-500/10">
+                              Confirmed
+                            </span>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="w-6 h-6 text-primary hover:text-primary/80"
+                            onClick={() => setViewCardPlayer(player)}
+                            data-ocid={`coach.player.card.${i + 1}`}
+                            title="View Player Card"
+                          >
+                            <CreditCard className="w-3.5 h-3.5" />
+                          </Button>
+                          <Checkbox
+                            checked={isConfirmed}
+                            onCheckedChange={(v) =>
+                              toggleConfirmation(player.playerId, !!v)
+                            }
+                            data-ocid={`coach.player.checkbox.${i + 1}`}
+                          />
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Add Player Dialog */}
@@ -404,7 +510,7 @@ export function CoachDashboardPage() {
               <Input
                 value={nickname}
                 onChange={(e) => setNickname(e.target.value)}
-                placeholder="e.g. Rocket"
+                placeholder="e.g. Omar"
                 className="h-9 text-sm"
                 data-ocid="coach.input"
               />
@@ -488,7 +594,7 @@ export function CoachDashboardPage() {
                 value={bulkText}
                 onChange={(e) => setBulkText(e.target.value)}
                 placeholder={
-                  "Hassan Mwende, forward, 9\nOmar Kiprotich, midfielder, 8\nAli Ndegwa, defender, 4"
+                  "Omar Ali, forward, 9\nAli Hassan, midfielder, 8\nSaid Mwenda, defender, 4"
                 }
                 className="text-sm min-h-[120px] font-mono resize-none"
                 data-ocid="coach.bulk_register.textarea"
@@ -551,7 +657,6 @@ export function CoachDashboardPage() {
               const photo = getPlayerPhotos()[viewCardPlayer.playerId];
               return (
                 <>
-                  {/* Printable card */}
                   <div id="player-card-print" />
                   <DialogHeader>
                     <DialogTitle className="font-display text-center">
@@ -561,55 +666,55 @@ export function CoachDashboardPage() {
                   <div
                     className="rounded-2xl overflow-hidden border-2 mx-auto w-full"
                     style={{
-                      background: `linear-gradient(135deg, ${team.color} 0%, ${team.color}bb 60%, oklch(0.14 0.06 252) 100%)`,
-                      borderColor: team.secondaryColor,
+                      background: `linear-gradient(135deg, ${team?.color ?? "#1A3A6B"} 0%, ${team?.color ?? "#1A3A6B"}bb 60%, oklch(0.14 0.06 252) 100%)`,
+                      borderColor: team?.secondaryColor ?? "#C0A060",
                     }}
                   >
-                    {/* Header bar */}
                     <div
                       className="px-4 py-2 flex items-center justify-between"
-                      style={{ backgroundColor: `${team.secondaryColor}33` }}
+                      style={{
+                        backgroundColor: `${team?.secondaryColor ?? "#C0A060"}33`,
+                      }}
                     >
                       <span
                         className="text-[10px] font-black uppercase tracking-widest"
-                        style={{ color: team.secondaryColor }}
+                        style={{ color: team?.secondaryColor ?? "#C0A060" }}
                       >
                         Lamu Sports Hub
                       </span>
                       <span
                         className="text-[10px] font-bold"
-                        style={{ color: team.secondaryColor }}
+                        style={{ color: team?.secondaryColor ?? "#C0A060" }}
                       >
-                        {team.name}
+                        {team?.name ?? ""}
                       </span>
                     </div>
-                    {/* Body */}
                     <div className="px-5 py-4 flex gap-4 items-center">
-                      {/* Photo or Jersey */}
                       {photo ? (
                         <img
                           src={photo}
                           alt={viewCardPlayer.name}
                           className="w-20 h-20 rounded-xl object-cover border-2 flex-shrink-0"
-                          style={{ borderColor: team.secondaryColor }}
+                          style={{
+                            borderColor: team?.secondaryColor ?? "#C0A060",
+                          }}
                         />
                       ) : (
                         <div
                           className="w-20 h-20 rounded-xl flex items-center justify-center text-3xl font-black font-stats border-2 flex-shrink-0"
                           style={{
-                            backgroundColor: `${team.secondaryColor}22`,
-                            color: team.secondaryColor,
-                            borderColor: `${team.secondaryColor}66`,
+                            backgroundColor: `${team?.secondaryColor ?? "#C0A060"}22`,
+                            color: team?.secondaryColor ?? "#C0A060",
+                            borderColor: `${team?.secondaryColor ?? "#C0A060"}66`,
                           }}
                         >
                           {viewCardPlayer.jerseyNumber}
                         </div>
                       )}
-                      {/* Info */}
                       <div className="flex-1 min-w-0">
                         <p
                           className="font-display font-black text-lg leading-tight"
-                          style={{ color: team.secondaryColor }}
+                          style={{ color: team?.secondaryColor ?? "#C0A060" }}
                         >
                           {viewCardPlayer.name}
                         </p>
@@ -623,20 +728,23 @@ export function CoachDashboardPage() {
                           {viewCardPlayer.jerseyNumber}
                         </p>
                         <p className="text-xs text-white/60 mt-0.5">
-                          {team.area} Area
+                          {team?.area ?? ""} Area
                         </p>
                         {viewCardPlayer.isVerified && (
                           <IslandPrideBadge className="mt-1.5" />
                         )}
                       </div>
                     </div>
-                    {/* Status stamp */}
                     <div
                       className="px-4 py-2 flex items-center justify-between border-t"
-                      style={{ borderColor: `${team.secondaryColor}33` }}
+                      style={{
+                        borderColor: `${team?.secondaryColor ?? "#C0A060"}33`,
+                      }}
                     >
                       <span
-                        className={`text-xs font-black tracking-widest uppercase ${isConfirmed ? "text-green-400" : "text-yellow-400"}`}
+                        className={`text-xs font-black tracking-widest uppercase ${
+                          isConfirmed ? "text-green-400" : "text-yellow-400"
+                        }`}
                       >
                         {isConfirmed ? "✓ CONFIRMED" : "⏳ PENDING"}
                       </span>
@@ -689,23 +797,30 @@ export function CoachDashboardPage() {
                   <SelectValue placeholder="Choose a match..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {teamMatches.map((m) => {
-                    const home = MOCK_TEAMS.find(
-                      (t) => t.teamId === m.homeTeamId,
-                    )!;
-                    const away = MOCK_TEAMS.find(
-                      (t) => t.teamId === m.awayTeamId,
-                    )!;
-                    return (
-                      <SelectItem
-                        key={m.matchId}
-                        value={m.matchId}
-                        className="text-sm"
-                      >
-                        {home.name} vs {away.name}
-                      </SelectItem>
-                    );
-                  })}
+                  {teamMatches.length === 0 ? (
+                    <SelectItem value="__none" disabled className="text-sm">
+                      No fixtures found
+                    </SelectItem>
+                  ) : (
+                    teamMatches.map((m) => {
+                      const homeTeam = allTeams.find(
+                        (t) => t.teamId === m.homeTeam,
+                      );
+                      const awayTeam = allTeams.find(
+                        (t) => t.teamId === m.awayTeam,
+                      );
+                      return (
+                        <SelectItem
+                          key={m.matchId}
+                          value={m.matchId}
+                          className="text-sm"
+                        >
+                          {homeTeam?.name ?? m.homeTeam} vs{" "}
+                          {awayTeam?.name ?? m.awayTeam}
+                        </SelectItem>
+                      );
+                    })
+                  )}
                 </SelectContent>
               </Select>
             </div>
