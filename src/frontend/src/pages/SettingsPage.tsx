@@ -39,6 +39,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   LSH_USER_SETTINGS_KEY,
   type UserSettings,
+  addPendingMatchResult,
   getDeletedTeamIds,
   getLocalPlayers,
   getLocalTeams,
@@ -70,10 +71,13 @@ import {
   MapPin,
   MessageCircle,
   Mic,
+  Mic2,
   Monitor,
   Moon,
   Phone,
+  PlusCircle,
   Radio,
+  Send,
   Settings,
   Share2,
   Shield,
@@ -247,6 +251,16 @@ export function SettingsPage() {
 
   const seasonSettings = getSeasonSettings();
   const pitches = getPitches();
+  const [showSubmitResult, setShowSubmitResult] = useState(false);
+  // Submit match result form state
+  const [resultHomeTeam, setResultHomeTeam] = useState("__none__");
+  const [resultAwayTeam, setResultAwayTeam] = useState("__none__");
+  const [resultHomeScore, setResultHomeScore] = useState("");
+  const [resultAwayScore, setResultAwayScore] = useState("");
+  const [resultScorers, setResultScorers] = useState("");
+  const [resultReporterName, setResultReporterName] = useState("");
+  const [submittingResult, setSubmittingResult] = useState(false);
+
   const officials = getOfficials();
 
   // Real teams from local store (with overrides applied, deleted filtered out)
@@ -373,6 +387,75 @@ export function SettingsPage() {
     if (value && notifSound) playBeep();
   };
 
+  const FKF_FALLBACK_TEAMS = [
+    "Manda City",
+    "Galatasaray FC",
+    "Fayaz Bakers FC",
+    "Monaco FC",
+    "Amu Stars FC",
+    "Jaguar FC",
+    "Nyundo B",
+    "Dragon Juniors",
+    "Crocodile Juniors",
+    "Sportlight FC",
+    "Team Lawasco",
+    "Deepsea FC",
+    "All Brothers FC",
+    "Kashmir City",
+    "Boda Nations",
+    "Dragon Fly",
+    "Benfica FC",
+    "Flamingo FC",
+    "Deep Shark FC",
+    "Team Wazee",
+  ];
+  const teamNamesForSelect =
+    realTeams.length > 0 ? realTeams.map((t) => t.name) : FKF_FALLBACK_TEAMS;
+
+  const handleSubmitResult = async () => {
+    if (resultHomeTeam === "__none__" || resultAwayTeam === "__none__") {
+      toast.error("Please select both teams.");
+      return;
+    }
+    if (resultHomeTeam === resultAwayTeam) {
+      toast.error("Home and Away teams must be different.");
+      return;
+    }
+    if (!resultReporterName.trim()) {
+      toast.error("Your name is required.");
+      return;
+    }
+    const hs = Number.parseInt(resultHomeScore, 10);
+    const as_ = Number.parseInt(resultAwayScore, 10);
+    if (Number.isNaN(hs) || Number.isNaN(as_) || hs < 0 || as_ < 0) {
+      toast.error("Please enter valid scores (0 or higher).");
+      return;
+    }
+    setSubmittingResult(true);
+    try {
+      addPendingMatchResult({
+        homeTeam: resultHomeTeam,
+        awayTeam: resultAwayTeam,
+        homeScore: hs,
+        awayScore: as_,
+        scorers: resultScorers,
+        reporterName: resultReporterName.trim(),
+      });
+      toast.success("Result submitted! Officials will verify shortly. ✓");
+      setResultHomeTeam("__none__");
+      setResultAwayTeam("__none__");
+      setResultHomeScore("");
+      setResultAwayScore("");
+      setResultScorers("");
+      setResultReporterName("");
+      setShowSubmitResult(false);
+    } catch {
+      toast.error("Failed to submit. Please try again.");
+    } finally {
+      setSubmittingResult(false);
+    }
+  };
+
   const handleRatingSubmit = () => {
     if (appRating === 0) return;
     localStorage.setItem("appRating", String(appRating));
@@ -415,6 +498,113 @@ export function SettingsPage() {
       </div>
 
       <div className="px-4 mt-5 space-y-4">
+        {/* ── Reporter Tools — DRIVES DATA ────────────────────────────────── */}
+        <motion.section
+          initial={{ y: 12, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.01 }}
+          data-ocid="settings.reporter_tools.section"
+          className="rounded-2xl overflow-hidden border"
+          style={{
+            background:
+              "linear-gradient(135deg, oklch(0.18 0.08 145 / 0.35) 0%, oklch(0.14 0.05 252 / 0.8) 100%)",
+            borderColor: "oklch(0.45 0.14 145 / 0.4)",
+          }}
+        >
+          <div className="px-4 pt-4 pb-1">
+            <div className="flex items-center gap-2 mb-1">
+              <div
+                className="w-7 h-7 rounded-lg flex items-center justify-center"
+                style={{ background: "oklch(0.45 0.14 145 / 0.3)" }}
+              >
+                <Mic2
+                  className="w-3.5 h-3.5"
+                  style={{ color: "oklch(0.7 0.2 145)" }}
+                />
+              </div>
+              <h2
+                className="font-display font-black text-xs uppercase tracking-widest"
+                style={{ color: "oklch(0.7 0.2 145)" }}
+              >
+                Reporter Tools
+              </h2>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed pb-3">
+              Help keep Lamu football alive. Submit scores, become a reporter.
+            </p>
+          </div>
+          <div className="px-4 pb-4 space-y-2">
+            {/* Become a Reporter */}
+            <a
+              href="https://wa.me/254705434375?text=I%20want%20to%20become%20a%20match%20reporter%20for%20Lamu%20Sports%20Hub"
+              target="_blank"
+              rel="noopener noreferrer"
+              data-ocid="settings.become_reporter.button"
+              className="flex items-center gap-3 w-full rounded-xl px-4 py-3 transition-all text-left"
+              style={{
+                background: "oklch(0.45 0.14 145 / 0.18)",
+                border: "1px solid oklch(0.55 0.16 145 / 0.4)",
+              }}
+            >
+              <div
+                className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+                style={{ background: "oklch(0.45 0.14 145 / 0.25)" }}
+              >
+                <span className="text-lg">📢</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p
+                  className="text-sm font-black"
+                  style={{ color: "oklch(0.7 0.2 145)" }}
+                >
+                  Become a Reporter
+                </p>
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Join as a match reporter — WhatsApp us to apply
+                </p>
+              </div>
+              <ExternalLink
+                className="w-4 h-4 flex-shrink-0"
+                style={{ color: "oklch(0.6 0.16 145)" }}
+              />
+            </a>
+
+            {/* Submit Match Result */}
+            <button
+              type="button"
+              data-ocid="settings.submit_result.open_modal_button"
+              onClick={() => setShowSubmitResult(true)}
+              className="flex items-center gap-3 w-full rounded-xl px-4 py-3 transition-all text-left"
+              style={{
+                background: "oklch(0.55 0.18 24 / 0.15)",
+                border: "1px solid oklch(0.6 0.2 24 / 0.35)",
+              }}
+            >
+              <div
+                className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+                style={{ background: "oklch(0.55 0.18 24 / 0.2)" }}
+              >
+                <PlusCircle
+                  className="w-5 h-5"
+                  style={{ color: "oklch(0.7 0.22 24)" }}
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p
+                  className="text-sm font-black"
+                  style={{ color: "oklch(0.75 0.22 24)" }}
+                >
+                  Submit Match Result
+                </p>
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Report a score — officials will verify it
+                </p>
+              </div>
+              <ChevronRight className="w-4 h-4 flex-shrink-0 text-muted-foreground" />
+            </button>
+          </div>
+        </motion.section>
+
         {/* ── Personal Details & Account Security ────────────────────────────── */}
         <motion.section
           initial={{ y: 12, opacity: 0 }}
@@ -1664,6 +1854,172 @@ export function SettingsPage() {
           </p>
         </motion.div>
       </div>
+
+      {/* ── Submit Match Result Sheet ────────────────────────────────────── */}
+      <Sheet open={showSubmitResult} onOpenChange={setShowSubmitResult}>
+        <SheetContent
+          side="bottom"
+          className="rounded-t-2xl max-h-[92vh] overflow-y-auto"
+          data-ocid="settings.submit_result.sheet"
+        >
+          <SheetHeader className="pb-3">
+            <SheetTitle className="text-lg font-black flex items-center gap-2">
+              <Send className="w-5 h-5 text-primary" />
+              Submit Match Result
+            </SheetTitle>
+          </SheetHeader>
+          <p className="text-[12px] text-muted-foreground mb-4 -mt-1">
+            Report a match result. An official will verify and publish it.
+          </p>
+          <div className="space-y-3 pb-6">
+            {/* Home Team */}
+            <div>
+              <Label className="text-xs mb-1.5 block text-muted-foreground">
+                Home Team *
+              </Label>
+              <Select value={resultHomeTeam} onValueChange={setResultHomeTeam}>
+                <SelectTrigger
+                  className="h-9 text-sm"
+                  data-ocid="settings.submit_result.home_team.select"
+                >
+                  <SelectValue placeholder="Select home team…" />
+                </SelectTrigger>
+                <SelectContent className="max-h-60 overflow-y-auto">
+                  <SelectItem
+                    value="__none__"
+                    className="text-sm text-muted-foreground"
+                  >
+                    — Select home team —
+                  </SelectItem>
+                  {teamNamesForSelect.map((name) => (
+                    <SelectItem key={name} value={name} className="text-sm">
+                      {name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Away Team */}
+            <div>
+              <Label className="text-xs mb-1.5 block text-muted-foreground">
+                Away Team *
+              </Label>
+              <Select value={resultAwayTeam} onValueChange={setResultAwayTeam}>
+                <SelectTrigger
+                  className="h-9 text-sm"
+                  data-ocid="settings.submit_result.away_team.select"
+                >
+                  <SelectValue placeholder="Select away team…" />
+                </SelectTrigger>
+                <SelectContent className="max-h-60 overflow-y-auto">
+                  <SelectItem
+                    value="__none__"
+                    className="text-sm text-muted-foreground"
+                  >
+                    — Select away team —
+                  </SelectItem>
+                  {teamNamesForSelect.map((name) => (
+                    <SelectItem key={name} value={name} className="text-sm">
+                      {name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Score row */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs mb-1.5 block text-muted-foreground">
+                  Home Score *
+                </Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={99}
+                  placeholder="0"
+                  value={resultHomeScore}
+                  onChange={(e) => setResultHomeScore(e.target.value)}
+                  className="h-9 text-sm text-center"
+                  data-ocid="settings.submit_result.home_score.input"
+                />
+              </div>
+              <div>
+                <Label className="text-xs mb-1.5 block text-muted-foreground">
+                  Away Score *
+                </Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={99}
+                  placeholder="0"
+                  value={resultAwayScore}
+                  onChange={(e) => setResultAwayScore(e.target.value)}
+                  className="h-9 text-sm text-center"
+                  data-ocid="settings.submit_result.away_score.input"
+                />
+              </div>
+            </div>
+
+            {/* Scorers */}
+            <div>
+              <Label className="text-xs mb-1.5 block text-muted-foreground">
+                Goal Scorers (optional)
+              </Label>
+              <Textarea
+                placeholder="e.g. Hassan 23&apos;, Farid 67&apos;"
+                value={resultScorers}
+                onChange={(e) => setResultScorers(e.target.value)}
+                className="text-sm resize-none h-16"
+                data-ocid="settings.submit_result.scorers.textarea"
+              />
+            </div>
+
+            {/* Reporter Name */}
+            <div>
+              <Label className="text-xs mb-1.5 block text-muted-foreground">
+                Your Name (Reporter) *
+              </Label>
+              <Input
+                placeholder="Your full name"
+                value={resultReporterName}
+                onChange={(e) => setResultReporterName(e.target.value)}
+                className="h-9 text-sm"
+                data-ocid="settings.submit_result.reporter_name.input"
+              />
+              <p className="text-[10px] text-muted-foreground/60 mt-1">
+                Your name will be shown with the result (e.g. "Reported by
+                Hassan")
+              </p>
+            </div>
+
+            {/* Submit */}
+            <Button
+              onClick={handleSubmitResult}
+              disabled={submittingResult}
+              className="w-full text-sm font-black mt-2"
+              data-ocid="settings.submit_result.submit_button"
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.6 0.22 24) 0%, oklch(0.55 0.25 20) 100%)",
+              }}
+            >
+              {submittingResult ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Submitting…
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4 mr-2" />
+                  Submit Result
+                </>
+              )}
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* ── Terms & Conditions Sheet ──────────────────────────────────────── */}
       <Sheet open={showTerms} onOpenChange={setShowTerms}>

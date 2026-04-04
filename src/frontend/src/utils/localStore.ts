@@ -1910,10 +1910,89 @@ export type LocalFixture = {
   awayScore: number;
   status: string;
   ground?: string;
+  reporterName?: string;
+  lastUpdated?: number;
+  verified?: boolean;
 };
 
 export function getLocalFixtures(): LocalFixture[] {
   return getLocalStore<LocalFixture[]>("lsh_local_fixtures", []);
+}
+
+// ── Pending Match Results (reporter submissions) ───────────────────────────────
+export type PendingMatchResult = {
+  id: string;
+  homeTeam: string;
+  awayTeam: string;
+  homeScore: number;
+  awayScore: number;
+  scorers: string;
+  reporterName: string;
+  submittedAt: number;
+  status: "pending" | "approved" | "rejected";
+};
+
+const LSH_PENDING_RESULTS_KEY = "lsh_pending_results";
+
+export function getPendingMatchResults(): PendingMatchResult[] {
+  return getLocalStore<PendingMatchResult[]>(LSH_PENDING_RESULTS_KEY, []);
+}
+
+export function addPendingMatchResult(
+  result: Omit<PendingMatchResult, "id" | "submittedAt" | "status">,
+): PendingMatchResult {
+  const existing = getPendingMatchResults();
+  const newResult: PendingMatchResult = {
+    ...result,
+    id: `pr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    submittedAt: Date.now(),
+    status: "pending",
+  };
+  setLocalStore(LSH_PENDING_RESULTS_KEY, [...existing, newResult]);
+  return newResult;
+}
+
+export function approvePendingResult(id: string): void {
+  const all = getPendingMatchResults();
+  setLocalStore(
+    LSH_PENDING_RESULTS_KEY,
+    all.map((r) => (r.id === id ? { ...r, status: "approved" as const } : r)),
+  );
+}
+
+export function rejectPendingResult(id: string): void {
+  const all = getPendingMatchResults();
+  setLocalStore(
+    LSH_PENDING_RESULTS_KEY,
+    all.map((r) => (r.id === id ? { ...r, status: "rejected" as const } : r)),
+  );
+}
+
+// ── Reporter Registrations ─────────────────────────────────────────────────────
+export type ReporterApplication = {
+  id: string;
+  name: string;
+  phone: string;
+  team: string;
+  submittedAt: number;
+};
+
+const LSH_REPORTER_APPS_KEY = "lsh_reporter_applications";
+
+export function getReporterApplications(): ReporterApplication[] {
+  return getLocalStore<ReporterApplication[]>(LSH_REPORTER_APPS_KEY, []);
+}
+
+export function addReporterApplication(
+  app: Omit<ReporterApplication, "id" | "submittedAt">,
+): void {
+  const existing = getReporterApplications();
+  const newApp: ReporterApplication = {
+    ...app,
+    id: `rep-${Date.now()}`,
+    submittedAt: Date.now(),
+  };
+  setLocalStore(LSH_REPORTER_APPS_KEY, [...existing, newApp]);
 }
 
 // ── News Reactions ────────────────────────────────────────────────────────────

@@ -41,6 +41,13 @@ import {
   getTeamRegistrations,
 } from "@/utils/localStore";
 import {
+  type PendingMatchResult,
+  approvePendingResult,
+  getLocalFixtures,
+  getPendingMatchResults,
+  rejectPendingResult,
+} from "@/utils/localStore";
+import {
   type Award,
   type CardEvent,
   type GoalEvent,
@@ -139,6 +146,7 @@ import {
   PlayCircle,
   Plus,
   Radio,
+  RefreshCw,
   Shield,
   Trash2,
   Trophy,
@@ -311,6 +319,67 @@ function AdminPanelInner() {
     (r) => r.status === "pending",
   ).length;
   const [loading, setLoading] = useState(false);
+
+  // Pending match results state
+  const [pendingResults, setPendingResults] = useState<PendingMatchResult[]>(
+    () => getPendingMatchResults(),
+  );
+  const pendingResultsCount = pendingResults.filter(
+    (r) => r.status === "pending",
+  ).length;
+
+  const handleApprovePendingResult = (result: PendingMatchResult) => {
+    approvePendingResult(result.id);
+    // Update local fixtures with the approved score
+    const fixtures = getLocalFixtures();
+    const fixture = fixtures.find(
+      (f) =>
+        (f.homeTeam === result.homeTeam && f.awayTeam === result.awayTeam) ||
+        f.homeTeam === result.homeTeam ||
+        f.awayTeam === result.awayTeam,
+    );
+    if (fixture) {
+      const localScores = JSON.parse(
+        localStorage.getItem("lsh_local_match_scores") ?? "{}",
+      );
+      localScores[fixture.matchId] = {
+        homeScore: result.homeScore,
+        awayScore: result.awayScore,
+        status: "played",
+      };
+      localStorage.setItem(
+        "lsh_local_match_scores",
+        JSON.stringify(localScores),
+      );
+      // Update fixture with reporter info
+      const updatedFixtures = fixtures.map((f) =>
+        f.matchId === fixture.matchId
+          ? {
+              ...f,
+              homeScore: result.homeScore,
+              awayScore: result.awayScore,
+              status: "played",
+              reporterName: result.reporterName,
+              lastUpdated: Date.now(),
+              verified: true,
+            }
+          : f,
+      );
+      localStorage.setItem(
+        "lsh_local_fixtures",
+        JSON.stringify(updatedFixtures),
+      );
+    }
+    window.dispatchEvent(new CustomEvent("lsh:matches-updated"));
+    setPendingResults(getPendingMatchResults());
+    toast.success("Result approved and published.");
+  };
+
+  const handleRejectPendingResult = (id: string) => {
+    rejectPendingResult(id);
+    setPendingResults(getPendingMatchResults());
+    toast.success("Result rejected.");
+  };
 
   // Registrations tab state
   const [registrations, setRegistrations] = useState<TeamRegistrationRequest[]>(
@@ -1438,8 +1507,8 @@ function AdminPanelInner() {
             Settings
           </TabsTrigger>
         </TabsList>
-        {/* Row 3 — Inbox + Admins + Recovery + Registrations */}
-        <TabsList className="w-full grid grid-cols-4 mb-4">
+        {/* Row 3 — Inbox + Admins + Recovery + Registrations + Reports */}
+        <TabsList className="w-full grid grid-cols-5 mb-4">
           <TabsTrigger
             value="inbox"
             className="text-[9px] px-0.5 gap-1"
@@ -1460,6 +1529,19 @@ function AdminPanelInner() {
           >
             <Shield className="w-3 h-3" />
             Admins
+          </TabsTrigger>
+          <TabsTrigger
+            value="reports"
+            className="text-[9px] px-0.5 gap-1"
+            data-ocid="admin.reports.tab"
+          >
+            <CheckCircle className="w-3 h-3" />
+            Reports
+            {pendingResultsCount > 0 && (
+              <span className="ml-0.5 bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                {pendingResultsCount}
+              </span>
+            )}
           </TabsTrigger>
           <TabsTrigger
             value="recovery"
@@ -2104,6 +2186,191 @@ function AdminPanelInner() {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* Reports Tab — Pending Match Results */}
+        <TabsContent value="reports">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-black uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                <CheckCircle className="w-4 h-4 text-amber-400" />
+                Pending Match Results
+                {pendingResultsCount > 0 && (
+                  <span className="ml-1 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                    {pendingResultsCount}
+                  </span>
+                )}
+              </h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs"
+                onClick={() => setPendingResults(getPendingMatchResults())}
+              >
+                <RefreshCw className="w-3 h-3 mr-1" />
+                Refresh
+              </Button>
+            </div>
+            {pendingResults.filter((r) => r.status === "pending").length ===
+            0 ? (
+              <div
+                className="rounded-xl border border-dashed border-border p-8 text-center"
+                data-ocid="admin.reports.empty_state"
+              >
+                <CheckCircle className="w-8 h-8 mx-auto mb-2 text-muted-foreground/30" />
+                <p className="text-sm font-bold text-foreground mb-1">
+                  No pending results
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  When reporters submit match results, they appear here for
+                  approval.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2" data-ocid="admin.reports.list">
+                {pendingResults
+                  .filter((r) => r.status === "pending")
+                  .map((result, i) => {
+                    const minsAgo = Math.floor(
+                      (Date.now() - result.submittedAt) / 60000,
+                    );
+                    return (
+                      <div
+                        key={result.id}
+                        data-ocid={`admin.reports.item.${i + 1}`}
+                        className="rounded-xl border border-border bg-card overflow-hidden"
+                      >
+                        <div className="px-4 py-3">
+                          {/* Match header */}
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                                style={{
+                                  background: "oklch(0.5 0.14 50 / 0.15)",
+                                  color: "oklch(0.7 0.16 50)",
+                                  border: "1px solid oklch(0.5 0.14 50 / 0.3)",
+                                }}
+                              >
+                                PENDING
+                              </span>
+                              <span className="text-[10px] text-muted-foreground/60">
+                                {minsAgo < 1
+                                  ? "just now"
+                                  : minsAgo < 60
+                                    ? `${minsAgo}m ago`
+                                    : `${Math.floor(minsAgo / 60)}h ago`}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Match scoreline */}
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-black text-foreground truncate">
+                                {result.homeTeam}
+                              </p>
+                            </div>
+                            <div
+                              className="flex-shrink-0 font-black text-2xl tracking-tight"
+                              style={{ fontVariantNumeric: "tabular-nums" }}
+                            >
+                              {result.homeScore} — {result.awayScore}
+                            </div>
+                            <div className="flex-1 min-w-0 text-right">
+                              <p className="text-sm font-black text-foreground truncate">
+                                {result.awayTeam}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Reporter info */}
+                          <div className="flex items-center gap-2 mb-3 text-[11px] text-muted-foreground">
+                            <span>📝 Reported by:</span>
+                            <span className="font-semibold text-foreground/80">
+                              {result.reporterName}
+                            </span>
+                          </div>
+
+                          {result.scorers && (
+                            <p className="text-[11px] text-muted-foreground mb-3 italic">
+                              Scorers: {result.scorers}
+                            </p>
+                          )}
+
+                          {/* Action buttons */}
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              className="flex-1 text-xs font-bold gap-1"
+                              data-ocid={`admin.reports.approve_button.${i + 1}`}
+                              onClick={() => handleApprovePendingResult(result)}
+                              style={{
+                                background:
+                                  "linear-gradient(135deg, oklch(0.55 0.18 145), oklch(0.5 0.16 145))",
+                              }}
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" />✓ Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 text-xs font-bold gap-1 border-red-500/30 text-red-400 hover:bg-red-500/10"
+                              data-ocid={`admin.reports.reject_button.${i + 1}`}
+                              onClick={() =>
+                                handleRejectPendingResult(result.id)
+                              }
+                            >
+                              <XCircle className="w-3.5 h-3.5" />✗ Reject
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+
+            {/* Approved / Rejected history */}
+            {pendingResults.some((r) => r.status !== "pending") && (
+              <div className="mt-4">
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">
+                  History
+                </h4>
+                <div className="space-y-1.5">
+                  {pendingResults
+                    .filter((r) => r.status !== "pending")
+                    .slice(0, 10)
+                    .map((result, i) => (
+                      <div
+                        key={result.id}
+                        className="rounded-lg border border-border/40 bg-muted/20 px-3 py-2 flex items-center gap-3"
+                        data-ocid={`admin.reports.history.item.${i + 1}`}
+                      >
+                        <span
+                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                            result.status === "approved"
+                              ? "bg-green-500/15 text-green-400"
+                              : "bg-red-500/15 text-red-400"
+                          }`}
+                        >
+                          {result.status === "approved"
+                            ? "✓ Approved"
+                            : "✗ Rejected"}
+                        </span>
+                        <span className="text-xs text-foreground/70 flex-1 truncate">
+                          {result.homeTeam} {result.homeScore}–
+                          {result.awayScore} {result.awayTeam}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground/50">
+                          {result.reporterName}
+                        </span>
+                      </div>
+                    ))}
+                </div>
               </div>
             )}
           </div>

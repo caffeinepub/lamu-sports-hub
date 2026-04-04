@@ -2,6 +2,7 @@ import type { T__5 as BackendMatch } from "@/backend";
 import { Status } from "@/backend";
 import { useActor } from "@/hooks/useActor";
 import {
+  type LocalFixture,
   addActivityEntry,
   getDeletedTeamIds,
   getLocalFixtures,
@@ -108,12 +109,25 @@ export function MatchesPage() {
     document.title = "Matches \u2013 Lamu Sports Hub";
   }, []);
 
+  // Store a ref to the raw local fixtures for reporter attribution
+  const [localFixtureMap, setLocalFixtureMap] = useState<
+    Record<string, LocalFixture>
+  >(() => {
+    const result: Record<string, LocalFixture> = {};
+    for (const f of getLocalFixtures()) result[f.matchId] = f;
+    return result;
+  });
+
   const buildLocalMatches = () => {
     const localScores = getLocalStore<
       Record<string, { homeScore: number; awayScore: number; status: string }>
     >("lsh_local_match_scores", {});
     const fixtures = getLocalFixtures();
     const now = Date.now();
+    // Rebuild fixture map for reporter attribution
+    const newMap: Record<string, LocalFixture> = {};
+    for (const f of fixtures) newMap[f.matchId] = f;
+    setLocalFixtureMap(newMap);
     return fixtures.map((f) => {
       const ov = localScores[f.matchId];
       const kickoffMs = Math.floor(f.date / 1_000_000);
@@ -398,6 +412,44 @@ export function MatchesPage() {
               {refName && <span>\u2022 Ref: {refName}</span>}
             </div>
           )}
+
+          {/* Reporter attribution */}
+          {(() => {
+            const localFix = localFixtureMap[matchId];
+            if (!localFix?.reporterName) return null;
+            const lastUpdatedMs = localFix.lastUpdated ?? 0;
+            const minutesAgo = lastUpdatedMs
+              ? Math.floor((Date.now() - lastUpdatedMs) / 60000)
+              : null;
+            return (
+              <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                {localFix.verified && (
+                  <span
+                    className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
+                    style={{
+                      background: "oklch(0.55 0.18 145 / 0.15)",
+                      color: "oklch(0.65 0.18 145)",
+                      border: "1px solid oklch(0.55 0.18 145 / 0.3)",
+                    }}
+                  >
+                    ✓ Verified
+                  </span>
+                )}
+                <span className="text-[10px] text-muted-foreground/70">
+                  📝 Reported by:{" "}
+                  <span className="font-semibold text-muted-foreground">
+                    {localFix.reporterName}
+                  </span>
+                  {minutesAgo !== null && minutesAgo < 180 && (
+                    <span>
+                      {" "}
+                      · {minutesAgo < 1 ? "just now" : `${minutesAgo} min ago`}
+                    </span>
+                  )}
+                </span>
+              </div>
+            );
+          })()}
 
           {/* Join Match engagement button */}
           {(() => {

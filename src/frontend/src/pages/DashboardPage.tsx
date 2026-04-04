@@ -45,12 +45,16 @@ import {
   LSH_SYSTEM_STATUS_KEY,
   type NewsConfirmation,
   type SystemStatus,
+  getDeletedTeamIds,
+  getLocalFixtures,
   getLocalNews,
   getLocalStore,
+  getLocalTeams,
   getMatchPitches,
   getNewsConfirmations,
   getNewsPhotos,
   getPitches,
+  getTeamOverrides,
   getUserSettings,
 } from "@/utils/localStore";
 import { getActiveSimpleSession } from "@/utils/simpleAuth";
@@ -224,6 +228,87 @@ export function DashboardPage({
         String(m.status) === "scheduled",
     )
     .slice(0, 3);
+
+  // Hero match: live first, then next upcoming (from local fixtures if no backend)
+  const heroMatch = (() => {
+    // Try live backend match first
+    const live = liveMatches[0];
+    if (live) {
+      const home = teams.find((t) => t.teamId === live.homeTeam);
+      const away = teams.find((t) => t.teamId === live.awayTeam);
+      return {
+        matchId: live.matchId,
+        homeName: home?.name ?? live.homeTeam,
+        awayName: away?.name ?? live.awayTeam,
+        homeScore: Number(live.homeScore),
+        awayScore: Number(live.awayScore),
+        kickoffMs: Number(live.date) / 1_000_000,
+        isLive: true,
+        isPlayed: false,
+        verified: false,
+        reporterName: undefined as string | undefined,
+      };
+    }
+    // Try next upcoming backend match
+    const next = upcomingMatches[0];
+    if (next) {
+      const home = teams.find((t) => t.teamId === next.homeTeam);
+      const away = teams.find((t) => t.teamId === next.awayTeam);
+      return {
+        matchId: next.matchId,
+        homeName: home?.name ?? next.homeTeam,
+        awayName: away?.name ?? next.awayTeam,
+        homeScore: Number(next.homeScore),
+        awayScore: Number(next.awayScore),
+        kickoffMs: Number(next.date) / 1_000_000,
+        isLive: false,
+        isPlayed: false,
+        verified: false,
+        reporterName: undefined as string | undefined,
+      };
+    }
+    // Fallback: use local fixtures
+    const overrides = getTeamOverrides();
+    const deletedIds = new Set(getDeletedTeamIds());
+    const localTeams = getLocalTeams().filter((t) => !deletedIds.has(t.teamId));
+    const localScores = getLocalStore<
+      Record<string, { homeScore: number; awayScore: number; status: string }>
+    >("lsh_local_match_scores", {});
+    const now = Date.now();
+    const localFixtures = getLocalFixtures().map((f) => {
+      const ov = localScores[f.matchId];
+      const kickoffMs = Math.floor(f.date / 1_000_000);
+      const autoPlayed = now - kickoffMs > 95 * 60 * 1000;
+      const statusStr = ov?.status ?? (autoPlayed ? "played" : f.status);
+      return { ...f, statusStr, kickoffMs, ov };
+    });
+    const liveLocal = localFixtures.find((f) => f.statusStr === "live");
+    const upcomingLocal = localFixtures
+      .filter((f) => f.statusStr === "scheduled" && f.kickoffMs > now)
+      .sort((a, b) => a.kickoffMs - b.kickoffMs)[0];
+    const target = liveLocal ?? upcomingLocal;
+    if (!target) return null;
+    const homeTeamName = localTeams.find((t) => t.teamId === target.homeTeam)
+      ? (overrides[target.homeTeam]?.name ??
+        localTeams.find((t) => t.teamId === target.homeTeam)!.name)
+      : target.homeTeam;
+    const awayTeamName = localTeams.find((t) => t.teamId === target.awayTeam)
+      ? (overrides[target.awayTeam]?.name ??
+        localTeams.find((t) => t.teamId === target.awayTeam)!.name)
+      : target.awayTeam;
+    return {
+      matchId: target.matchId,
+      homeName: homeTeamName,
+      awayName: awayTeamName,
+      homeScore: target.ov?.homeScore ?? target.homeScore,
+      awayScore: target.ov?.awayScore ?? target.awayScore,
+      kickoffMs: target.kickoffMs,
+      isLive: target.statusStr === "live",
+      isPlayed: target.statusStr === "played",
+      verified: target.verified ?? false,
+      reporterName: target.reporterName,
+    };
+  })();
   // Today's matches for the engagement section
   const todayMatchCards = (() => {
     const today = new Date();
@@ -632,6 +717,159 @@ export function DashboardPage({
         </motion.div>
       </div>
 
+      {/* ── HERO: Live / Next Match card ───────────────────────────────────── */}
+      {heroMatch && (
+        <div className="px-4 mt-4 mb-1">
+          <motion.div
+            initial={{ y: 8, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.08 }}
+            data-ocid="dashboard.hero_match.card"
+            className="rounded-2xl border overflow-hidden"
+            style={{
+              background: heroMatch.isLive
+                ? "linear-gradient(135deg, oklch(0.18 0.08 145 / 0.4) 0%, oklch(0.14 0.05 252) 100%)"
+                : "linear-gradient(135deg, oklch(0.18 0.06 252) 0%, oklch(0.13 0.04 255) 100%)",
+              borderColor: heroMatch.isLive
+                ? "oklch(0.55 0.18 145 / 0.5)"
+                : "oklch(0.3 0.06 252 / 0.6)",
+            }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 pt-3 pb-2">
+              <div className="flex items-center gap-2">
+                {heroMatch.isLive ? (
+                  <span
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wider"
+                    style={{
+                      background: "oklch(0.55 0.18 145 / 0.2)",
+                      color: "oklch(0.7 0.2 145)",
+                      border: "1px solid oklch(0.55 0.18 145 / 0.4)",
+                    }}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                    LIVE NOW
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                    ⚽ Next Match
+                  </span>
+                )}
+                {heroMatch.verified && (
+                  <span
+                    className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
+                    style={{
+                      background: "oklch(0.55 0.18 145 / 0.15)",
+                      color: "oklch(0.65 0.18 145)",
+                      border: "1px solid oklch(0.55 0.18 145 / 0.3)",
+                    }}
+                  >
+                    ✓ Verified
+                  </span>
+                )}
+              </div>
+              {!heroMatch.isLive && (
+                <span className="text-[11px] font-bold text-primary">
+                  {new Date(heroMatch.kickoffMs).toLocaleDateString("en-GB", {
+                    weekday: "short",
+                    day: "numeric",
+                    month: "short",
+                  })}{" "}
+                  ·{" "}
+                  {new Date(heroMatch.kickoffMs).toLocaleTimeString("en-GB", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              )}
+            </div>
+
+            {/* Score row */}
+            <div className="flex items-center px-4 pb-3 gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-black text-foreground leading-tight truncate">
+                  {heroMatch.homeName}
+                </div>
+              </div>
+              <div className="flex-shrink-0 text-center">
+                {heroMatch.isLive || heroMatch.isPlayed ? (
+                  <div
+                    className="font-black text-3xl tracking-tight"
+                    style={{
+                      color: heroMatch.isLive
+                        ? "oklch(0.7 0.2 145)"
+                        : "oklch(0.95 0.02 252)",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {heroMatch.homeScore} — {heroMatch.awayScore}
+                  </div>
+                ) : (
+                  <div className="font-black text-lg text-muted-foreground">
+                    VS
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 min-w-0 text-right">
+                <div className="text-sm font-black text-foreground leading-tight truncate">
+                  {heroMatch.awayName}
+                </div>
+              </div>
+            </div>
+
+            {/* Reporter attribution */}
+            {heroMatch.reporterName && (
+              <div
+                className="px-4 pb-2.5 text-[10px] font-medium"
+                style={{ color: "oklch(0.55 0.08 252)" }}
+              >
+                📝 Reported by:{" "}
+                <span className="font-bold text-foreground/70">
+                  {heroMatch.reporterName}
+                </span>
+                {heroMatch.isLive && (
+                  <span className="ml-1.5 text-muted-foreground/50">
+                    · Updated{" "}
+                    {Math.floor(
+                      (Date.now() - (heroMatch.kickoffMs ?? Date.now())) /
+                        60000,
+                    )}
+                    ′ ago
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* View Match CTA */}
+            {(heroMatch.isLive || heroMatch.isPlayed) && (
+              <div className="px-4 pb-3">
+                <button
+                  type="button"
+                  data-ocid="dashboard.hero_match.button"
+                  onClick={() =>
+                    navigate({ to: `/matchday/${heroMatch.matchId}` })
+                  }
+                  className="w-full py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all"
+                  style={{
+                    background: heroMatch.isLive
+                      ? "linear-gradient(135deg, oklch(0.55 0.18 145 / 0.3), oklch(0.5 0.16 145 / 0.2))"
+                      : "oklch(0.2 0.05 252 / 0.6)",
+                    color: heroMatch.isLive
+                      ? "oklch(0.7 0.2 145)"
+                      : "oklch(0.7 0.06 252)",
+                    border: heroMatch.isLive
+                      ? "1px solid oklch(0.55 0.18 145 / 0.3)"
+                      : "1px solid oklch(0.35 0.06 252 / 0.4)",
+                  }}
+                >
+                  {heroMatch.isLive ? "Follow Live →" : "View Match →"}
+                </button>
+              </div>
+            )}
+          </motion.div>
+        </div>
+      )}
+
       {/* Quick Links Bar */}
       <div className="overflow-x-auto scrollbar-hide mt-3 mb-1">
         <div className="flex gap-2 px-4 pb-1 min-w-max">
@@ -916,6 +1154,14 @@ export function DashboardPage({
           );
         })()}
 
+        {/* ── Today's Matches — most important section ─────────────────────── */}
+        {todayMatchCards.length > 0 && (
+          <TodayMatchesSection
+            todayMatches={todayMatchCards}
+            currentUser={currentSimpleUser}
+          />
+        )}
+
         {/* Top 5 standings snippet */}
         <motion.div
           initial={{ y: 10, opacity: 0 }}
@@ -1180,14 +1426,6 @@ export function DashboardPage({
               })()}
             </div>
           </motion.div>
-        )}
-
-        {/* Today's Matches — engagement section */}
-        {todayMatchCards.length > 0 && (
-          <TodayMatchesSection
-            todayMatches={todayMatchCards}
-            currentUser={currentSimpleUser}
-          />
         )}
 
         {/* Activity Feed */}
