@@ -1785,7 +1785,7 @@ export function SettingsPage() {
             {[
               {
                 q: "How do I add my team?",
-                a: "Enter Official mode using code LSH2026, then go to Admin Panel → Teams → Add Team.",
+                a: "Enter Official mode using your official access code, then go to Admin Panel → Teams → Add Team.",
               },
               {
                 q: "Who can edit match scores?",
@@ -2053,8 +2053,8 @@ export function SettingsPage() {
                 3. Official Content
               </h3>
               <p className="text-[13px] text-muted-foreground leading-relaxed">
-                Only verified officials (access code LSH2026) may add, edit, or
-                delete league data. Unauthorized data modification is
+                Only verified officials (with the official access code) may add,
+                edit, or delete league data. Unauthorized data modification is
                 prohibited.
               </p>
             </div>

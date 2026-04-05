@@ -300,10 +300,32 @@ export function TeamsPage() {
                     type="button"
                     data-ocid={`teams.pending_reg.approve_button.${i + 1}`}
                     onClick={() => handleApproveReg(reg)}
-                    className="w-8 h-8 rounded-full bg-green-500/20 hover:bg-green-500/40 flex items-center justify-center transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/20 hover:bg-green-500/40 transition-colors border border-green-500/30"
                     aria-label="Approve registration"
                   >
-                    <span className="text-green-400 text-sm font-bold">✓</span>
+                    <span className="w-4 h-4 rounded border-2 border-green-400 bg-green-400/20 flex items-center justify-center flex-shrink-0">
+                      <svg
+                        width="10"
+                        height="8"
+                        viewBox="0 0 10 8"
+                        fill="none"
+                        aria-hidden="true"
+                        role="presentation"
+                      >
+                        <title>checkmark</title>
+                        <path
+                          d="M1 4L3.5 6.5L9 1"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="text-green-400"
+                        />
+                      </svg>
+                    </span>
+                    <span className="text-green-400 text-xs font-bold">
+                      Approve
+                    </span>
                   </button>
                   <button
                     type="button"

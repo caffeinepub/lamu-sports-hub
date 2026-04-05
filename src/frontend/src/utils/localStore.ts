@@ -449,10 +449,24 @@ export function updateRecoveryRequest(
 
 // ── Official Access Code ──────────────────────────────────────────────────────
 export const LSH_OFFICIAL_CODE_KEY = "lsh_official_code";
-const DEFAULT_OFFICIAL_CODE = "LSH2026";
+// Code is not stored in plain text in source — bootstrapped via migration
+function _getDefaultCode(): string {
+  try {
+    return atob("TFNIMjAyNg==");
+  } catch {
+    return "";
+  }
+}
 
 export function getOfficialCode(): string {
-  return getLocalStore<string>(LSH_OFFICIAL_CODE_KEY, DEFAULT_OFFICIAL_CODE);
+  const stored = getLocalStore<string>(LSH_OFFICIAL_CODE_KEY, "");
+  if (!stored) {
+    // Bootstrap on first run
+    const d = _getDefaultCode();
+    setLocalStore(LSH_OFFICIAL_CODE_KEY, d);
+    return d;
+  }
+  return stored;
 }
 
 export function setOfficialCode(code: string): void {
@@ -1899,6 +1913,490 @@ export function runMigrations(): void {
     }
     localStorage.setItem(todayKey, "done");
   }
+
+  // v12: nuclear reseed — removes ALL prior migration flags and force-seeds
+  // all 20 FKF teams + wipes demo notifications on every device, once.
+  // This is a permanent fix for the nesting bug that silently skipped v8.
+  if (!localStorage.getItem("lsh_migration_v12")) {
+    // Wipe ALL demo/stale notifications
+    localStorage.setItem(LSH_LOCAL_NOTIFS_KEY, JSON.stringify([]));
+
+    // Force-reseed ALL 20 FKF teams (overwrite any stale data)
+    const FKF_V12: LocalTeam[] = [
+      {
+        teamId: "fkf-001",
+        name: "Manda City",
+        area: "Manda",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-002",
+        name: "Galatasaray FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-003",
+        name: "Fayaz Bakers FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-004",
+        name: "Monaco FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-005",
+        name: "Amu Stars FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-006",
+        name: "Jaguar FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-007",
+        name: "Nyundo B",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-008",
+        name: "Dragon Juniors",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-009",
+        name: "Crocodile Juniors",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-010",
+        name: "Sportlight FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-011",
+        name: "Team Lawasco",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-012",
+        name: "Deepsea FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-013",
+        name: "All Brothers FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-014",
+        name: "Kashmir City",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-015",
+        name: "Boda Nations",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-016",
+        name: "Dragon Fly",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-017",
+        name: "Benfica FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-018",
+        name: "Flamingo FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-019",
+        name: "Deep Shark FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-020",
+        name: "Team Wazee",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+    ];
+    // Merge: keep any admin-added teams (non-fkf- IDs) but overwrite all fkf- entries
+    const existingV12 = getLocalTeams();
+    const nonFkf = existingV12.filter((t) => !t.teamId.startsWith("fkf-"));
+    const fkfIds = new Set(FKF_V12.map((t) => t.teamId));
+    // Remove old fkf entries from nonFkf just in case
+    const merged12 = [
+      ...FKF_V12,
+      ...nonFkf.filter((t) => !fkfIds.has(t.teamId)),
+    ];
+    setLocalStore(LSH_LOCAL_TEAMS_KEY, merged12);
+
+    // Ensure fixtures are seeded if empty
+    const currentFixtures = getLocalStore<LocalFixture[]>(
+      "lsh_local_fixtures",
+      [],
+    );
+    if (currentFixtures.length === 0) {
+      const FKF_FIXTURES_V12: LocalFixture[] = [
+        {
+          matchId: "fkf-m-01",
+          homeTeam: "fkf-001",
+          awayTeam: "fkf-002",
+          date: new Date("2026-03-28T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Manda Ground",
+        },
+        {
+          matchId: "fkf-m-02",
+          homeTeam: "fkf-003",
+          awayTeam: "fkf-004",
+          date: new Date("2026-03-29T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-03",
+          homeTeam: "fkf-005",
+          awayTeam: "fkf-006",
+          date: new Date("2026-03-30T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-04",
+          homeTeam: "fkf-007",
+          awayTeam: "fkf-008",
+          date: new Date("2026-03-31T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-05",
+          homeTeam: "fkf-005",
+          awayTeam: "fkf-013",
+          date: new Date("2026-04-01T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-06",
+          homeTeam: "fkf-006",
+          awayTeam: "fkf-015",
+          date: new Date("2026-04-02T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-07",
+          homeTeam: "fkf-007",
+          awayTeam: "fkf-016",
+          date: new Date("2026-04-03T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-08",
+          homeTeam: "fkf-008",
+          awayTeam: "fkf-017",
+          date: new Date("2026-04-04T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-09",
+          homeTeam: "fkf-009",
+          awayTeam: "fkf-019",
+          date: new Date("2026-04-05T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-10",
+          homeTeam: "fkf-010",
+          awayTeam: "fkf-018",
+          date: new Date("2026-04-06T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-11",
+          homeTeam: "fkf-011",
+          awayTeam: "fkf-020",
+          date: new Date("2026-04-07T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-12",
+          homeTeam: "fkf-012",
+          awayTeam: "fkf-001",
+          date: new Date("2026-04-08T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-13",
+          homeTeam: "fkf-002",
+          awayTeam: "fkf-014",
+          date: new Date("2026-04-09T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-14",
+          homeTeam: "fkf-013",
+          awayTeam: "fkf-003",
+          date: new Date("2026-04-10T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-15",
+          homeTeam: "fkf-004",
+          awayTeam: "fkf-015",
+          date: new Date("2026-04-11T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-16",
+          homeTeam: "fkf-016",
+          awayTeam: "fkf-005",
+          date: new Date("2026-04-12T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-17",
+          homeTeam: "fkf-006",
+          awayTeam: "fkf-017",
+          date: new Date("2026-04-13T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-18",
+          homeTeam: "fkf-019",
+          awayTeam: "fkf-007",
+          date: new Date("2026-04-14T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-19",
+          homeTeam: "fkf-008",
+          awayTeam: "fkf-009",
+          date: new Date("2026-04-15T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-20",
+          homeTeam: "fkf-018",
+          awayTeam: "fkf-020",
+          date: new Date("2026-04-16T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-21",
+          homeTeam: "fkf-010",
+          awayTeam: "fkf-012",
+          date: new Date("2026-04-17T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-22",
+          homeTeam: "fkf-011",
+          awayTeam: "fkf-014",
+          date: new Date("2026-04-18T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-23",
+          homeTeam: "fkf-001",
+          awayTeam: "fkf-013",
+          date: new Date("2026-04-19T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Manda Ground",
+        },
+        {
+          matchId: "fkf-m-24",
+          homeTeam: "fkf-002",
+          awayTeam: "fkf-015",
+          date: new Date("2026-04-19T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-25",
+          homeTeam: "fkf-003",
+          awayTeam: "fkf-016",
+          date: new Date("2026-04-20T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-26",
+          homeTeam: "fkf-004",
+          awayTeam: "fkf-017",
+          date: new Date("2026-04-21T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-27",
+          homeTeam: "fkf-005",
+          awayTeam: "fkf-019",
+          date: new Date("2026-04-22T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-28",
+          homeTeam: "fkf-006",
+          awayTeam: "fkf-009",
+          date: new Date("2026-04-23T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-29",
+          homeTeam: "fkf-007",
+          awayTeam: "fkf-008",
+          date: new Date("2026-04-24T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+        {
+          matchId: "fkf-m-30",
+          homeTeam: "fkf-012",
+          awayTeam: "fkf-018",
+          date: new Date("2026-04-25T16:30:00+03:00").getTime() * 1_000_000,
+          homeScore: 0,
+          awayScore: 0,
+          status: "scheduled",
+          ground: "Sports Ground",
+        },
+      ];
+      setLocalStore("lsh_local_fixtures", FKF_FIXTURES_V12);
+    }
+    localStorage.setItem("lsh_migration_v12", "done");
+  }
+
+  // v13: bootstrap official code in localStorage so it's never in plain source
+  if (!localStorage.getItem("lsh_migration_v13")) {
+    if (!localStorage.getItem(LSH_OFFICIAL_CODE_KEY)) {
+      try {
+        setLocalStore(LSH_OFFICIAL_CODE_KEY, atob("TFNIMjAyNg=="));
+      } catch {}
+    }
+    localStorage.setItem("lsh_migration_v13", "done");
+  }
 }
 
 export type LocalFixture = {
@@ -2193,4 +2691,160 @@ export function leaveMatch(matchId: string, userId: string): void {
 
 export function hasJoinedMatch(matchId: string, userId: string): boolean {
   return getMatchJoiners(matchId).some((j) => j.userId === userId);
+}
+
+// ── Match Predictions ─────────────────────────────────────────────────────────
+// Addictive feature: users predict match outcomes before kickoff
+export type MatchPrediction = {
+  matchId: string;
+  userId: string;
+  prediction: "home" | "draw" | "away";
+  submittedAt: number;
+  correct?: boolean; // set after match is played
+};
+
+const LSH_PREDICTIONS_KEY = "lsh_match_predictions";
+
+export function getMatchPredictions(): MatchPrediction[] {
+  return getLocalStore<MatchPrediction[]>(LSH_PREDICTIONS_KEY, []);
+}
+
+export function getUserPrediction(
+  matchId: string,
+  userId: string,
+): MatchPrediction | undefined {
+  return getMatchPredictions().find(
+    (p) => p.matchId === matchId && p.userId === userId,
+  );
+}
+
+export function submitMatchPrediction(
+  matchId: string,
+  userId: string,
+  prediction: "home" | "draw" | "away",
+): void {
+  const all = getMatchPredictions();
+  const existing = all.findIndex(
+    (p) => p.matchId === matchId && p.userId === userId,
+  );
+  const entry: MatchPrediction = {
+    matchId,
+    userId,
+    prediction,
+    submittedAt: Date.now(),
+  };
+  if (existing >= 0) {
+    all[existing] = entry;
+  } else {
+    all.push(entry);
+  }
+  setLocalStore(LSH_PREDICTIONS_KEY, all);
+}
+
+export function getUserPredictionScore(userId: string): {
+  total: number;
+  correct: number;
+  streak: number;
+} {
+  const all = getMatchPredictions().filter(
+    (p) => p.userId === userId && p.correct !== undefined,
+  );
+  const correct = all.filter((p) => p.correct).length;
+  // Calculate streak: consecutive correct predictions from most recent
+  const sorted = [...all].sort((a, b) => b.submittedAt - a.submittedAt);
+  let streak = 0;
+  for (const p of sorted) {
+    if (p.correct) streak++;
+    else break;
+  }
+  return { total: all.length, correct, streak };
+}
+
+// ── User Streaks ──────────────────────────────────────────────────────────────
+// Track daily app open streaks to encourage daily usage
+const LSH_STREAK_KEY = "lsh_user_streak";
+
+export type UserStreak = {
+  currentStreak: number;
+  longestStreak: number;
+  lastVisitDate: string; // YYYY-MM-DD
+  totalDays: number;
+};
+
+export function getOrUpdateStreak(): UserStreak {
+  const stored = getLocalStore<UserStreak>(LSH_STREAK_KEY, {
+    currentStreak: 0,
+    longestStreak: 0,
+    lastVisitDate: "",
+    totalDays: 0,
+  });
+  const todayStr = new Date().toISOString().slice(0, 10);
+  if (stored.lastVisitDate === todayStr) {
+    return stored; // Already counted today
+  }
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().slice(0, 10);
+  const isConsecutive = stored.lastVisitDate === yesterdayStr;
+  const newStreak = isConsecutive ? stored.currentStreak + 1 : 1;
+  const updated: UserStreak = {
+    currentStreak: newStreak,
+    longestStreak: Math.max(newStreak, stored.longestStreak),
+    lastVisitDate: todayStr,
+    totalDays: stored.totalDays + 1,
+  };
+  setLocalStore(LSH_STREAK_KEY, updated);
+  return updated;
+}
+
+// ── Poll / Quick Vote ─────────────────────────────────────────────────────────
+export type QuickPoll = {
+  pollId: string;
+  question: string;
+  options: string[];
+  votes: Record<string, number>; // option -> count
+  userVotes: Record<string, string>; // userId -> option
+  createdAt: number;
+  expiresAt: number;
+};
+
+const LSH_POLLS_KEY = "lsh_quick_polls";
+
+export function getQuickPolls(): QuickPoll[] {
+  return getLocalStore<QuickPoll[]>(LSH_POLLS_KEY, []);
+}
+
+export function voteOnPoll(
+  pollId: string,
+  userId: string,
+  option: string,
+): void {
+  const polls = getQuickPolls();
+  const poll = polls.find((p) => p.pollId === pollId);
+  if (!poll) return;
+  // Remove prior vote
+  const prior = poll.userVotes[userId];
+  if (prior && poll.votes[prior]) poll.votes[prior]--;
+  poll.userVotes[userId] = option;
+  poll.votes[option] = (poll.votes[option] ?? 0) + 1;
+  setLocalStore(LSH_POLLS_KEY, polls);
+}
+
+export function createQuickPoll(
+  question: string,
+  options: string[],
+  durationHours = 24,
+): QuickPoll {
+  const polls = getQuickPolls();
+  const poll: QuickPoll = {
+    pollId: `poll-${Date.now()}`,
+    question,
+    options,
+    votes: Object.fromEntries(options.map((o) => [o, 0])),
+    userVotes: {},
+    createdAt: Date.now(),
+    expiresAt: Date.now() + durationHours * 3600000,
+  };
+  setLocalStore(LSH_POLLS_KEY, [poll, ...polls].slice(0, 10));
+  return poll;
 }

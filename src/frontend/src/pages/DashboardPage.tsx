@@ -45,6 +45,8 @@ import {
   LSH_SYSTEM_STATUS_KEY,
   type NewsConfirmation,
   type SystemStatus,
+  createQuickPoll,
+  getActivityFeed,
   getDeletedTeamIds,
   getLocalFixtures,
   getLocalNews,
@@ -53,9 +55,12 @@ import {
   getMatchPitches,
   getNewsConfirmations,
   getNewsPhotos,
+  getOrUpdateStreak,
   getPitches,
+  getQuickPolls,
   getTeamOverrides,
   getUserSettings,
+  voteOnPoll,
 } from "@/utils/localStore";
 import { getActiveSimpleSession } from "@/utils/simpleAuth";
 import { computeBackendStandings } from "@/utils/standingsUtils";
@@ -188,8 +193,50 @@ export function DashboardPage({
   const isAdmin = role === "admin";
   const [currentSimpleUser] = useState(() => getActiveSimpleSession());
 
+  // Addictive engagement state
+  const [streak, setStreak] = useState(() => getOrUpdateStreak());
+  const [activeTodayCount, setActiveTodayCount] = useState(() => {
+    const feed = getActivityFeed();
+    const cutoff = Date.now() - 86400000;
+    const names = new Set(
+      feed.filter((e) => e.timestamp > cutoff).map((e) => e.userName),
+    );
+    return names.size;
+  });
+  const [activePoll, setActivePoll] = useState(() => {
+    const polls = getQuickPolls();
+    const now = Date.now();
+    const live = polls.find((p) => p.expiresAt > now);
+    if (live) return live;
+    return createQuickPoll(
+      "Who will win the league?",
+      [
+        "Manda City",
+        "Galatasaray FC",
+        "Fayaz Bakers FC",
+        "Monaco FC",
+        "Amu Stars FC",
+      ],
+      168,
+    );
+  });
+  const [pollVoted, setPollVoted] = useState(() => {
+    const userId = getActiveSimpleSession()?.id ?? "anonymous";
+    const poll = getQuickPolls().find((p) => p.expiresAt > Date.now());
+    return poll?.userVotes[userId] ?? null;
+  });
+  const pollUserId = currentSimpleUser?.id ?? "anonymous";
+
   useEffect(() => {
     document.title = "Lamu Sports Hub | Football League Tables & Teams";
+    // Refresh streak and active count on mount
+    setStreak(getOrUpdateStreak());
+    const feed = getActivityFeed();
+    const cutoff = Date.now() - 86400000;
+    const names = new Set(
+      feed.filter((e) => e.timestamp > cutoff).map((e) => e.userName),
+    );
+    setActiveTodayCount(names.size);
   }, []);
 
   // Backend data state
@@ -560,7 +607,7 @@ export function DashboardPage({
           <AlertCircle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
           <p className="text-[10px] text-yellow-200 flex-1 leading-tight">
             Your data is saved on this device only. Enter{" "}
-            <strong>Official mode (LSH2026)</strong> to save data permanently.
+            <strong>Official mode</strong> to save data permanently.
           </p>
         </div>
       )}
@@ -715,6 +762,70 @@ export function DashboardPage({
             🏝️ Island Pride. Island Football.
           </p>
         </motion.div>
+      </div>
+
+      {/* ── Streak & Active Users Pill ─────────────────────────────────────── */}
+      <div className="px-4 mt-3 flex items-center gap-2 flex-wrap">
+        {streak.currentStreak >= 1 && (
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.05 }}
+            data-ocid="dashboard.streak.card"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
+            style={{
+              background:
+                streak.currentStreak >= 3
+                  ? "oklch(0.55 0.22 24 / 0.15)"
+                  : "oklch(0.25 0.05 252 / 0.8)",
+              border:
+                streak.currentStreak >= 3
+                  ? "1px solid oklch(0.6 0.22 24 / 0.4)"
+                  : "1px solid oklch(0.35 0.06 252 / 0.5)",
+            }}
+          >
+            <span
+              className={streak.currentStreak >= 3 ? "animate-pulse" : ""}
+              style={{ fontSize: "13px" }}
+            >
+              🔥
+            </span>
+            <span
+              className="text-[11px] font-black"
+              style={{
+                color:
+                  streak.currentStreak >= 3
+                    ? "oklch(0.8 0.2 24)"
+                    : "oklch(0.75 0.1 252)",
+              }}
+            >
+              {streak.currentStreak} day streak
+            </span>
+            {streak.longestStreak > streak.currentStreak && (
+              <span className="text-[10px] text-muted-foreground/70">
+                · Best: {streak.longestStreak}
+              </span>
+            )}
+          </motion.div>
+        )}
+        {activeTodayCount > 0 && (
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.08 }}
+            data-ocid="dashboard.active_users.card"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
+            style={{
+              background: "oklch(0.55 0.18 145 / 0.1)",
+              border: "1px solid oklch(0.55 0.18 145 / 0.3)",
+            }}
+          >
+            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse inline-block" />
+            <span className="text-[11px] font-bold text-green-400">
+              {activeTodayCount} active today
+            </span>
+          </motion.div>
+        )}
       </div>
 
       {/* ── HERO: Live / Next Match card ───────────────────────────────────── */}
@@ -1424,6 +1535,124 @@ export function DashboardPage({
                   </div>
                 ));
               })()}
+            </div>
+          </motion.div>
+        )}
+
+        {/* Quick Poll Widget */}
+        {activePoll && (
+          <motion.div
+            initial={{ y: 10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.28 }}
+            data-ocid="dashboard.poll.card"
+            className="rounded-2xl border border-border bg-card overflow-hidden"
+            style={{ borderColor: "oklch(0.4 0.12 252 / 0.4)" }}
+          >
+            <div
+              className="px-4 pt-3 pb-2"
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.18 0.06 252 / 0.5) 0%, oklch(0.15 0.04 255 / 0.3) 100%)",
+              }}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-base">🗳️</span>
+                <span className="text-[11px] font-black text-muted-foreground uppercase tracking-wider">
+                  Fan Poll
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-bold ml-auto">
+                  {Object.values(activePoll.votes).reduce((a, b) => a + b, 0)}{" "}
+                  votes
+                </span>
+              </div>
+              <h3 className="font-bold text-sm text-foreground">
+                {activePoll.question}
+              </h3>
+            </div>
+            <div className="px-4 py-3 space-y-2">
+              {activePoll.options.map((option) => {
+                const total = Object.values(activePoll.votes).reduce(
+                  (a, b) => a + b,
+                  0,
+                );
+                const count = activePoll.votes[option] ?? 0;
+                const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                const isMyVote = pollVoted === option;
+                const hasVoted = !!pollVoted;
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    data-ocid="dashboard.poll.toggle"
+                    disabled={hasVoted}
+                    onClick={() => {
+                      if (hasVoted) return;
+                      voteOnPoll(activePoll.pollId, pollUserId, option);
+                      setActivePoll((prev) => {
+                        if (!prev) return prev;
+                        const updated = {
+                          ...prev,
+                          votes: { ...prev.votes },
+                          userVotes: { ...prev.userVotes },
+                        };
+                        updated.votes[option] =
+                          (updated.votes[option] ?? 0) + 1;
+                        updated.userVotes[pollUserId] = option;
+                        return updated;
+                      });
+                      setPollVoted(option);
+                    }}
+                    className="w-full relative rounded-lg overflow-hidden transition-all text-left"
+                    style={{
+                      border: isMyVote
+                        ? "1px solid oklch(0.55 0.18 252 / 0.6)"
+                        : hasVoted
+                          ? "1px solid oklch(0.28 0.04 255 / 0.4)"
+                          : "1px solid oklch(0.32 0.06 252 / 0.5)",
+                      cursor: hasVoted ? "default" : "pointer",
+                    }}
+                  >
+                    {/* Fill bar */}
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: hasVoted ? `${pct}%` : "0%" }}
+                      transition={{ duration: 0.5, ease: "easeOut" }}
+                      className="absolute inset-y-0 left-0 rounded-lg"
+                      style={{
+                        background: isMyVote
+                          ? "oklch(0.55 0.18 252 / 0.25)"
+                          : "oklch(0.3 0.04 255 / 0.2)",
+                      }}
+                    />
+                    <div className="relative flex items-center justify-between px-3 py-2.5">
+                      <span
+                        className="text-xs font-bold"
+                        style={{
+                          color: isMyVote
+                            ? "oklch(0.85 0.14 252)"
+                            : "oklch(0.7 0.06 255)",
+                        }}
+                      >
+                        {isMyVote && "✓ "}
+                        {option}
+                      </span>
+                      {hasVoted && (
+                        <span
+                          className="text-[11px] font-black"
+                          style={{
+                            color: isMyVote
+                              ? "oklch(0.8 0.16 252)"
+                              : "oklch(0.55 0.06 255)",
+                          }}
+                        >
+                          {pct}%
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </motion.div>
         )}

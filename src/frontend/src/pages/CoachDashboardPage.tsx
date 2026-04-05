@@ -247,7 +247,7 @@ export function CoachDashboardPage() {
         <Users className="w-12 h-12 opacity-30" />
         <p className="text-sm font-bold text-foreground">No teams registered</p>
         <p className="text-xs text-muted-foreground text-center">
-          Enter Official mode (LSH2026) and add teams in Admin Panel first.
+          Enter Official mode and add teams in Admin Panel first.
         </p>
       </div>
     );

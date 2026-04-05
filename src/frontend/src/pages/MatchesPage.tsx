@@ -1,5 +1,6 @@
 import type { T__5 as BackendMatch } from "@/backend";
 import { Status } from "@/backend";
+import { PredictionWidget } from "@/components/shared/PredictionWidget";
 import { useActor } from "@/hooks/useActor";
 import {
   type LocalFixture,
@@ -10,6 +11,7 @@ import {
   getLocalTeams,
   getMatchJoiners,
   getMatchPitches,
+  getMatchPredictions,
   getMatchReferees,
   getPitches,
   getReferees,
@@ -92,11 +94,12 @@ function getTeamColor(name: string): string {
 export function MatchesPage() {
   const navigate = useNavigate();
   const { actor, isFetching: actorFetching } = useActor();
-  const [activeTab, setActiveTab] = useState<DateTab>("today");
+  const [activeTab, setActiveTab] = useState<DateTab>("all");
   const [matches, setMatches] = useState<BackendMatch[]>([]);
   const [loading, setLoading] = useState(false);
   const [currentUser] = useState(() => getActiveSimpleSession());
   const [_joinerTick, setJoinerTick] = useState(0);
+  const allPredictions = getMatchPredictions();
   const [followedMatches, setFollowedMatches] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem("followedMatches") ?? "[]");
@@ -531,6 +534,16 @@ export function MatchesPage() {
             );
           })()}
         </div>
+        {/* Prediction widget — only for scheduled matches */}
+        {!isLive && !isPlayed && currentUser && (
+          <PredictionWidget
+            matchId={matchId}
+            homeName={homeName}
+            awayName={awayName}
+            userId={currentUser.id}
+            allPredictions={allPredictions}
+          />
+        )}
       </motion.div>
     );
   };

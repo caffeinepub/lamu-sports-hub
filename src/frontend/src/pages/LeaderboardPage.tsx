@@ -6,10 +6,17 @@ import type {
 import { TeamBadge, getTeamColor } from "@/components/shared/TeamBadge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useActor } from "@/hooks/useActor";
-import { getLocalPlayers } from "@/utils/localStore";
+import { getLocalPlayers, getMatchPredictions } from "@/utils/localStore";
 import { computeBackendStandings } from "@/utils/standingsUtils";
 import { useNavigate } from "@tanstack/react-router";
-import { AlertTriangle, Loader2, Target, Trophy, Zap } from "lucide-react";
+import {
+  AlertTriangle,
+  Brain,
+  Loader2,
+  Target,
+  Trophy,
+  Zap,
+} from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 
@@ -97,6 +104,33 @@ export function LeaderboardPage() {
 
   const standings = computeBackendStandings(teams, matches);
 
+  // Predictions leaderboard
+  const predictionsLeaderboard = (() => {
+    const all = getMatchPredictions();
+    const byUser: Record<
+      string,
+      { total: number; correct: number; name: string }
+    > = {};
+    for (const p of all) {
+      if (!byUser[p.userId])
+        byUser[p.userId] = { total: 0, correct: 0, name: p.userId };
+      byUser[p.userId].total++;
+      if (p.correct === true) byUser[p.userId].correct++;
+    }
+    return Object.entries(byUser)
+      .map(([userId, data]) => ({
+        userId,
+        name:
+          data.name.length > 16 ? `${data.name.slice(0, 14)}...` : data.name,
+        total: data.total,
+        correct: data.correct,
+        accuracy:
+          data.total > 0 ? Math.round((data.correct / data.total) * 100) : 0,
+      }))
+      .sort((a, b) => b.correct - a.correct || b.accuracy - a.accuracy)
+      .slice(0, 20);
+  })();
+
   // Sort helpers
   const topScorers = [...players]
     .sort((a, b) => Number(b.goals) - Number(a.goals))
@@ -156,7 +190,7 @@ export function LeaderboardPage() {
 
       <Tabs defaultValue="scorers" className="px-4 pt-4">
         <TabsList
-          className="w-full grid grid-cols-4 mb-4"
+          className="w-full grid grid-cols-5 mb-4"
           data-ocid="leaderboard.tab"
         >
           <TabsTrigger value="scorers" className="text-[11px] px-1">
@@ -174,6 +208,10 @@ export function LeaderboardPage() {
           <TabsTrigger value="teams" className="text-[11px] px-1">
             <Trophy className="w-3 h-3 mr-1" />
             Teams
+          </TabsTrigger>
+          <TabsTrigger value="predictions" className="text-[11px] px-1">
+            <Brain className="w-3 h-3 mr-1" />
+            Picks
           </TabsTrigger>
         </TabsList>
 
@@ -509,6 +547,90 @@ export function LeaderboardPage() {
                       </div>
                     </div>
                   </button>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Predictions Leaderboard */}
+        <TabsContent value="predictions">
+          {predictionsLeaderboard.length === 0 ? (
+            <div
+              className="rounded-xl border border-dashed border-border bg-card py-12 flex flex-col items-center gap-3 text-center"
+              data-ocid="leaderboard.predictions.empty_state"
+            >
+              <Brain className="w-10 h-10 text-muted-foreground/30" />
+              <p className="text-sm font-bold text-foreground">
+                No predictions yet
+              </p>
+              <p className="text-xs text-muted-foreground px-6">
+                Make your first prediction on any upcoming match to appear here!
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2" data-ocid="leaderboard.predictions.list">
+              {predictionsLeaderboard.map((entry, i) => (
+                <motion.div
+                  key={entry.userId}
+                  initial={{ x: -20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: i * 0.04 }}
+                  data-ocid={`leaderboard.predictions.item.${i + 1}`}
+                >
+                  <div className="rounded-xl border border-border bg-card p-3 flex items-center gap-3">
+                    <MedalBadge rank={i + 1} />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold text-sm text-foreground truncate">
+                        {entry.name}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {entry.correct}/{entry.total} correct
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <span
+                        className="text-[11px] font-black px-2 py-0.5 rounded-full"
+                        style={{
+                          background:
+                            entry.accuracy >= 60
+                              ? "oklch(0.55 0.18 145 / 0.15)"
+                              : entry.accuracy >= 40
+                                ? "oklch(0.82 0.08 82 / 0.15)"
+                                : "oklch(0.25 0.04 255 / 0.5)",
+                          color:
+                            entry.accuracy >= 60
+                              ? "oklch(0.7 0.18 145)"
+                              : entry.accuracy >= 40
+                                ? "oklch(0.75 0.12 82)"
+                                : "oklch(0.55 0.06 255)",
+                          border:
+                            entry.accuracy >= 60
+                              ? "1px solid oklch(0.55 0.18 145 / 0.3)"
+                              : "1px solid transparent",
+                        }}
+                      >
+                        {entry.accuracy}%
+                      </span>
+                      <div className="flex gap-0.5">
+                        {Array.from({ length: Math.min(entry.total, 5) }).map(
+                          (_, si) => (
+                            <div
+                              // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length history dots
+                              key={si}
+                              className="w-2 h-2 rounded-full"
+                              style={{
+                                background:
+                                  si < entry.correct
+                                    ? "oklch(0.55 0.18 145)"
+                                    : "oklch(0.35 0.04 255)",
+                              }}
+                            />
+                          ),
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </motion.div>
               ))}
             </div>

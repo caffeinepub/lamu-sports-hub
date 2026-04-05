@@ -122,8 +122,58 @@ export function StandingsPage() {
                     : { scheduled: null },
             };
           });
-          setTeams(t);
-          setMatches(merged as BackendMatch[]);
+          // Merge backend teams with local teams so all FKF teams appear
+          const overrides = getTeamOverrides();
+          const deleted = new Set(getDeletedTeamIds());
+          const localTs = getLocalTeams()
+            .filter((lt) => !deleted.has(lt.teamId))
+            .map(
+              (lt) =>
+                ({
+                  teamId: lt.teamId,
+                  name: overrides[lt.teamId]?.name ?? lt.name,
+                  area: lt.area,
+                  coachId: lt.coachName ?? "",
+                  logoUrl: "",
+                  wins: BigInt(0),
+                  losses: BigInt(0),
+                  draws: BigInt(0),
+                  goalsFor: BigInt(0),
+                  goalsAgainst: BigInt(0),
+                  isApproved: false,
+                }) as unknown as BackendTeam,
+            );
+          const backendIds = new Set(t.map((bt: BackendTeam) => bt.teamId));
+          const extraLocal = localTs.filter((lt) => !backendIds.has(lt.teamId));
+          // Also merge local fixtures so local score overrides are included
+          const localFixtures = getLocalFixtures();
+          const localMatchIds = new Set(
+            (merged as BackendMatch[]).map((m: BackendMatch) => m.matchId),
+          );
+          const extraMatches = localFixtures
+            .filter((f) => !localMatchIds.has(f.matchId))
+            .map((f) => {
+              const ov = localScores[f.matchId];
+              const statusStr = ov?.status ?? f.status;
+              return {
+                matchId: f.matchId,
+                homeTeam: f.homeTeam,
+                awayTeam: f.awayTeam,
+                date: BigInt(Math.floor(f.date)),
+                homeScore: BigInt(ov?.homeScore ?? f.homeScore),
+                awayScore: BigInt(ov?.awayScore ?? f.awayScore),
+                status:
+                  statusStr === "played"
+                    ? { played: null }
+                    : statusStr === "live"
+                      ? { live: null }
+                      : { scheduled: null },
+                referee: [],
+                events: [],
+              } as unknown as BackendMatch;
+            });
+          setTeams([...t, ...extraLocal]);
+          setMatches([...merged, ...extraMatches] as BackendMatch[]);
         })
         .catch(() => loadFromLocal())
         .finally(() => setLoading(false));

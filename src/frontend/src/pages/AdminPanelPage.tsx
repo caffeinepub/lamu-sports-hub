@@ -911,6 +911,20 @@ function AdminPanelInner() {
         status: editMatchStatus,
       };
       setLocalStore("lsh_local_match_scores", localScores);
+      // Also patch the fixture directly in lsh_local_fixtures for MatchesPage
+      const fixtures = getLocalStore<any[]>("lsh_local_fixtures", []);
+      const fIdx = fixtures.findIndex(
+        (f: any) => f.matchId === editingMatch.matchId,
+      );
+      if (fIdx !== -1) {
+        fixtures[fIdx] = {
+          ...fixtures[fIdx],
+          homeScore: Number.parseInt(editHomeScore) || 0,
+          awayScore: Number.parseInt(editAwayScore) || 0,
+          status: editMatchStatus,
+        };
+        setLocalStore("lsh_local_fixtures", fixtures);
+      }
       setBackendMatches((prev: any[]) =>
         prev.map((m: any) =>
           m.matchId === editingMatch.matchId
@@ -963,6 +977,20 @@ function AdminPanelInner() {
       setMatchPitchesState(getMatchPitches());
       window.dispatchEvent(new Event("lsh:matches-updated"));
       toast.success("Match updated successfully!");
+      // Also patch fixture locally for immediate UI refresh
+      const fixturesB = getLocalStore<any[]>("lsh_local_fixtures", []);
+      const fIdxB = fixturesB.findIndex(
+        (f: any) => f.matchId === editingMatch.matchId,
+      );
+      if (fIdxB !== -1) {
+        fixturesB[fIdxB] = {
+          ...fixturesB[fIdxB],
+          homeScore: Number.parseInt(editHomeScore) || 0,
+          awayScore: Number.parseInt(editAwayScore) || 0,
+          status: editMatchStatus,
+        };
+        setLocalStore("lsh_local_fixtures", fixturesB);
+      }
       setEditingMatch(null);
       await fetchMatches();
     } catch {
