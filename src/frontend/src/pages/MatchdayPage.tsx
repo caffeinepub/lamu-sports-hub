@@ -3,6 +3,8 @@ import type {
   T__2 as BackendPlayer,
   T__1 as BackendTeam,
 } from "@/backend";
+import { QuickReactions } from "@/components/shared/QuickReactions";
+import { ShareButton } from "@/components/shared/ShareButton";
 import { TeamBadge } from "@/components/shared/TeamBadge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useActor } from "@/hooks/useActor";
@@ -12,6 +14,8 @@ import {
   getPitches,
   getReferees,
 } from "@/utils/localStore";
+import { getMatchJoiners } from "@/utils/localStore";
+import { getActiveSimpleSession } from "@/utils/simpleAuth";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   AlertTriangle,
@@ -21,6 +25,8 @@ import {
   Info,
   Loader2,
   MapPin,
+  MessageCircle,
+  Send,
   Square,
   Target,
   User,
@@ -517,6 +523,36 @@ export function MatchdayPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedShot, setSelectedShot] = useState<ShotData | null>(null);
+  const [chatMessage, setChatMessage] = useState("");
+  const currentUser = getActiveSimpleSession();
+
+  const getChatMessages = () => {
+    if (!matchId) return [];
+    try {
+      return JSON.parse(
+        localStorage.getItem(`matchChat_${matchId}`) ?? "[]",
+      ) as { user: string; text: string; time: number }[];
+    } catch {
+      return [];
+    }
+  };
+  const [chatMessages, setChatMessages] = useState<
+    { user: string; text: string; time: number }[]
+  >(() => getChatMessages());
+
+  const sendChatMessage = () => {
+    if (!chatMessage.trim() || !matchId) return;
+    const userName = currentUser?.name ?? "Fan";
+    const newMsg = {
+      user: userName,
+      text: chatMessage.trim(),
+      time: Date.now(),
+    };
+    const msgs = [...getChatMessages(), newMsg].slice(-100);
+    localStorage.setItem(`matchChat_${matchId}`, JSON.stringify(msgs));
+    setChatMessages(msgs);
+    setChatMessage("");
+  };
 
   const momentumData = generateMomentum();
   const homeLineup = match
@@ -783,30 +819,143 @@ export function MatchdayPage() {
             </div>
           )}
         </motion.div>
+
+        {/* Share + Reactions */}
+        {(isLive || isPlayed) && (
+          <motion.div
+            initial={{ y: 8, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            className="mt-4 flex flex-col items-center gap-3"
+          >
+            <ShareButton
+              variant="text"
+              label={isPlayed ? "Share Result" : "Share Live Score"}
+              data-ocid="matchday.share_result.button"
+              text={
+                isPlayed
+                  ? `FULL TIME: ${homeTeam?.name ?? match.homeTeam} ${Number(match.homeScore)} - ${Number(match.awayScore)} ${awayTeam?.name ?? match.awayTeam} | FKF Lamu County League | Lamu Sports Hub`
+                  : `LIVE: ${homeTeam?.name ?? match.homeTeam} ${Number(match.homeScore)} - ${Number(match.awayScore)} ${awayTeam?.name ?? match.awayTeam} | FKF Lamu County League | Lamu Sports Hub`
+              }
+            />
+            <QuickReactions matchId={matchId ?? ""} />
+          </motion.div>
+        )}
       </div>
 
       {/* Tabs */}
       <Tabs defaultValue="live" className="px-4 pt-4">
         <TabsList
-          className="w-full grid grid-cols-4 mb-4"
+          className="w-full grid grid-cols-5 mb-4"
           data-ocid="matchday.tab"
         >
-          <TabsTrigger value="live" className="text-xs">
+          <TabsTrigger value="live" className="text-[10px]">
             Live
           </TabsTrigger>
-          <TabsTrigger value="lineups" className="text-xs">
+          <TabsTrigger value="lineups" className="text-[10px]">
             Lineups
           </TabsTrigger>
-          <TabsTrigger value="momentum" className="text-xs">
+          <TabsTrigger value="momentum" className="text-[10px]">
             Momentum
           </TabsTrigger>
-          <TabsTrigger value="shots" className="text-xs">
+          <TabsTrigger value="shots" className="text-[10px]">
             Shots
+          </TabsTrigger>
+          <TabsTrigger
+            value="chat"
+            className="text-[10px]"
+            data-ocid="matchday.chat.tab"
+          >
+            <MessageCircle className="w-3 h-3 mr-0.5" />
+            Chat
           </TabsTrigger>
         </TabsList>
 
         {/* Live tab */}
         <TabsContent value="live">
+          {/* Mini event ticker */}
+          {commentary.filter(
+            (evt) =>
+              evt.type === "goal" ||
+              evt.type === "red_card" ||
+              evt.type === "yellow_card",
+          ).length > 0 && (
+            <div className="overflow-x-auto pb-2 mb-3 -mx-1 px-1">
+              <div className="flex gap-2 w-max">
+                {commentary
+                  .filter(
+                    (evt) =>
+                      evt.type === "goal" ||
+                      evt.type === "red_card" ||
+                      evt.type === "yellow_card",
+                  )
+                  .slice(-8)
+                  .map((evt, tickerIdx) => (
+                    <span
+                      // biome-ignore lint/suspicious/noArrayIndexKey: ticker stable
+                      key={`ticker-${tickerIdx}`}
+                      className="flex-shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap"
+                      style={{
+                        background:
+                          evt.type === "goal"
+                            ? "oklch(0.55 0.18 145 / 0.15)"
+                            : evt.type === "red_card"
+                              ? "oklch(0.55 0.22 25 / 0.15)"
+                              : "oklch(0.82 0.12 85 / 0.15)",
+                        color:
+                          evt.type === "goal"
+                            ? "oklch(0.7 0.18 145)"
+                            : evt.type === "red_card"
+                              ? "oklch(0.7 0.22 25)"
+                              : "oklch(0.82 0.12 85)",
+                        border:
+                          evt.type === "goal"
+                            ? "1px solid oklch(0.55 0.18 145 / 0.4)"
+                            : evt.type === "red_card"
+                              ? "1px solid oklch(0.55 0.22 25 / 0.4)"
+                              : "1px solid oklch(0.82 0.12 85 / 0.4)",
+                      }}
+                    >
+                      {evt.type === "goal"
+                        ? "⚽"
+                        : evt.type === "red_card"
+                          ? "🟥"
+                          : "🟨"}{" "}
+                      {evt.minute}' {evt.text.slice(0, 22)}
+                    </span>
+                  ))}
+              </div>
+            </div>
+          )}
+          {/* Watching Now with avatar bubbles */}
+          {(() => {
+            const joiners = matchId ? getMatchJoiners(matchId) : [];
+            if (joiners.length === 0) return null;
+            return (
+              <div className="flex items-center gap-2 mb-3 px-1">
+                <div className="flex">
+                  {joiners.slice(0, 5).map((j, ji) => (
+                    <div
+                      key={j.userId}
+                      title={j.userName}
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-black text-white border-2 border-card"
+                      style={{
+                        background: `oklch(${0.48 + ji * 0.05} 0.18 ${(ji * 72 + 24) % 360})`,
+                        marginLeft: ji > 0 ? "-6px" : undefined,
+                        zIndex: 5 - ji,
+                        position: "relative",
+                      }}
+                    >
+                      {j.userName.charAt(0).toUpperCase()}
+                    </div>
+                  ))}
+                </div>
+                <span className="text-[10px] text-muted-foreground font-semibold">
+                  {joiners.length} watching
+                </span>
+              </div>
+            );
+          })()}
           {commentary.length > 0 && (
             <div>
               <h2 className="font-display font-bold text-sm text-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
@@ -844,6 +993,13 @@ export function MatchdayPage() {
                       >
                         {entry.text}
                       </p>
+                      {entry.type === "goal" && (
+                        <ShareButton
+                          variant="icon"
+                          data-ocid="matchday.goal_share.button"
+                          text={`Goal at ${entry.minute}'! ${entry.text} | ${homeTeam?.name ?? ""} ${Number(match.homeScore)}-${Number(match.awayScore)} ${awayTeam?.name ?? ""} | FKF Lamu County League | Lamu Sports Hub`}
+                        />
+                      )}
                     </motion.div>
                   ))}
                 </AnimatePresence>
@@ -1171,6 +1327,102 @@ export function MatchdayPage() {
                 </p>
               </div>
             )}
+          </div>
+        </TabsContent>
+
+        {/* Chat tab */}
+        <TabsContent value="chat" data-ocid="matchday.chat.panel">
+          <div className="flex flex-col" style={{ height: "60vh" }}>
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1 pb-3">
+              {chatMessages.length === 0 ? (
+                <div
+                  className="flex flex-col items-center justify-center h-full gap-3 py-12"
+                  data-ocid="matchday.chat.empty_state"
+                >
+                  <MessageCircle className="w-10 h-10 text-muted-foreground/30" />
+                  <p className="text-sm text-muted-foreground text-center">
+                    No messages yet. Be the first to react!
+                  </p>
+                </div>
+              ) : (
+                chatMessages.map((msg, i) => {
+                  const isOwn = msg.user === (currentUser?.name ?? "");
+                  const minutesAgo = Math.floor(
+                    (Date.now() - msg.time) / 60000,
+                  );
+                  const timeLabel =
+                    minutesAgo < 1
+                      ? "just now"
+                      : minutesAgo < 60
+                        ? `${minutesAgo}m ago`
+                        : `${Math.floor(minutesAgo / 60)}h ago`;
+                  return (
+                    <div
+                      // biome-ignore lint/suspicious/noArrayIndexKey: chat messages stable
+                      key={`chat-${i}`}
+                      className={`flex gap-2 ${isOwn ? "flex-row-reverse" : "flex-row"}`}
+                      data-ocid={`matchday.chat.item.${i + 1}`}
+                    >
+                      <div
+                        className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-black text-white"
+                        style={{
+                          background: `oklch(0.5 0.18 ${(msg.user.charCodeAt(0) * 37) % 360})`,
+                        }}
+                      >
+                        {msg.user.charAt(0).toUpperCase()}
+                      </div>
+                      <div
+                        className={`max-w-[75%] ${isOwn ? "items-end" : "items-start"} flex flex-col gap-0.5`}
+                      >
+                        <span className="text-[9px] text-muted-foreground px-1">
+                          {msg.user} · {timeLabel}
+                        </span>
+                        <div
+                          className="px-3 py-2 rounded-2xl text-sm"
+                          style={{
+                            background: isOwn
+                              ? "oklch(0.6 0.22 24 / 0.85)"
+                              : "oklch(0.22 0.04 255)",
+                            color: isOwn ? "white" : "oklch(0.85 0.04 255)",
+                            borderRadius: isOwn
+                              ? "18px 18px 4px 18px"
+                              : "18px 18px 18px 4px",
+                          }}
+                        >
+                          {msg.text}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            {/* Input */}
+            <div className="flex gap-2 pt-2 border-t border-border">
+              <input
+                type="text"
+                value={chatMessage}
+                onChange={(e) => setChatMessage(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && sendChatMessage()}
+                placeholder={
+                  currentUser ? "Say something..." : "Login to chat..."
+                }
+                disabled={!currentUser}
+                className="flex-1 px-3 py-2 rounded-xl text-sm bg-card border border-border text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50 disabled:opacity-50"
+                data-ocid="matchday.chat.input"
+              />
+              <button
+                type="button"
+                onClick={sendChatMessage}
+                disabled={!chatMessage.trim() || !currentUser}
+                className="w-10 h-10 rounded-xl flex items-center justify-center disabled:opacity-40 transition-all active:scale-90"
+                style={{ background: "oklch(0.6 0.22 24)", color: "white" }}
+                data-ocid="matchday.chat.submit_button"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </TabsContent>
       </Tabs>

@@ -1,4 +1,5 @@
 import type { T__5 as BackendMatch, T__1 as BackendTeam } from "@/backend";
+import { ShareButton } from "@/components/shared/ShareButton";
 import { TeamBadge } from "@/components/shared/TeamBadge";
 import { useActor } from "@/hooks/useActor";
 import {
@@ -233,12 +234,28 @@ export function StandingsPage() {
           initial={{ y: -10, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
         >
-          <h1 className="font-display font-black text-2xl text-foreground">
-            League Table
-          </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Season {seasonName} — {tournamentName}
-          </p>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h1 className="font-display font-black text-2xl text-foreground">
+                League Table
+              </h1>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Season {seasonName} — {tournamentName}
+              </p>
+            </div>
+            <ShareButton
+              variant="text"
+              label="Share Table"
+              data-ocid="standings.share.button"
+              text={[
+                "🏆 FKF Lamu County League Standings:",
+                ...standings
+                  .slice(0, 5)
+                  .map((e, i) => `${i + 1}. ${e.team.name} — ${e.points} pts`),
+                "| Lamu Sports Hub",
+              ].join("\n")}
+            />
+          </div>
         </motion.div>
       </div>
 

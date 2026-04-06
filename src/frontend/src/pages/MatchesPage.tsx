@@ -1,6 +1,8 @@
 import type { T__5 as BackendMatch } from "@/backend";
 import { Status } from "@/backend";
 import { PredictionWidget } from "@/components/shared/PredictionWidget";
+import { QuickReactions } from "@/components/shared/QuickReactions";
+import { ShareButton } from "@/components/shared/ShareButton";
 import { useActor } from "@/hooks/useActor";
 import {
   type LocalFixture,
@@ -218,14 +220,45 @@ export function MatchesPage() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: buildLocalMatches is a stable local function
   useEffect(() => {
     const reload = () => {
-      if (!actor) {
-        setMatches(buildLocalMatches() as any);
-      }
+      // Always re-apply local score overrides so official saves reflect immediately
+      setMatches((prev: any[]) => {
+        const localScores = getLocalStore<
+          Record<
+            string,
+            { homeScore: number; awayScore: number; status: string }
+          >
+        >("lsh_local_match_scores", {});
+        const nowMs = Date.now();
+        // Build updated from local fixtures (always present)
+        const localBuilt = buildLocalMatches();
+        // Merge with existing backend matches if any
+        const backendMatches = prev.filter(
+          (m: any) => !localBuilt.find((lb: any) => lb.matchId === m.matchId),
+        );
+        const merged = [...localBuilt, ...backendMatches].map((m: any) => {
+          const ov = localScores[m.matchId];
+          if (!ov) return m;
+          const kickoffMs = Number(m.date) / 1_000_000;
+          const autoPlayed = nowMs - kickoffMs > 95 * 60 * 1000;
+          return {
+            ...m,
+            homeScore: BigInt(ov.homeScore),
+            awayScore: BigInt(ov.awayScore),
+            status:
+              ov.status === "played" || autoPlayed
+                ? { played: null }
+                : ov.status === "live"
+                  ? { live: null }
+                  : { scheduled: null },
+          };
+        });
+        return merged;
+      });
     };
     window.addEventListener("lsh:matches-updated", reload);
     return () => window.removeEventListener("lsh:matches-updated", reload);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [actor]);
+  }, []);
 
   // Build merged team name map
   const teamNameMap = useMemo(() => {
@@ -361,24 +394,37 @@ export function MatchesPage() {
                 </span>
               )}
             </div>
-            <button
-              type="button"
-              data-ocid={`matches.star.toggle.${index + 1}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleFollow(matchId);
-              }}
-              className="p-1 rounded-full hover:bg-muted/40 transition-colors"
-              aria-label={isFollowed ? "Unfollow match" : "Follow match"}
-            >
-              <Star
-                className={`w-4 h-4 transition-colors ${
-                  isFollowed
-                    ? "fill-yellow-400 text-yellow-400"
-                    : "text-muted-foreground"
-                }`}
-              />
-            </button>
+            <div className="flex items-center gap-0.5">
+              {(isLive || isPlayed) && (
+                <ShareButton
+                  variant="icon"
+                  data-ocid={`matches.share.${index + 1}`}
+                  text={
+                    isLive
+                      ? `🔴 LIVE: ${homeName} ${Number(match.homeScore)}-${Number(match.awayScore)} ${awayName} (${minute}') | FKF Lamu County League | Lamu Sports Hub`
+                      : `FULL TIME: ${homeName} ${Number(match.homeScore)}-${Number(match.awayScore)} ${awayName} | FKF Lamu County League | Lamu Sports Hub`
+                  }
+                />
+              )}
+              <button
+                type="button"
+                data-ocid={`matches.star.toggle.${index + 1}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleFollow(matchId);
+                }}
+                className="p-1 rounded-full hover:bg-muted/40 transition-colors"
+                aria-label={isFollowed ? "Unfollow match" : "Follow match"}
+              >
+                <Star
+                  className={`w-4 h-4 transition-colors ${
+                    isFollowed
+                      ? "fill-yellow-400 text-yellow-400"
+                      : "text-muted-foreground"
+                  }`}
+                />
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center gap-3">
@@ -534,6 +580,13 @@ export function MatchesPage() {
             );
           })()}
         </div>
+        {/* Quick reactions for live matches */}
+        {isLive && (
+          <div className="px-3 pb-2.5 pt-1">
+            <QuickReactions matchId={matchId} />
+          </div>
+        )}
+
         {/* Prediction widget — only for scheduled matches */}
         {!isLive && !isPlayed && currentUser && (
           <PredictionWidget

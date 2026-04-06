@@ -31,7 +31,7 @@ type SearchResult = {
 export function TopNav({ onNotificationsClick }: TopNavProps) {
   const navigate = useNavigate();
   const { identity, clear } = useInternetIdentity();
-  const { actor, isFetching: actorFetching } = useActor();
+  const { actor } = useActor();
   const officialSession = isOfficialSessionVerified();
   const customLogo = getAppLogo();
   const logoSrc =
@@ -57,21 +57,9 @@ export function TopNav({ onNotificationsClick }: TopNavProps) {
     };
   }, []);
 
-  useEffect(() => {
-    if (!actor || actorFetching || !identity) return;
-    let cancelled = false;
-    actor
-      .getAllNotifications()
-      .then((allNotifs) => {
-        if (cancelled) return;
-        const unread = allNotifs.filter((n) => !n.isRead).length;
-        setUnreadCount(unread);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [actor, actorFetching, identity]);
+  // NOTE: intentionally NOT re-fetching from backend here.
+  // The local compute() function already accounts for read IDs properly.
+  // Fetching from backend would overwrite local read state and show stale counts.
 
   const displayCount =
     unreadCount > 9 ? "9+" : unreadCount > 0 ? String(unreadCount) : null;

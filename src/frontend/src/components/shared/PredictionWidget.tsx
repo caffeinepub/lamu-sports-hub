@@ -1,3 +1,4 @@
+import { ShareButton } from "@/components/shared/ShareButton";
 import { getUserPrediction, submitMatchPrediction } from "@/utils/localStore";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
@@ -184,6 +185,14 @@ export function PredictionWidget({
                   </div>
                 </div>
               ))}
+              <div className="mt-2 flex justify-end">
+                <ShareButton
+                  variant="text"
+                  label="Share My Prediction"
+                  data-ocid="matches.share_prediction.button"
+                  text={`My prediction: ${homeName} vs ${awayName} — I picked ${voted === "home" ? homeName : voted === "away" ? awayName : "Draw"} | FKF Lamu County League. What's yours? | Lamu Sports Hub`}
+                />
+              </div>
             </motion.div>
           </AnimatePresence>
         )}

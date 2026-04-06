@@ -1,4 +1,5 @@
 import type { T__2 as BackendPlayer, T__1 as BackendTeam } from "@/backend";
+import { ShareButton } from "@/components/shared/ShareButton";
 import {
   AreaBadge,
   IslandPrideBadge,
@@ -514,6 +515,16 @@ export function PlayerProfilePage() {
               />
             </RadarChart>
           </ResponsiveContainer>
+        </div>
+
+        {/* Share Player */}
+        <div className="flex justify-center pb-2">
+          <ShareButton
+            variant="text"
+            label="Share Player"
+            data-ocid="player_profile.share.button"
+            text={`${player.name} (${posLabel}) | Goals: ${goals} | ${team?.name ?? "Lamu FC"} | FKF Lamu County League — Lamu Sports Hub`}
+          />
         </div>
       </div>
     </div>

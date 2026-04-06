@@ -2397,6 +2397,163 @@ export function runMigrations(): void {
     }
     localStorage.setItem("lsh_migration_v13", "done");
   }
+
+  // v14: FORCE re-seed all 20 FKF teams on every device — runs once.
+  // Guarantees teams appear even on devices where v5–v12 ran but teams were cleared.
+  if (!localStorage.getItem("lsh_migration_v14")) {
+    const FKF_V14: LocalTeam[] = [
+      {
+        teamId: "fkf-001",
+        name: "Manda City",
+        area: "Manda",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-002",
+        name: "Galatasaray FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-003",
+        name: "Fayaz Bakers FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-004",
+        name: "Monaco FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-005",
+        name: "Amu Stars FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-006",
+        name: "Jaguar FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-007",
+        name: "Nyundo B",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-008",
+        name: "Dragon Juniors",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-009",
+        name: "Crocodile Juniors",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-010",
+        name: "Sportlight FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-011",
+        name: "Team Lawasco",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-012",
+        name: "Deepsea FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-013",
+        name: "All Brothers FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-014",
+        name: "Kashmir City",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-015",
+        name: "Boda Nations",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-016",
+        name: "Dragon Fly",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-017",
+        name: "Benfica FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-018",
+        name: "Flamingo FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-019",
+        name: "Deep Shark FC",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+      {
+        teamId: "fkf-020",
+        name: "Team Wazee",
+        area: "Lamu Town",
+        coachName: "",
+        createdAt: Date.now(),
+      },
+    ];
+    const existingV14 = getLocalTeams();
+    const nonFkf14 = existingV14.filter((t) => !t.teamId.startsWith("fkf-"));
+    setLocalStore(LSH_LOCAL_TEAMS_KEY, [...FKF_V14, ...nonFkf14]);
+
+    // Also force-wipe demo notifications one more time
+    const notifsV14 = getLocalNotifications();
+    const cleanedV14 = notifsV14.filter((n) => !isDemoNotification(n));
+    setLocalStore(LSH_LOCAL_NOTIFS_KEY, cleanedV14);
+
+    localStorage.setItem("lsh_migration_v14", "done");
+  }
 }
 
 export type LocalFixture = {

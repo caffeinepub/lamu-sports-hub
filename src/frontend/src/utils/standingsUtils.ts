@@ -53,11 +53,16 @@ export function computeBackendStandings(
   }
 
   // Process only played matches
-  const playedMatches = matches.filter(
-    (m) =>
-      m.status?.toString().includes("played") ||
-      m.status?.toString() === "played",
-  );
+  // status can be: { played: null }, { scheduled: null }, { live: null }, or a string
+  const isPlayed = (status: BackendMatch["status"]): boolean => {
+    if (!status) return false;
+    if (typeof status === "string") return status === "played";
+    if (typeof status === "object") {
+      return "played" in status;
+    }
+    return String(status) === "played";
+  };
+  const playedMatches = matches.filter((m) => isPlayed(m.status));
 
   for (const match of playedMatches) {
     const homeRow = table[match.homeTeam];

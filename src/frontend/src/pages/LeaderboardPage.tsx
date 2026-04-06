@@ -3,14 +3,23 @@ import type {
   T__2 as BackendPlayer,
   T__1 as BackendTeam,
 } from "@/backend";
+import { ShareButton } from "@/components/shared/ShareButton";
 import { TeamBadge, getTeamColor } from "@/components/shared/TeamBadge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useActor } from "@/hooks/useActor";
-import { getLocalPlayers, getMatchPredictions } from "@/utils/localStore";
+import {
+  LSH_MATCH_JOINERS_KEY,
+  getLocalPlayers,
+  getLocalStore,
+  getMatchJoiners,
+  getMatchPredictions,
+} from "@/utils/localStore";
+import { getActiveSimpleSession } from "@/utils/simpleAuth";
 import { computeBackendStandings } from "@/utils/standingsUtils";
 import { useNavigate } from "@tanstack/react-router";
 import {
   AlertTriangle,
+  Award,
   Brain,
   Loader2,
   Target,
@@ -637,6 +646,166 @@ export function LeaderboardPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Badges Section */}
+      {(() => {
+        const session = getActiveSimpleSession();
+        if (!session) return null;
+        const userId = session.id;
+        const appUrl = window.location.origin;
+
+        const allPreds = getMatchPredictions().filter(
+          (p) => p.userId === userId,
+        );
+        const allJoiners = getLocalStore<Record<string, { userId: string }[]>>(
+          LSH_MATCH_JOINERS_KEY,
+          {},
+        );
+        const joinedMatchCount = Object.values(allJoiners).filter((joiners) =>
+          joiners.some((j) => j.userId === userId),
+        ).length;
+        const reporterSubmissions = (() => {
+          try {
+            return JSON.parse(
+              localStorage.getItem("lsh_reporter_submissions") ?? "[]",
+            );
+          } catch {
+            return [];
+          }
+        })();
+        const hasReported = reporterSubmissions.some(
+          (s: any) => s.userId === userId || s.reporterName === session.name,
+        );
+        const streak = (() => {
+          try {
+            const s = JSON.parse(
+              localStorage.getItem("lsh_user_streak") ?? "{}",
+            );
+            return s.currentStreak ?? 0;
+          } catch {
+            return 0;
+          }
+        })();
+
+        type Badge = {
+          id: string;
+          emoji: string;
+          name: string;
+          desc: string;
+          earned: boolean;
+        };
+        const badges: Badge[] = [
+          {
+            id: "top_predictor",
+            emoji: "🏆",
+            name: "Top Predictor",
+            desc: "Made 3+ predictions",
+            earned: allPreds.length >= 3,
+          },
+          {
+            id: "goal_reporter",
+            emoji: "⚽",
+            name: "Goal Reporter",
+            desc: "Submitted a match result",
+            earned: hasReported,
+          },
+          {
+            id: "most_active",
+            emoji: "🔥",
+            name: "Most Active",
+            desc: "Joined 2+ matches",
+            earned: joinedMatchCount >= 2,
+          },
+          {
+            id: "fan_of_month",
+            emoji: "👑",
+            name: "Fan of the Month",
+            desc: "3+ day streak",
+            earned: streak >= 3,
+          },
+        ];
+        const earnedBadges = badges.filter((b) => b.earned);
+
+        return (
+          <div className="px-4 mt-6 pb-4">
+            <h2 className="font-display font-black text-lg text-foreground mb-3 flex items-center gap-2">
+              <Award className="w-5 h-5 text-yellow-400" />
+              Your Badges
+            </h2>
+            {earnedBadges.length === 0 ? (
+              <div
+                className="rounded-xl border border-dashed border-border bg-card p-6 text-center"
+                data-ocid="leaderboard.badges.empty_state"
+              >
+                <p className="text-sm text-muted-foreground">
+                  Complete actions to earn badges. Join a match, make a
+                  prediction, or report a result!
+                </p>
+              </div>
+            ) : (
+              <div
+                className="grid grid-cols-2 gap-3"
+                data-ocid="leaderboard.badges.list"
+              >
+                {earnedBadges.map((badge, i) => (
+                  <motion.div
+                    key={badge.id}
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: i * 0.1 }}
+                    data-ocid={`leaderboard.badge.item.${i + 1}`}
+                    className="rounded-xl p-4 flex flex-col items-center gap-2 text-center"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, oklch(0.82 0.15 85 / 0.12) 0%, oklch(0.16 0.04 255) 100%)",
+                      border: "1px solid oklch(0.82 0.15 85 / 0.3)",
+                    }}
+                  >
+                    <span className="text-3xl">{badge.emoji}</span>
+                    <div>
+                      <p className="font-bold text-sm text-foreground">
+                        {badge.name}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {badge.desc}
+                      </p>
+                    </div>
+                    <ShareButton
+                      variant="text"
+                      label="Share"
+                      data-ocid={`leaderboard.badge_share.button.${i + 1}`}
+                      text={`I just earned the '${badge.name}' badge on Lamu Sports Hub! ${badge.emoji} The home of football in Lamu County. ${appUrl}`}
+                    />
+                  </motion.div>
+                ))}
+              </div>
+            )}
+            {badges.filter((b) => !b.earned).length > 0 && (
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {badges
+                  .filter((b) => !b.earned)
+                  .map((badge) => (
+                    <div
+                      key={badge.id}
+                      className="rounded-xl p-3 flex items-center gap-2 opacity-40 border border-border"
+                    >
+                      <span className="text-xl">{badge.emoji}</span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-muted-foreground truncate">
+                          {badge.name}
+                        </p>
+                        <p className="text-[9px] text-muted-foreground/70">
+                          {badge.desc}
+                        </p>
+                      </div>
+                      <span className="text-[10px] ml-auto">🔒</span>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
