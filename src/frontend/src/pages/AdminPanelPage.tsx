@@ -1,10 +1,3 @@
-import {
-  type T__1 as BackendTeam,
-  type ExternalBlob,
-  type T__2 as PlayerT,
-  Position,
-  Role,
-} from "@/backend";
 import { AreaBadge, TeamBadge } from "@/components/shared/TeamBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,9 +21,16 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  type T__1 as BackendTeam,
+  type ExternalBlob,
+  type T__2 as PlayerT,
+  Position,
+  Role,
+} from "@/types/backend-compat";
 
-import { type T__5 as BackendMatch, Status } from "@/backend";
 import { useActor } from "@/hooks/useActor";
+import { type T__5 as BackendMatch, Status } from "@/types/backend-compat";
 import { compressImage } from "@/utils/imageUtils";
 import { isOfficialSessionVerified } from "@/utils/localStore";
 import {

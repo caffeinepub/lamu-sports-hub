@@ -34,10 +34,10 @@ module {
   public func updateGatewayPrincipals(registry : State) : async () {
     let cashierPrincipal = await getCashierPrincipal();
     let cashierActor = actor (cashierPrincipal.toText()) : actor {
-      storage_gateway_principal_list_v1 : () -> async [Principal];
+      storage_gateway_list_v1 : () -> async [Principal];
     };
 
-    registry.authorizedPrincipals := await cashierActor.storage_gateway_principal_list_v1();
+    registry.authorizedPrincipals := await cashierActor.storage_gateway_list_v1();
   };
 
   public func isAuthorized(registry : State, caller : Principal) : Bool {

@@ -1,5 +1,8 @@
-import type { T__5 as BackendMatch, T__1 as BackendTeam } from "@/backend";
 import { getTeamColor } from "@/components/shared/TeamBadge";
+import type {
+  T__5 as BackendMatch,
+  T__1 as BackendTeam,
+} from "@/types/backend-compat";
 
 export type StandingEntry = {
   position: number;

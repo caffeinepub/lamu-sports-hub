@@ -1,0 +1,194 @@
+type _ImmutableObjectStorageRefillResult = 
+ record {
+   success: opt bool;
+   topped_up_amount: opt nat;
+ };
+type _ImmutableObjectStorageRefillInformation = record {
+                                                  proposed_top_up_amount:
+                                                   opt nat;};
+type _ImmutableObjectStorageCreateCertificateResult = 
+ record {
+   blob_hash: text;
+   method: text;
+ };
+type VoteId = text;
+type UserRole = 
+ variant {
+   admin;
+   guest;
+   user;
+ };
+type UserId = principal;
+type Type = 
+ variant {
+   alert;
+   message;
+   reminder;
+ };
+type Time = int;
+type TeamId = text;
+type T__6 = 
+ record {
+   matchId: MatchId;
+   nomineePlayerId: PlayerId;
+   timestamp: Time;
+   voteId: VoteId;
+   voterId: UserId;
+ };
+type T__5 = 
+ record {
+   awayScore: nat;
+   awayTeam: TeamId;
+   commentary: vec text;
+   date: Time;
+   homeScore: nat;
+   homeTeam: TeamId;
+   kickoffTime: text;
+   matchId: MatchId;
+   mvpPlayerId: opt PlayerId;
+   status: Status;
+ };
+type T__4 = 
+ record {
+   authorId: text;
+   body: text;
+   isPublished: bool;
+   newsId: NewsId;
+   photo: opt ExternalBlob;
+   timestamp: Time;
+   title: text;
+ };
+type T__3 = 
+ record {
+   isRead: bool;
+   message: text;
+   notifType: Type;
+   notificationId: NotificationId;
+   timestamp: Time;
+   userId: UserId;
+ };
+type T__2 = 
+ record {
+   assists: nat;
+   goals: nat;
+   isVerified: bool;
+   jerseyNumber: nat;
+   matchesPlayed: nat;
+   name: text;
+   nickname: text;
+   photo: opt ExternalBlob;
+   playerId: PlayerId;
+   position: Position;
+   redCards: nat;
+   teamId: TeamId;
+   userId: text;
+   yellowCards: nat;
+ };
+type T__1 = 
+ record {
+   area: text;
+   coachId: text;
+   draws: nat;
+   goalsAgainst: nat;
+   goalsFor: nat;
+   isApproved: bool;
+   logo: opt ExternalBlob;
+   losses: nat;
+   name: text;
+   teamId: TeamId;
+   wins: nat;
+ };
+type T = 
+ record {
+   area: text;
+   email: text;
+   favoriteTeamId: opt TeamId;
+   name: text;
+   phone: text;
+   role: Role;
+   userId: text;
+ };
+type Status = 
+ variant {
+   live;
+   played;
+   scheduled;
+ };
+type Role = 
+ variant {
+   admin;
+   coach;
+   fan;
+   player;
+ };
+type Position = 
+ variant {
+   defender;
+   forward;
+   goalkeeper;
+   midfielder;
+ };
+type PlayerId = text;
+type NotificationId = text;
+type NewsId = text;
+type MatchId = text;
+type ExternalBlob = blob;
+service : {
+  _immutableObjectStorageBlobsAreLive: (hashes: vec blob) -> (vec bool) query;
+  _immutableObjectStorageBlobsToDelete: () -> (vec blob) query;
+  _immutableObjectStorageConfirmBlobDeletion: (blobs: vec blob) -> ();
+  _immutableObjectStorageCreateCertificate: (blobHash: text) ->
+   (_ImmutableObjectStorageCreateCertificateResult);
+  _immutableObjectStorageRefillCashier: (refillInformation:
+   opt _ImmutableObjectStorageRefillInformation) ->
+   (_ImmutableObjectStorageRefillResult);
+  _immutableObjectStorageUpdateGatewayPrincipals: () -> ();
+  _initializeAccessControl: () -> ();
+  adminAddPlayer: (teamId: TeamId, nickname: text, name: text, position:
+   Position, jerseyNumber: nat) -> (PlayerId);
+  adminCreateTeam: (name: text, area: text, coachName: text) -> (TeamId);
+  adminCreateUser: (name: text, phone: text, email: text, role: Role, area:
+   text) -> (text);
+  approveTeam: (teamId: TeamId) -> ();
+  assignCallerUserRole: (user: principal, role: UserRole) -> ();
+  createMVPVote: (matchId: MatchId, nomineePlayerId: PlayerId) -> ();
+  createMatch: (homeTeam: TeamId, awayTeam: TeamId, date: Time, kickoffTime:
+   text) -> (MatchId);
+  createNews: (title: text, body: text, isPublished: bool) -> (NewsId);
+  createNotification: (userId: UserId, notifType: Type, message: text) ->
+   (NotificationId);
+  createOrUpdateUserProfile: (name: text, phone: text, email: text, role:
+   Role, area: text, favoriteTeamId: opt TeamId) -> ();
+  createPlayer: (teamId: TeamId, nickname: text, name: text, position:
+   Position, jerseyNumber: nat) -> (PlayerId);
+  createTeam: (name: text, area: text) -> (TeamId);
+  deleteNews: (newsId: NewsId) -> ();
+  getAllMVPVotes: () -> (vec T__6) query;
+  getAllMatches: () -> (vec T__5) query;
+  getAllNews: () -> (vec T__4) query;
+  getAllNewsAdmin: () -> (vec T__4) query;
+  getAllNotifications: () -> (vec T__3) query;
+  getAllPlayers: () -> (vec T__2) query;
+  getAllTeams: () -> (vec T__1) query;
+  getAllUserProfiles: () -> (vec T) query;
+  getCallerUserProfile: () -> (opt T) query;
+  getCallerUserRole: () -> (UserRole) query;
+  getMVPVotesByMatch: (matchId: MatchId) -> (vec T__6) query;
+  getMatch: (matchId: MatchId) -> (opt T__5) query;
+  getMatchesByStatus: (status: Status) -> (vec T__5) query;
+  getNews: (newsId: NewsId) -> (opt T__4) query;
+  getNotificationsByUser: (userId: UserId) -> (vec T__3) query;
+  getPlayer: (playerId: PlayerId) -> (opt T__2) query;
+  getPlayersByTeam: (teamId: TeamId) -> (vec T__2) query;
+  getTeam: (teamId: TeamId) -> (opt T__1) query;
+  getUserIdFromCaller: () -> (text) query;
+  getUserProfile: (userId: UserId) -> (opt T) query;
+  isCallerAdmin: () -> (bool) query;
+  markNotificationAsRead: (notificationId: NotificationId) -> ();
+  saveCallerUserProfile: (name: text, phone: text, email: text, role: 
+   Role, area: text, favoriteTeamId: opt TeamId) -> ();
+  updateMatchScore: (matchId: MatchId, homeScore: nat, awayScore: nat,
+   status: Status) -> ();
+  updateNews: (newsId: NewsId, title: text, body: text, isPublished: 
+   bool) -> ();
+}

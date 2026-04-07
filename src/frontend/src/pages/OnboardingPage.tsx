@@ -1,4 +1,3 @@
-import type { T__1 as BackendTeam } from "@/backend";
 import { TeamBadge, getTeamColor } from "@/components/shared/TeamBadge";
 import { AreaBadge } from "@/components/shared/TeamBadge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useActor } from "@/hooks/useActor";
+import type { T__1 as BackendTeam } from "@/types/backend-compat";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";

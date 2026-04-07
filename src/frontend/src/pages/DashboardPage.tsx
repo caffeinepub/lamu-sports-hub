@@ -1,10 +1,3 @@
-import type { ExternalBlob } from "@/backend";
-import {
-  type T__5 as BackendMatch,
-  type T__2 as BackendPlayer,
-  type T__1 as BackendTeam,
-  Position,
-} from "@/backend";
 import { MatchCard } from "@/components/shared/MatchCard";
 import {
   AreaBadge,
@@ -41,6 +34,13 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useActor } from "@/hooks/useActor";
+import type { ExternalBlob } from "@/types/backend-compat";
+import {
+  type T__5 as BackendMatch,
+  type T__2 as BackendPlayer,
+  type T__1 as BackendTeam,
+  Position,
+} from "@/types/backend-compat";
 import {
   LSH_SYSTEM_STATUS_KEY,
   type NewsConfirmation,

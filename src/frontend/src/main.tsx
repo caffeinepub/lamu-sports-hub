@@ -1,8 +1,9 @@
+import { InternetIdentityProvider } from "@caffeineai/core-infrastructure";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import { InternetIdentityProvider } from "./hooks/useInternetIdentity";
 import "./index.css";
+import { runMigrations } from "./utils/localStore";
 
 BigInt.prototype.toJSON = function () {
   return this.toString();
@@ -13,6 +14,10 @@ declare global {
     toJSON(): string;
   }
 }
+
+// CRITICAL: Run all migrations before anything renders.
+// This seeds the 20 FKF teams, wipes demo notifications, and seeds fixtures.
+runMigrations();
 
 const queryClient = new QueryClient();
 

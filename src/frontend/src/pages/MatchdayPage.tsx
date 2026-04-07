@@ -1,13 +1,13 @@
-import type {
-  T__5 as BackendMatch,
-  T__2 as BackendPlayer,
-  T__1 as BackendTeam,
-} from "@/backend";
 import { QuickReactions } from "@/components/shared/QuickReactions";
 import { ShareButton } from "@/components/shared/ShareButton";
 import { TeamBadge } from "@/components/shared/TeamBadge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useActor } from "@/hooks/useActor";
+import type {
+  T__5 as BackendMatch,
+  T__2 as BackendPlayer,
+  T__1 as BackendTeam,
+} from "@/types/backend-compat";
 import {
   getMatchPitches,
   getMatchReferees,

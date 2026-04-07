@@ -1,8 +1,3 @@
-import type {
-  T__5 as BackendMatch,
-  T__2 as BackendPlayer,
-  T__1 as BackendTeam,
-} from "@/backend";
 import {
   AreaBadge,
   TeamBadge,
@@ -10,6 +5,11 @@ import {
 } from "@/components/shared/TeamBadge";
 import { Button } from "@/components/ui/button";
 import { useActor } from "@/hooks/useActor";
+import type {
+  T__5 as BackendMatch,
+  T__2 as BackendPlayer,
+  T__1 as BackendTeam,
+} from "@/types/backend-compat";
 import {
   getLocalTeams,
   getMatchEvents,

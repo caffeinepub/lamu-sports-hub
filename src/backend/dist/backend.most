@@ -1,0 +1,165 @@
+// Version: 1.0.0
+type Data__791452850<K, V> =
+  {var count : Nat__490723111; kvs : [var ?(K, V)]};
+type ExternalBlob__140892883 = Blob;
+type Int__270357528 = Int__616954475;
+type Int__616954475 = Int;
+type Internal__8484328<K, V> =
+  {children : [var ?Node__46230540<K, V>]; data : Data__791452850<K, V>};
+type Leaf__809889148<K, V> = {data : Data__791452850<K, V>};
+type Map__158565046<K, V> = Map__297112838<K, V>;
+type Map__297112838<K, V> =
+  {var root : Node__46230540<K, V>; var size : Nat__490723111};
+type Map__605269027<K, V> = Map__158565046<K, V>;
+type MatchId__155508655 = Text;
+type Nat__490723111 = Nat__920180692;
+type Nat__920180692 = Nat;
+type NewsId__998423805 = Text;
+type Node__46230540<K, V> =
+  {#internal : Internal__8484328<K, V>; #leaf : Leaf__809889148<K, V>};
+type NotificationId__65415016 = Text;
+type PlayerId__230708681 = Text;
+type Position__128887991 = {#defender; #forward; #goalkeeper; #midfielder};
+type Role__931309261 = {#admin; #coach; #fan; #player};
+type Status__1000080315 = {#live; #played; #scheduled};
+type T__153773549 =
+  {
+    assists : Nat;
+    goals : Nat;
+    isVerified : Bool;
+    jerseyNumber : Nat;
+    matchesPlayed : Nat;
+    name : Text;
+    nickname : Text;
+    photo : ?ExternalBlob__140892883;
+    playerId : PlayerId__230708681;
+    position : Position__128887991;
+    redCards : Nat;
+    teamId : TeamId__324581119;
+    userId : Text;
+    yellowCards : Nat
+  };
+type T__158137398 =
+  {
+    matchId : MatchId__155508655;
+    nomineePlayerId : PlayerId__230708681;
+    timestamp : Time__900049286;
+    voteId : VoteId__838651445;
+    voterId : UserId__313180070
+  };
+type T__193832904 =
+  {
+    awayScore : Nat;
+    awayTeam : TeamId__324581119;
+    commentary : [Text];
+    date : Time__900049286;
+    homeScore : Nat;
+    homeTeam : TeamId__324581119;
+    kickoffTime : Text;
+    matchId : MatchId__155508655;
+    mvpPlayerId : ?PlayerId__230708681;
+    status : Status__1000080315
+  };
+type T__270141258 =
+  {
+    area : Text;
+    coachId : Text;
+    draws : Nat;
+    goalsAgainst : Nat;
+    goalsFor : Nat;
+    isApproved : Bool;
+    logo : ?ExternalBlob__140892883;
+    losses : Nat;
+    name : Text;
+    teamId : TeamId__324581119;
+    wins : Nat
+  };
+type T__288018522 =
+  {
+    authorId : Text;
+    body : Text;
+    isPublished : Bool;
+    newsId : NewsId__998423805;
+    photo : ?ExternalBlob__140892883;
+    timestamp : Time__900049286;
+    title : Text
+  };
+type T__346283120 =
+  {
+    isRead : Bool;
+    message : Text;
+    notifType : Type__393689763;
+    notificationId : NotificationId__65415016;
+    timestamp : Time__900049286;
+    userId : UserId__313180070
+  };
+type T__618344784 =
+  {
+    area : Text;
+    email : Text;
+    favoriteTeamId : ?TeamId__324581119;
+    name : Text;
+    phone : Text;
+    role : Role__931309261;
+    userId : Text
+  };
+type TeamId__324581119 = Text;
+type Time__796480547 = Int__270357528;
+type Time__900049286 = Time__796480547;
+type Type__393689763 = {#alert; #message; #reminder};
+type UserId__313180070 = Principal;
+type UserRole__521596351 = {#admin; #guest; #user};
+type VoteId__838651445 = Text;
+actor {
+  stable accessControlState :
+    {
+      var adminAssigned : Bool;
+      userRoles : Map__605269027<Principal, UserRole__521596351>
+    };
+  stable matches :
+    {
+      var root : Node__46230540<MatchId__155508655, T__193832904>;
+      var size : Nat__490723111
+    };
+  stable mvpVotes :
+    {
+      var root : Node__46230540<VoteId__838651445, T__158137398>;
+      var size : Nat__490723111
+    };
+  stable news :
+    {
+      var root : Node__46230540<NewsId__998423805, T__288018522>;
+      var size : Nat__490723111
+    };
+  stable var nextMatchId : Nat;
+  stable var nextNotificationId : Nat;
+  stable var nextPlayerId : Nat;
+  stable var nextTeamId : Nat;
+  stable var nextUserId : Nat;
+  stable var nextVoteId : Nat;
+  stable notifications :
+    {
+      var root : Node__46230540<NotificationId__65415016, T__346283120>;
+      var size : Nat__490723111
+    };
+  stable players :
+    {
+      var root : Node__46230540<PlayerId__230708681, T__153773549>;
+      var size : Nat__490723111
+    };
+  stable teams :
+    {
+      var root : Node__46230540<TeamId__324581119, T__270141258>;
+      var size : Nat__490723111
+    };
+  stable userProfiles :
+    {
+      var root : Node__46230540<UserId__313180070, T__618344784>;
+      var size : Nat__490723111
+    };
+  stable userProfilesByUserId :
+    {
+      var root : Node__46230540<Text, T__618344784>;
+      var size : Nat__490723111
+    }
+};

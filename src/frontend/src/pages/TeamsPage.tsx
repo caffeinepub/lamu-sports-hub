@@ -1,7 +1,7 @@
-import type { T__1 as BackendTeam } from "@/backend";
 import { AreaBadge } from "@/components/shared/TeamBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useActor } from "@/hooks/useActor";
+import type { T__1 as BackendTeam } from "@/types/backend-compat";
 import {
   addLocalTeam,
   approveTeamRegistration,

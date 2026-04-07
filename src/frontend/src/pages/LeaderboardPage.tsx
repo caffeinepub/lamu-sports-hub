@@ -1,12 +1,12 @@
-import type {
-  T__5 as BackendMatch,
-  T__2 as BackendPlayer,
-  T__1 as BackendTeam,
-} from "@/backend";
 import { ShareButton } from "@/components/shared/ShareButton";
 import { TeamBadge, getTeamColor } from "@/components/shared/TeamBadge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useActor } from "@/hooks/useActor";
+import type {
+  T__5 as BackendMatch,
+  T__2 as BackendPlayer,
+  T__1 as BackendTeam,
+} from "@/types/backend-compat";
 import {
   LSH_MATCH_JOINERS_KEY,
   getLocalPlayers,

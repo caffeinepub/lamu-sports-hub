@@ -1,4 +1,3 @@
-import type { T__2 as BackendPlayer, T__1 as BackendTeam } from "@/backend";
 import { AreaBadge, IslandPrideBadge } from "@/components/shared/TeamBadge";
 import { Input } from "@/components/ui/input";
 import {
@@ -15,6 +14,10 @@ import {
   getPositionLabel,
 } from "@/data/mockData";
 import { useActor } from "@/hooks/useActor";
+import type {
+  T__2 as BackendPlayer,
+  T__1 as BackendTeam,
+} from "@/types/backend-compat";
 import { getLocalPlayers, getLocalTeams } from "@/utils/localStore";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -282,7 +285,7 @@ export function PlayersPage() {
             goalsFor: BigInt(0),
             goalsAgainst: BigInt(0),
             isApproved: false,
-          }) as import("@/backend").T__1,
+          }) as import("@/types/backend-compat").T__1,
       );
       setBackendTeams(localBackendTeams);
       setLoadingData(false);
@@ -334,7 +337,7 @@ export function PlayersPage() {
                 goalsFor: BigInt(0),
                 goalsAgainst: BigInt(0),
                 isApproved: false,
-              }) as import("@/backend").T__1,
+              }) as import("@/types/backend-compat").T__1,
           );
         setPlayers([...rawPlayers.map(backendToMock), ...extraLocalPlayers]);
         setBackendTeams([...rawTeams, ...extraLocalTeams]);

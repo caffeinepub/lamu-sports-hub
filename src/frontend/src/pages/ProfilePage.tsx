@@ -1,5 +1,3 @@
-import type { Role as BackendRole, T, T__1, T__2 } from "@/backend";
-import { Role } from "@/backend";
 import {
   AreaBadge,
   IslandPrideBadge,
@@ -19,6 +17,13 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useActor } from "@/hooks/useActor";
 import { useInternetIdentity } from "@/hooks/useInternetIdentity";
+import type {
+  Role as BackendRole,
+  T,
+  T__1,
+  T__2,
+} from "@/types/backend-compat";
+import { Role } from "@/types/backend-compat";
 import {
   LSH_MATCH_JOINERS_KEY,
   LSH_PROFILE_PHOTO_KEY,
@@ -86,7 +91,7 @@ function roleToBackend(r: string): BackendRole {
   return map[r] ?? Role.fan;
 }
 
-function roleFromBackend(r: BackendRole): string {
+function roleFromBackend(r: BackendRole | string): string {
   const s = String(r);
   if (s === "admin" || s.includes("admin")) return "admin";
   if (s === "coach" || s.includes("coach")) return "coach";

@@ -1,0 +1,11 @@
+[package]
+name = "backend"
+version = "0.1.0"
+
+[canisters.backend]
+main = "main.mo"
+
+[dependencies]
+core = "2.2.0"
+caffeineai-authorization = "0.1.0"
+caffeineai-object-storage = "0.1.0"

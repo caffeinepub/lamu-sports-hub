@@ -1,7 +1,7 @@
-import { Role } from "@/backend";
 import { Toaster } from "@/components/ui/sonner";
 import { useActor } from "@/hooks/useActor";
 import { useInternetIdentity } from "@/hooks/useInternetIdentity";
+import { Role } from "@/types/backend-compat";
 import {
   Outlet,
   RouterProvider,

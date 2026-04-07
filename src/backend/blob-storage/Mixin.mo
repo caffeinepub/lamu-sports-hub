@@ -1,9 +1,6 @@
 import Nat "mo:core/Nat";
-import Principal "mo:core/Principal";
-import Map "mo:core/Map";
 import Array "mo:core/Array";
 import Text "mo:core/Text";
-import Time "mo:core/Time";
 import Storage "Storage";
 import Prim "mo:prim";
 import Runtime "mo:core/Runtime";
@@ -11,40 +8,42 @@ import Runtime "mo:core/Runtime";
 mixin () {
   type ExternalBlob = Storage.ExternalBlob;
 
-  transient let _caffeineStorageState : Storage.State = Storage.new();
+  transient let _immutableObjectStorageState : Storage.State = Storage.new();
 
-  type _CaffeineStorageRefillInformation = {
+  type _ImmutableObjectStorageRefillInformation = {
     proposed_top_up_amount : ?Nat;
   };
 
-  type _CaffeineStorageRefillResult = {
+  type _ImmutableObjectStorageRefillResult = {
     success : ?Bool;
     topped_up_amount : ?Nat;
   };
 
-  type _CaffeineStorageCreateCertificateResult = {
+  type _ImmutableObjectStorageCreateCertificateResult = {
     method : Text;
     blob_hash : Text;
   };
 
-  public shared ({ caller }) func _caffeineStorageRefillCashier(refillInformation : ?_CaffeineStorageRefillInformation) : async _CaffeineStorageRefillResult {
+  public shared ({ caller }) func _immutableObjectStorageRefillCashier(refillInformation : ?_ImmutableObjectStorageRefillInformation) : async _ImmutableObjectStorageRefillResult {
     let cashier = await Storage.getCashierPrincipal();
     if (cashier != caller) {
       Runtime.trap("Unauthorized access");
     };
-    await Storage.refillCashier(_caffeineStorageState, cashier, refillInformation);
+    await Storage.refillCashier(_immutableObjectStorageState, cashier, refillInformation);
   };
 
-  public shared ({ caller }) func _caffeineStorageUpdateGatewayPrincipals() : async () {
-    await Storage.updateGatewayPrincipals(_caffeineStorageState);
+  public shared ({ caller }) func _immutableObjectStorageUpdateGatewayPrincipals() : async () {
+    await Storage.updateGatewayPrincipals(_immutableObjectStorageState);
   };
 
-  public query ({ caller }) func _caffeineStorageBlobIsLive(hash : Blob) : async Bool {
-    Prim.isStorageBlobLive(hash);
+  public query ({ caller }) func _immutableObjectStorageBlobsAreLive(hashes : [Blob]) : async [Bool] {
+    hashes.map(func(hash){
+      Prim.isStorageBlobLive(hash)
+    })
   };
 
-  public query ({ caller }) func _caffeineStorageBlobsToDelete() : async [Blob] {
-    if (not Storage.isAuthorized(_caffeineStorageState, caller)) {
+  public query ({ caller }) func _immutableObjectStorageBlobsToDelete() : async [Blob] {
+    if (not Storage.isAuthorized(_immutableObjectStorageState, caller)) {
       Runtime.trap("Unauthorized access");
     };
     let deadBlobs = Prim.getDeadBlobs();
@@ -58,8 +57,8 @@ mixin () {
     };
   };
 
-  public shared ({ caller }) func _caffeineStorageConfirmBlobDeletion(blobs : [Blob]) : async () {
-    if (not Storage.isAuthorized(_caffeineStorageState, caller)) {
+  public shared ({ caller }) func _immutableObjectStorageConfirmBlobDeletion(blobs : [Blob]) : async () {
+    if (not Storage.isAuthorized(_immutableObjectStorageState, caller)) {
       Runtime.trap("Unauthorized access");
     };
     Prim.pruneConfirmedDeadBlobs(blobs);
@@ -71,7 +70,7 @@ mixin () {
     await myGC.__motoko_gc_trigger();
   };
 
-  public shared ({ caller }) func _caffeineStorageCreateCertificate(blobHash : Text) : async _CaffeineStorageCreateCertificateResult {
+  public shared ({ caller }) func _immutableObjectStorageCreateCertificate(blobHash : Text) : async _ImmutableObjectStorageCreateCertificateResult {
     {
       method = "upload";
       blob_hash = blobHash;

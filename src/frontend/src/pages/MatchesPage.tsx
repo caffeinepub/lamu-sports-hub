@@ -1,9 +1,9 @@
-import type { T__5 as BackendMatch } from "@/backend";
-import { Status } from "@/backend";
 import { PredictionWidget } from "@/components/shared/PredictionWidget";
 import { QuickReactions } from "@/components/shared/QuickReactions";
 import { ShareButton } from "@/components/shared/ShareButton";
 import { useActor } from "@/hooks/useActor";
+import type { T__5 as BackendMatch } from "@/types/backend-compat";
+import { Status } from "@/types/backend-compat";
 import {
   type LocalFixture,
   addActivityEntry,

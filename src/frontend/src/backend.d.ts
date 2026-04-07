@@ -49,7 +49,6 @@ export interface T__3 {
     timestamp: Time;
     notificationId: NotificationId;
 }
-export type PlayerId = string;
 export interface T__2 {
     nickname: string;
     assists: bigint;
@@ -75,7 +74,7 @@ export interface T {
     favoriteTeamId?: TeamId;
     phone: string;
 }
-export type NotificationId = string;
+export type PlayerId = string;
 export interface T__5 {
     status: Status;
     homeTeam: TeamId;
@@ -88,6 +87,7 @@ export interface T__5 {
     mvpPlayerId?: PlayerId;
     kickoffTime: string;
 }
+export type NotificationId = string;
 export interface T__6 {
     voteId: VoteId;
     matchId: MatchId;

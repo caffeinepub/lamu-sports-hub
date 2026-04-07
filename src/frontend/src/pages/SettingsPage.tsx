@@ -18,6 +18,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -40,6 +47,7 @@ import {
   LSH_USER_SETTINGS_KEY,
   type UserSettings,
   addPendingMatchResult,
+  clearOfficialSession,
   getDeletedTeamIds,
   getLocalPlayers,
   getLocalTeams,
@@ -48,8 +56,14 @@ import {
   getSeasonSettings,
   getTeamOverrides,
   getUserSettings,
+  isOfficialSessionVerified,
   setLocalStore,
 } from "@/utils/localStore";
+import {
+  clearSimpleSession,
+  getActiveSimpleSession,
+  getAllSimpleProfiles,
+} from "@/utils/simpleAuth";
 import { applyTheme } from "@/utils/themeUtils";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -240,6 +254,18 @@ export function SettingsPage() {
   const [hoverRating, setHoverRating] = useState(0);
   const navigate = useNavigate();
 
+  // ── Delete Account state ─────────────────────────────────────────────────
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Detect current session type
+  const isOfficial = isOfficialSessionVerified();
+  const simpleSession = getActiveSimpleSession();
+  const currentUserName =
+    simpleSession?.name || getUserSettings().displayName || "";
+
   useEffect(() => {
     const handler = (e: Event) => {
       e.preventDefault();
@@ -319,6 +345,60 @@ export function SettingsPage() {
     }
     toast.success("App data cleared. Reloading…");
     setTimeout(() => window.location.reload(), 800);
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeleteError("");
+    const input = deleteConfirmInput.trim();
+    if (!input) {
+      setDeleteError("Please enter your name or PIN to confirm.");
+      return;
+    }
+
+    if (isOfficial) {
+      // Official: clear all LSH_ keys, clear session, reload
+      setIsDeleting(true);
+      const keys = Object.keys(localStorage).filter((k) =>
+        k.startsWith("lsh_"),
+      );
+      for (const k of keys) localStorage.removeItem(k);
+      clearOfficialSession();
+      sessionStorage.clear();
+      toast.success("Official session cleared. All local app data removed.");
+      setTimeout(() => window.location.reload(), 800);
+      return;
+    }
+
+    if (simpleSession) {
+      // PIN user: verify by name OR PIN
+      const matchesName =
+        input.toLowerCase() === simpleSession.name.trim().toLowerCase();
+      // Try PIN verification
+      const { verifySimpleUser } = await import("@/utils/simpleAuth");
+      const pinMatch = verifySimpleUser(simpleSession.id, input);
+      if (!matchesName && !pinMatch) {
+        setDeleteError("Name or PIN doesn't match. Please try again.");
+        return;
+      }
+      setIsDeleting(true);
+      // Remove this profile from the profiles list
+      const allProfiles = getAllSimpleProfiles();
+      const updated = allProfiles.filter((p) => p.id !== simpleSession.id);
+      localStorage.setItem("lsh_simple_profiles", JSON.stringify(updated));
+      clearSimpleSession();
+      // Clear all LSH_ keys
+      const keys = Object.keys(localStorage).filter((k) =>
+        k.startsWith("lsh_"),
+      );
+      for (const k of keys) localStorage.removeItem(k);
+      sessionStorage.clear();
+      setShowDeleteModal(false);
+      toast.success("Account deleted successfully.");
+      setTimeout(() => window.location.reload(), 800);
+      return;
+    }
+
+    setDeleteError("No active account found.");
   };
 
   const handleShare = async () => {
@@ -619,24 +699,42 @@ export function SettingsPage() {
             accent="oklch(0.3 0.16 252 / 0.5)"
           />
 
-          {/* Security status */}
+          {/* Security status — dynamic based on login method */}
           <div className="flex items-center gap-3 rounded-xl bg-muted/20 border border-border/40 px-3 py-3">
-            <div className="w-9 h-9 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0">
-              <Shield className="w-4 h-4 text-emerald-400" />
+            <div
+              className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${isOfficial ? "bg-emerald-500/15" : simpleSession ? "bg-blue-500/15" : "bg-muted/30"}`}
+            >
+              <Shield
+                className={`w-4 h-4 ${isOfficial ? "text-emerald-400" : simpleSession ? "text-blue-400" : "text-muted-foreground"}`}
+              />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="text-sm font-bold text-foreground">
-                  Internet Identity
+                  {isOfficial
+                    ? "Official Mode"
+                    : simpleSession
+                      ? `${simpleSession.name} (${simpleSession.role.charAt(0).toUpperCase() + simpleSession.role.slice(1)})`
+                      : "Not signed in"}
                 </p>
-                <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px] px-1.5 py-0 h-4 flex items-center gap-1">
-                  <CheckCircle className="w-2.5 h-2.5" />
-                  Secured
-                </Badge>
+                {isOfficial ? (
+                  <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px] px-1.5 py-0 h-4 flex items-center gap-1">
+                    <CheckCircle className="w-2.5 h-2.5" />
+                    Secured
+                  </Badge>
+                ) : simpleSession ? (
+                  <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-[10px] px-1.5 py-0 h-4 flex items-center gap-1">
+                    <CheckCircle className="w-2.5 h-2.5" />
+                    PIN Login
+                  </Badge>
+                ) : null}
               </div>
               <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
-                Your Internet Identity is secured by your device (fingerprint,
-                Face ID, or security key)
+                {isOfficial
+                  ? "Secured by Internet Identity (fingerprint, Face ID, or security key)"
+                  : simpleSession
+                    ? "PIN-secured account · Data stored on this device only"
+                    : "Sign in to access personalised features"}
               </p>
             </div>
           </div>
@@ -743,18 +841,18 @@ export function SettingsPage() {
             <Button
               variant="outline"
               size="sm"
-              className="text-xs border-destructive/30 text-destructive hover:bg-destructive/10 gap-1.5"
+              className="text-xs border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-red-300 gap-1.5 font-bold"
               data-ocid="settings.delete_account.button"
-              onClick={() => goTo("/suggestions")}
+              onClick={() => {
+                setDeleteConfirmInput("");
+                setDeleteError("");
+                setShowDeleteModal(true);
+              }}
             >
               <UserX className="w-3.5 h-3.5" />
               Delete Account
             </Button>
           </div>
-          <p className="text-[10px] text-muted-foreground/50 pt-1">
-            Account deletion requires contacting an official via the Suggestions
-            page.
-          </p>
         </motion.section>
 
         {/* ── Favourite Team ────────────────────────────────────────────────── */}
@@ -2167,6 +2265,105 @@ export function SettingsPage() {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* ── Delete Account Dialog ──────────────────────────────────────────── */}
+      <Dialog
+        open={showDeleteModal}
+        onOpenChange={(v) => {
+          if (!isDeleting) setShowDeleteModal(v);
+        }}
+      >
+        <DialogContent
+          className="max-w-sm mx-auto rounded-2xl"
+          data-ocid="settings.delete_account.dialog"
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 font-display text-lg">
+              <span className="w-8 h-8 rounded-full bg-destructive/15 flex items-center justify-center">
+                <UserX className="w-4 h-4 text-destructive" />
+              </span>
+              {isOfficial ? "Reset Official Session" : "Delete Account"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 mt-1">
+            <div className="rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-3">
+              <p className="text-sm font-semibold text-destructive mb-1">
+                ⚠️ Warning
+              </p>
+              <p className="text-[13px] text-muted-foreground leading-relaxed">
+                {isOfficial
+                  ? "This will clear all official session data and local app data from this device. Your Internet Identity remains intact on the blockchain."
+                  : "This will permanently delete your account and all local data on this device. This action cannot be undone."}
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">
+                {isOfficial
+                  ? 'Type "DELETE" to confirm'
+                  : simpleSession
+                    ? `Type your name "${currentUserName}" or enter your 4-digit PIN`
+                    : 'Type "DELETE" to confirm'}
+              </Label>
+              <Input
+                value={deleteConfirmInput}
+                onChange={(e) => {
+                  setDeleteConfirmInput(e.target.value);
+                  setDeleteError("");
+                }}
+                placeholder={
+                  isOfficial
+                    ? "DELETE"
+                    : simpleSession
+                      ? "Your name or PIN"
+                      : "DELETE"
+                }
+                className="h-9 text-sm"
+                data-ocid="settings.delete_account.confirm_input"
+                disabled={isDeleting}
+              />
+              {deleteError && (
+                <p className="text-xs text-destructive font-medium">
+                  {deleteError}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="flex gap-2 pt-1">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={() => setShowDeleteModal(false)}
+              disabled={isDeleting}
+              data-ocid="settings.delete_account.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="flex-1 bg-destructive hover:bg-destructive/90 text-destructive-foreground gap-1.5"
+              onClick={handleDeleteAccount}
+              disabled={isDeleting || !deleteConfirmInput.trim()}
+              data-ocid="settings.delete_account.confirm_button"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Deleting…
+                </>
+              ) : (
+                <>
+                  <UserX className="w-3.5 h-3.5" />
+                  {isOfficial ? "Reset Session" : "Delete Account"}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

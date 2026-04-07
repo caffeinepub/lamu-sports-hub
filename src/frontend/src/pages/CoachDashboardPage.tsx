@@ -1,4 +1,3 @@
-import { Position } from "@/backend";
 import { PlayerCard } from "@/components/shared/PlayerCard";
 import { AreaBadge, IslandPrideBadge } from "@/components/shared/TeamBadge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useActor } from "@/hooks/useActor";
+import { Position } from "@/types/backend-compat";
 import {
   LSH_PLAYER_CONFIRMATIONS_KEY,
   getLocalFixtures,

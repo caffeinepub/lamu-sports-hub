@@ -1,4 +1,3 @@
-import type { T__4 as BackendNewsItem } from "@/backend";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +9,7 @@ import {
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useActor } from "@/hooks/useActor";
+import type { T__4 as BackendNewsItem } from "@/types/backend-compat";
 import {
   addNewsComment,
   getLocalNews,

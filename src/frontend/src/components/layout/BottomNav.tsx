@@ -1,4 +1,3 @@
-import { type T__1 as BackendTeam, Position, Role } from "@/backend";
 import { OfficialAccessModal } from "@/components/shared/OfficialAccessModal";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +25,11 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useActor } from "@/hooks/useActor";
+import {
+  type T__1 as BackendTeam,
+  Position,
+  Role,
+} from "@/types/backend-compat";
 import { compressImage } from "@/utils/imageUtils";
 import {
   addLocalNewsItem,

@@ -1,59 +1,106 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
-import type { backendInterface } from "../backend";
-import { createActorWithConfig } from "../config";
-import { getSecretParameter } from "../utils/urlParams";
-import { useInternetIdentity } from "./useInternetIdentity";
+import type {
+  Position,
+  Role,
+  Status,
+  T,
+  T__1,
+  T__2,
+  T__4,
+  T__5,
+} from "@/types/backend-compat";
 
-const ACTOR_QUERY_KEY = "actor";
-export function useActor() {
-  const { identity } = useInternetIdentity();
-  const queryClient = useQueryClient();
-  const actorQuery = useQuery<backendInterface>({
-    queryKey: [ACTOR_QUERY_KEY, identity?.getPrincipal().toString()],
-    queryFn: async () => {
-      const isAuthenticated = !!identity;
+/**
+ * The full actor interface that pages expect to call.
+ * The canister backend is currently empty/local-first, so actor will be null
+ * in most sessions. Pages guard every call with `if (!actor)` and fall through
+ * to localStorage — these types just ensure TypeScript is happy.
+ */
+export interface ActorInterface {
+  isCallerAdmin(): Promise<boolean>;
+  getCallerUserProfile(): Promise<T | null>;
+  getAllUserProfiles(): Promise<T[]>;
+  getUserIdFromCaller(): Promise<string>;
+  createOrUpdateUserProfile(
+    name: string,
+    phone: string,
+    email: string,
+    role: Role,
+    area: string,
+    favoriteTeamId?: string | null,
+  ): Promise<void>;
 
-      if (!isAuthenticated) {
-        // Return anonymous actor if not authenticated
-        return await createActorWithConfig();
-      }
+  getAllTeams(): Promise<T__1[]>;
+  getTeam(teamId: string): Promise<T__1 | null>;
 
-      const actorOptions = {
-        agentOptions: {
-          identity,
-        },
-      };
+  getAllPlayers(): Promise<T__2[]>;
+  getPlayer(playerId: string): Promise<T__2 | null>;
+  getPlayersByTeam(teamId: string): Promise<T__2[]>;
 
-      const actor = await createActorWithConfig(actorOptions);
-      const adminToken = getSecretParameter("caffeineAdminToken") || "";
-      await actor._initializeAccessControlWithSecret(adminToken);
-      return actor;
-    },
-    // Only refetch when identity changes
-    staleTime: Number.POSITIVE_INFINITY,
-    // This will cause the actor to be recreated when the identity changes
-    enabled: true,
-  });
+  getAllMatches(): Promise<T__5[]>;
+  getMatch(matchId: string): Promise<T__5 | null>;
+  updateMatchScore(
+    matchId: string,
+    homeScore: bigint,
+    awayScore: bigint,
+    status: Status,
+  ): Promise<void>;
+  createMatch(
+    homeTeam: string,
+    awayTeam: string,
+    date: bigint,
+    venue: string,
+    ...rest: unknown[]
+  ): Promise<void>;
 
-  // When the actor changes, invalidate dependent queries
-  useEffect(() => {
-    if (actorQuery.data) {
-      queryClient.invalidateQueries({
-        predicate: (query) => {
-          return !query.queryKey.includes(ACTOR_QUERY_KEY);
-        },
-      });
-      queryClient.refetchQueries({
-        predicate: (query) => {
-          return !query.queryKey.includes(ACTOR_QUERY_KEY);
-        },
-      });
-    }
-  }, [actorQuery.data, queryClient]);
+  getAllNews(): Promise<T__4[]>;
+  getAllNewsAdmin(): Promise<T__4[]>;
+  createNews(
+    title: string,
+    body: string,
+    isPublished: boolean,
+    ...rest: unknown[]
+  ): Promise<string | undefined>;
+  updateNews(
+    newsId: string,
+    title: string,
+    body: string,
+    isPublished: boolean,
+    ...rest: unknown[]
+  ): Promise<void>;
+  deleteNews(newsId: string): Promise<void>;
 
-  return {
-    actor: actorQuery.data || null,
-    isFetching: actorQuery.isFetching,
-  };
+  adminCreateUser(
+    name: string,
+    phone: string,
+    email: string,
+    role: Role,
+    area: string,
+    teamId?: string | null,
+  ): Promise<void>;
+  adminCreateTeam(
+    name: string,
+    area: string,
+    coachId: string,
+    ...rest: unknown[]
+  ): Promise<void>;
+  adminAddPlayer(
+    teamId: string,
+    nickname: string,
+    name: string,
+    position: Position,
+    jerseyNumber: bigint,
+    ...rest: unknown[]
+  ): Promise<void>;
+}
+
+/**
+ * Returns the actor interface for calling backend canister methods.
+ * Since the backend is currently empty (local-first app), actor is always null.
+ * Pages guard every call with `if (!actor)` and fall through to localStorage.
+ */
+export function useActor(): {
+  actor: ActorInterface | null;
+  isFetching: boolean;
+} {
+  return { actor: null, isFetching: false };
 }
